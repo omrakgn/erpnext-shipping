@@ -169,6 +169,8 @@ class SendCloudUtils:
 			},
 		}
 
+		frappe.log_error(message=f"SendCloud Payload: {json.dumps(payload, indent=2)}", title="SendCloud Debug - Payload")
+
 		if service_info.get("multicollo"):
 			# Multicollo Logic: All packages are processed in a single API call
 			try:
