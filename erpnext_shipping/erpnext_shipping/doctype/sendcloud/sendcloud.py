@@ -471,7 +471,7 @@ class SendCloudUtils:
 			parcel_item = {
 				"description": (item.item_name or item.item_code or "Product")[:200],
 				"quantity": int(item.qty),
-				"value": {
+				"price": {
 					"value": flt(item.amount, CURRENCY_DECIMALS),
 					"currency": currency or "EUR"
 				},
