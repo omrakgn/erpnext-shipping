@@ -399,10 +399,10 @@ class SendCloudUtils:
 
 			# Shipment'a bağlı Delivery Note'ları kontrol et
 			delivery_notes = shipment_doc.get("shipment_delivery_note", [])
-			
+
 			if not delivery_notes:
-				# Delivery Note yoksa, Sales Order'dan almayı dene
-				return self.get_items_from_sales_order(shipment_doc)
+				# Delivery Note yoksa None döndür
+				return None
 
 			for dn_row in delivery_notes:
 				if not dn_row.delivery_note:
@@ -411,7 +411,7 @@ class SendCloudUtils:
 				delivery_note = frappe.get_doc("Delivery Note", dn_row.delivery_note)
 
 				for item in delivery_note.items:
-					parcel_item = self.format_parcel_item(item)
+					parcel_item = self.format_parcel_item(item, delivery_note.currency)
 					if parcel_item:
 						parcel_items.append(parcel_item)
 
@@ -424,51 +424,31 @@ class SendCloudUtils:
 			)
 			return None
 
-	def get_items_from_sales_order(self, shipment_doc):
+	def format_parcel_item(self, item, currency="EUR"):
 		"""
-		Eğer Delivery Note yoksa, Shipment'a bağlı Sales Order'dan item bilgilerini al.
-		"""
-		parcel_items = []
+		Delivery Note Item'ı SendCloud API v3 parcel_item formatına dönüştür.
 
-		try:
-			# Shipment'ta value_of_goods alanı varsa, en azından toplam değeri alabiliriz
-			# Ama detaylı item bilgisi için Sales Order'a bakmamız gerekiyor
-			
-			# shipment_delivery_note boşsa, belki direkt bir referans vardır
-			# Bu kısım ERPNext yapınıza göre özelleştirilebilir
-			
-			return parcel_items if parcel_items else None
-
-		except Exception as e:
-			frappe.log_error(
-				message=f"Error getting items from sales order: {str(e)}",
-				title="SendCloud - Get Sales Order Items Error"
-			)
-			return None
-
-	def format_parcel_item(self, item):
-		"""
-		Delivery Note Item'ı SendCloud parcel_item formatına dönüştür.
-		
-		SendCloud API formatı:
+		SendCloud API v3 formatı:
 		{
 			"description": "T-Shirt",
 			"hs_code": "6109",
 			"origin_country": "SE",
 			"product_id": "898678671",
-			"properties": {"color": "Blue", "size": "Medium"},
 			"quantity": 2,
 			"sku": "TST-OD2019-B620",
-			"value": "19.95",
-			"weight": "0.9"
+			"value": {"value": 19.95, "currency": "EUR"},
+			"weight": {"value": 0.9, "unit": "kg"}
 		}
 		"""
 		try:
 			# Temel item bilgileri
 			parcel_item = {
-				"description": (item.item_name or item.item_code or "Product")[:200],  # Max 200 karakter
+				"description": (item.item_name or item.item_code or "Product")[:200],
 				"quantity": int(item.qty),
-				"value": str(flt(item.amount, CURRENCY_DECIMALS)),
+				"value": {
+					"value": flt(item.amount, CURRENCY_DECIMALS),
+					"currency": currency or "EUR"
+				},
 			}
 
 			# Ağırlık hesapla
@@ -477,18 +457,21 @@ class SendCloudUtils:
 				item_weight = item.total_weight
 			elif item.qty and hasattr(item, 'weight_per_unit') and item.weight_per_unit:
 				item_weight = item.qty * item.weight_per_unit
-			
-			if item_weight > 0:
-				parcel_item["weight"] = str(flt(item_weight, WEIGHT_DECIMALS))
+
+			# Ağırlık varsa ekle, yoksa varsayılan 0.1 kg
+			parcel_item["weight"] = {
+				"value": flt(item_weight, WEIGHT_DECIMALS) if item_weight > 0 else 0.1,
+				"unit": "kg"
+			}
 
 			# SKU ekle
 			if item.item_code:
-				parcel_item["sku"] = item.item_code[:50]  # Max 50 karakter
+				parcel_item["sku"] = item.item_code[:50]
 
 			# Item master'dan ek bilgileri al
 			if item.item_code:
 				item_doc = frappe.get_cached_doc("Item", item.item_code)
-				
+
 				# HS Code (Gümrük Tarife Numarası)
 				if item_doc.customs_tariff_number:
 					parcel_item["hs_code"] = item_doc.customs_tariff_number[:20]
@@ -500,10 +483,6 @@ class SendCloudUtils:
 					)
 					if country_code:
 						parcel_item["origin_country"] = country_code.upper()
-
-				# Product ID (varsa)
-				if hasattr(item_doc, 'product_id') and item_doc.product_id:
-					parcel_item["product_id"] = str(item_doc.product_id)
 
 			return parcel_item
 
@@ -562,15 +541,15 @@ class SendCloudUtils:
 			if customer_type == "Company":
 				# Şirket adı olarak address_title veya customer_name kullan
 				company_name = delivery_address.address_title or ""
-				
+
 				# Eğer address_title kişi adıyla aynıysa, customer_name'i kontrol et
 				if company_name.lower() == customer_name.lower():
 					customer_name_from_db = frappe.db.get_value("Customer", customer, "customer_name")
 					if customer_name_from_db and customer_name_from_db.lower() != customer_name.lower():
 						return customer_name_from_db
-				
+
 				return company_name if company_name.lower() != customer_name.lower() else ""
-			
+
 			# Bireysel müşteri - company_name boş olsun
 			return ""
 
