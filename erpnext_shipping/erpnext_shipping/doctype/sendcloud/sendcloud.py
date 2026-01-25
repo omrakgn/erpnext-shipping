@@ -176,6 +176,9 @@ class SendCloudUtils:
 			},
 		}
 
+		# DEBUG: Payload'u logla
+		frappe.log_error(message=json.dumps(payload, indent=2, default=str), title="SendCloud Debug Payload")
+
 		if service_info.get("multicollo"):
 			# Multicollo Logic: All packages are processed in a single API call
 			try:
@@ -185,6 +188,10 @@ class SendCloudUtils:
 					auth=(self.api_key, self.api_secret),
 				)
 				response_data = response.json()
+				
+				# DEBUG: API Response logla
+				frappe.log_error(message=json.dumps(response_data, indent=2, default=str), title="SendCloud API Response (multicollo)")
+				
 				if "errors" in response_data and response_data["errors"]:
 					error_details = [
 						f"Code: {err.get('code', 'N/A')}, Detail: {err.get('detail', 'N/A')}"
@@ -230,6 +237,10 @@ class SendCloudUtils:
 						auth=(self.api_key, self.api_secret),
 					)
 					response_data = response.json()
+					
+					# DEBUG: API Response logla
+					frappe.log_error(message=json.dumps(response_data, indent=2, default=str), title="SendCloud API Response (non-multicollo)")
+					
 					if "errors" in response_data and response_data["errors"]:
 						error_details = [
 							f"Code: {err.get('code', 'N/A')}, Detail: {err.get('detail', 'N/A')}"
