@@ -117,31 +117,50 @@ class SendCloudUtils:
 		customer_name = f"{delivery_contact.first_name} {delivery_contact.last_name}"
 		company_name = self.get_company_name(delivery_address, customer_name)
 
+		# to_address oluştur
+		to_address = {
+			"name": customer_name,
+			"address_line_1": delivery_address.address_line1,
+			"postal_code": delivery_address.pincode,
+			"city": delivery_address.city,
+			"country_code": delivery_address.country_code.upper(),
+		}
+		
+		# Opsiyonel alanları sadece doluysa ekle
+		if company_name:
+			to_address["company_name"] = company_name
+		if delivery_contact.phone:
+			to_address["phone_number"] = delivery_contact.phone
+		if delivery_contact.email_id:
+			to_address["email"] = delivery_contact.email_id
+
+		# from_address oluştur
+		from_address = {
+			"name": f"{pickup_contact.first_name} {pickup_contact.last_name}",
+			"address_line_1": address or pickup_address.address_line1,
+			"house_number": house_number or " ",
+			"postal_code": pickup_address.pincode,
+			"city": pickup_address.city,
+			"country_code": pickup_address.country_code.upper(),
+		}
+		
+		# Company name için: address_title adres gibi görünüyorsa, şirket adını farklı yerden al
+		from_company = pickup_address.address_title
+		if from_company and not any(word in from_company.lower() for word in ['straat', 'laan', 'weg', 'street', 'road', 'avenue']):
+			from_address["company_name"] = from_company
+		else:
+			# Address title adres içeriyorsa, Company'den şirket adını al
+			from_address["company_name"] = frappe.defaults.get_global_default("company") or "Scarnatti"
+		
+		if pickup_contact.phone:
+			from_address["phone_number"] = pickup_contact.phone
+		if pickup_contact.email_id:
+			from_address["email"] = pickup_contact.email_id
+
 		payload = {
 			"parcels": parcels,
-			"to_address": {
-				"company_name": company_name,
-				"name": customer_name,
-				"address_line_1": delivery_address.address_line1,
-				"postal_code": delivery_address.pincode,
-				"city": delivery_address.city,
-				"country_code": delivery_address.country_code.upper(),
-				"phone_number": delivery_contact.phone,
-				"email": delivery_contact.email_id,
-			},
-			"from_address": {
-				"name": f"{pickup_contact.first_name} {pickup_contact.last_name}",
-				"company_name": pickup_address.address_title,
-				"address_line_1": address
-				or pickup_address.address_line1,  # Using original address if parsing fails
-				"house_number": house_number
-				or " ",  # API requires a house number. If None, we use a U+200A HAIR SPACE to bypass validation without displaying a number
-				"postal_code": pickup_address.pincode,
-				"city": pickup_address.city,
-				"country_code": pickup_address.country_code.upper(),
-				"phone_number": pickup_contact.phone,
-				"email": pickup_contact.email_id,
-			},
+			"to_address": to_address,
+			"from_address": from_address,
 			"ship_with": {
 				"type": "shipping_option_code",
 				"properties": {
@@ -149,9 +168,6 @@ class SendCloudUtils:
 				},
 			},
 		}
-
-		frappe.log_error(message=json.dumps(payload, indent=2, default=str), title="SendCloud Debug Payload")
-
 
 		if service_info.get("multicollo"):
 			# Multicollo Logic: All packages are processed in a single API call
