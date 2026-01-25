@@ -586,5 +586,3 @@ class SendCloudUtils:
 			)
 			# Hata durumunda güvenli tarafta kal, boş döndür
 			return ""
-		
-		#TEST
