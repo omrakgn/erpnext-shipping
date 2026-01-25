@@ -113,11 +113,15 @@ class SendCloudUtils:
 
 		house_number, address = self.extract_house_number(pickup_address.address_line1)
 
+		# Müşteri tipini belirle (Şirket mi, Bireysel mi?)
+		customer_name = f"{delivery_contact.first_name} {delivery_contact.last_name}"
+		company_name = self.get_company_name(delivery_address, customer_name)
+
 		payload = {
 			"parcels": parcels,
 			"to_address": {
-				"company_name": delivery_address.address_title,
-				"name": f"{delivery_contact.first_name} {delivery_contact.last_name}",
+				"company_name": company_name,
+				"name": customer_name,
 				"address_line_1": delivery_address.address_line1,
 				"postal_code": delivery_address.pincode,
 				"city": delivery_address.city,
@@ -131,7 +135,7 @@ class SendCloudUtils:
 				"address_line_1": address
 				or pickup_address.address_line1,  # Using original address if parsing fails
 				"house_number": house_number
-				or " ",  # API requires a house number. If None, we use a U+200A HAIR SPACE to bypass validation without displaying a number
+				or " ",  # API requires a house number. If None, we use a U+200A HAIR SPACE to bypass validation without displaying a number
 				"postal_code": pickup_address.pincode,
 				"city": pickup_address.city,
 				"country_code": pickup_address.country_code.upper(),
@@ -364,7 +368,8 @@ class SendCloudUtils:
 			return carrier_name.upper() if post_or_get == "get" else carrier_name.lower()
 
 	def get_parcel(self, parcel, shipment, index):
-		return {
+		"""Parcel verilerini SendCloud API formatında hazırla"""
+		parcel_data = {
 			"dimensions": {
 				"length": parcel.get("length", 0),
 				"width": parcel.get("width", 0),
@@ -375,6 +380,140 @@ class SendCloudUtils:
 			"order_number": f"{shipment}-{index}",
 		}
 
+		# Item bilgilerini ekle
+		parcel_items = self.get_shipment_items(shipment)
+		if parcel_items:
+			parcel_data["parcel_items"] = parcel_items
+
+		return parcel_data
+
+	def get_shipment_items(self, shipment_name):
+		"""
+		Shipment'a bağlı Delivery Note'lardan item bilgilerini al.
+		SendCloud API formatında parcel_items listesi döndürür.
+		"""
+		parcel_items = []
+
+		try:
+			shipment_doc = frappe.get_doc("Shipment", shipment_name)
+
+			# Shipment'a bağlı Delivery Note'ları kontrol et
+			delivery_notes = shipment_doc.get("shipment_delivery_note", [])
+			
+			if not delivery_notes:
+				# Delivery Note yoksa, Sales Order'dan almayı dene
+				return self.get_items_from_sales_order(shipment_doc)
+
+			for dn_row in delivery_notes:
+				if not dn_row.delivery_note:
+					continue
+
+				delivery_note = frappe.get_doc("Delivery Note", dn_row.delivery_note)
+
+				for item in delivery_note.items:
+					parcel_item = self.format_parcel_item(item)
+					if parcel_item:
+						parcel_items.append(parcel_item)
+
+			return parcel_items if parcel_items else None
+
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error getting shipment items for {shipment_name}: {str(e)}",
+				title="SendCloud - Get Shipment Items Error"
+			)
+			return None
+
+	def get_items_from_sales_order(self, shipment_doc):
+		"""
+		Eğer Delivery Note yoksa, Shipment'a bağlı Sales Order'dan item bilgilerini al.
+		"""
+		parcel_items = []
+
+		try:
+			# Shipment'ta value_of_goods alanı varsa, en azından toplam değeri alabiliriz
+			# Ama detaylı item bilgisi için Sales Order'a bakmamız gerekiyor
+			
+			# shipment_delivery_note boşsa, belki direkt bir referans vardır
+			# Bu kısım ERPNext yapınıza göre özelleştirilebilir
+			
+			return parcel_items if parcel_items else None
+
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error getting items from sales order: {str(e)}",
+				title="SendCloud - Get Sales Order Items Error"
+			)
+			return None
+
+	def format_parcel_item(self, item):
+		"""
+		Delivery Note Item'ı SendCloud parcel_item formatına dönüştür.
+		
+		SendCloud API formatı:
+		{
+			"description": "T-Shirt",
+			"hs_code": "6109",
+			"origin_country": "SE",
+			"product_id": "898678671",
+			"properties": {"color": "Blue", "size": "Medium"},
+			"quantity": 2,
+			"sku": "TST-OD2019-B620",
+			"value": "19.95",
+			"weight": "0.9"
+		}
+		"""
+		try:
+			# Temel item bilgileri
+			parcel_item = {
+				"description": (item.item_name or item.item_code or "Product")[:200],  # Max 200 karakter
+				"quantity": int(item.qty),
+				"value": str(flt(item.amount, CURRENCY_DECIMALS)),
+			}
+
+			# Ağırlık hesapla
+			item_weight = 0
+			if item.total_weight:
+				item_weight = item.total_weight
+			elif item.qty and hasattr(item, 'weight_per_unit') and item.weight_per_unit:
+				item_weight = item.qty * item.weight_per_unit
+			
+			if item_weight > 0:
+				parcel_item["weight"] = str(flt(item_weight, WEIGHT_DECIMALS))
+
+			# SKU ekle
+			if item.item_code:
+				parcel_item["sku"] = item.item_code[:50]  # Max 50 karakter
+
+			# Item master'dan ek bilgileri al
+			if item.item_code:
+				item_doc = frappe.get_cached_doc("Item", item.item_code)
+				
+				# HS Code (Gümrük Tarife Numarası)
+				if item_doc.customs_tariff_number:
+					parcel_item["hs_code"] = item_doc.customs_tariff_number[:20]
+
+				# Menşei Ülke
+				if item_doc.country_of_origin:
+					country_code = frappe.db.get_value(
+						"Country", item_doc.country_of_origin, "code"
+					)
+					if country_code:
+						parcel_item["origin_country"] = country_code.upper()
+
+				# Product ID (varsa)
+				if hasattr(item_doc, 'product_id') and item_doc.product_id:
+					parcel_item["product_id"] = str(item_doc.product_id)
+
+			return parcel_item
+
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error formatting parcel item {item.item_code}: {str(e)}",
+				title="SendCloud - Format Parcel Item Error"
+			)
+			return None
+
 	def extract_house_number(self, address):
 		pattern = r"\b\d+[/-]?\w*(?:-\d+\w*)?\b"
 		match = re.search(pattern, address)
@@ -384,3 +523,61 @@ class SendCloudUtils:
 			return house_number, cleaned_address
 		else:
 			return None, None
+
+	def get_company_name(self, delivery_address, customer_name):
+		"""
+		Müşteri tipine göre company_name belirle.
+		- Şirket müşterisiyse: Şirket adını döndür
+		- Bireysel müşteriyse: Boş string döndür (SendCloud'da company_name görünmez)
+		"""
+		try:
+			# Address'e bağlı Customer veya Link'i bul
+			customer = None
+			customer_type = None
+
+			# Önce address_title'dan Customer bulmayı dene
+			if delivery_address.address_title:
+				# Customer tablosunda ara
+				customer_exists = frappe.db.exists("Customer", delivery_address.address_title)
+				if customer_exists:
+					customer = delivery_address.address_title
+					customer_type = frappe.db.get_value("Customer", customer, "customer_type")
+
+			# Eğer bulunamadıysa, Dynamic Link üzerinden bul
+			if not customer and delivery_address.name:
+				links = frappe.get_all(
+					"Dynamic Link",
+					filters={
+						"link_doctype": "Customer",
+						"parenttype": "Address",
+						"parent": delivery_address.name
+					},
+					fields=["link_name"]
+				)
+				if links:
+					customer = links[0].link_name
+					customer_type = frappe.db.get_value("Customer", customer, "customer_type")
+
+			# Customer tipi "Company" ise şirket adını döndür
+			if customer_type == "Company":
+				# Şirket adı olarak address_title veya customer_name kullan
+				company_name = delivery_address.address_title or ""
+				
+				# Eğer address_title kişi adıyla aynıysa, customer_name'i kontrol et
+				if company_name.lower() == customer_name.lower():
+					customer_name_from_db = frappe.db.get_value("Customer", customer, "customer_name")
+					if customer_name_from_db and customer_name_from_db.lower() != customer_name.lower():
+						return customer_name_from_db
+				
+				return company_name if company_name.lower() != customer_name.lower() else ""
+			
+			# Bireysel müşteri - company_name boş olsun
+			return ""
+
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error determining company name: {str(e)}",
+				title="SendCloud - Get Company Name Error"
+			)
+			# Hata durumunda güvenli tarafta kal, boş döndür
+			return ""
