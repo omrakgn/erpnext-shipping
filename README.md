@@ -44,6 +44,240 @@ You can see the list of shipping rates by clicking the `Fetch Shipping Rates` bu
 The service provider will also provide the shipping label and to generate the label, click on the `Print Shipping Label` on top of the doctype.
 
 -----------------------
-#### License
 
-MIT
+
+# SendCloud ERPNext Entegrasyonu
+
+Bu doküman, ERPNext için özelleştirilmiş SendCloud entegrasyonunun özelliklerini ve yapılandırmasını açıklar.
+
+## 📦 Özellikler
+
+### 1. Parcel Items Desteği
+Shipment oluşturulduğunda, bağlı Delivery Note'lardan ürün bilgileri otomatik olarak SendCloud'a gönderilir:
+
+- **Description**: Ürün adı
+- **SKU**: Öncelik sırası: `custom_sku` → `item_code`
+- **Quantity**: Ürün adedi (aynı SKU'lar birleştirilir)
+- **Price**: Ürün tutarı (EUR)
+- **Weight**: Ürün ağırlığı (kg)
+- **HS Code**: Gümrük tarife numarası (uluslararası gönderiler için)
+- **Origin Country**: Menşei ülke kodu
+
+### 2. Akıllı Order Number
+SendCloud'a gönderilen `order_number` alanı için öncelik sırası:
+
+1. **Customer's Purchase Order** (`po_no`): Sales Order'daki müşteri PO numarası
+2. **Sales Order Name**: PO yoksa Sales Order adı
+3. **Shipment Name**: Hiçbiri yoksa Shipment adı (fallback)
+
+### 3. Label Notes (Etiket Notları)
+Kargo etiketi üzerinde SKU ve adet bilgisi görüntülenir:
+
+```
+SC-MAT-090-200-18[2]
+SC-VAC-DOUBLE[1]
+```
+
+- Her SKU ayrı satırda
+- Format: `SKU[adet]`
+- Maksimum 50 karakter limiti
+- Aynı SKU'lar birleştirilir
+
+### 4. Müşteri Tipi Kontrolü
+Bireysel ve kurumsal müşteriler farklı işlenir:
+
+| Müşteri Tipi | company_name Alanı |
+|--------------|-------------------|
+| **Company** | Şirket adı gösterilir |
+| **Individual** | Boş bırakılır |
+
+### 5. Adres House Number Extraction
+Hem gönderici hem alıcı adresleri için ev numarası otomatik ayrıştırılır:
+
+```
+"Reichelstr. 42/a" → address_line_1: "Reichelstr.", house_number: "42/a"
+```
+
+### 6. Duplicate SKU Birleştirme
+Aynı siparişte birden fazla aynı ürün varsa:
+
+- Parcel items'da tek satırda birleştirilir
+- Quantity, price ve weight toplanır
+- Label notes'da tek SKU ile toplam adet gösterilir
+
+## ⚙️ Yapılandırma
+
+### SendCloud Settings
+ERPNext'te `SendCloud` DocType'ında şu alanlar yapılandırılmalı:
+
+| Alan | Açıklama |
+|------|----------|
+| `api_key` | SendCloud Public Key |
+| `api_secret` | SendCloud Secret Key |
+| `enabled` | Entegrasyonu aktif et |
+| `brand_id` | (Opsiyonel) SendCloud Brand ID |
+
+### Item Master Alanları
+Ürünlerde şu alanlar kullanılır:
+
+| Alan | Açıklama |
+|------|----------|
+| `custom_sku` | Özel SKU (öncelikli) |
+| `item_code` | Standart ürün kodu |
+| `customs_tariff_number` | HS Code (gümrük) |
+| `country_of_origin` | Menşei ülke |
+| `weight_per_unit` | Birim ağırlığı |
+
+### Customer Ayarları
+Müşteri tipinin doğru belirlenmesi için:
+
+- `Customer.customer_type`: "Company" veya "Individual"
+
+### Address Ayarları
+Gönderici adresi için:
+
+- `address_title`: Şirket adı olmalı (adres değil)
+
+## 🔄 API Versiyonu
+
+Bu entegrasyon **SendCloud API v3** kullanır:
+
+- Endpoint: `https://panel.sendcloud.sc/api/v3/shipments`
+- Multicollo desteği
+- Label notes desteği
+- Brand ID desteği
+
+## 📋 Payload Örneği
+
+```json
+{
+  "order_number": "305-8095352-1473946",
+  "brand_id": 12345,
+  "parcels": [
+    {
+      "dimensions": {
+        "length": 100,
+        "width": 33,
+        "height": 33,
+        "unit": "cm"
+      },
+      "weight": {
+        "value": 17.0,
+        "unit": "kg"
+      },
+      "order_number": "SHIPMENT-00047-1",
+      "parcel_items": [
+        {
+          "description": "Mattress 180x200x18",
+          "quantity": 2,
+          "price": {
+            "value": 1058.0,
+            "currency": "EUR"
+          },
+          "weight": {
+            "value": 24.0,
+            "unit": "kg"
+          },
+          "sku": "SC-MAT-180-200-18",
+          "hs_code": "940421",
+          "origin_country": "BE"
+        }
+      ],
+      "label_notes": ["SC-MAT-180-200-18[2]"]
+    }
+  ],
+  "to_address": {
+    "name": "John Doe",
+    "address_line_1": "Hauptstraße",
+    "house_number": "123",
+    "postal_code": "10115",
+    "city": "Berlin",
+    "country_code": "DE",
+    "phone_number": "+49123456789",
+    "email": "john@example.com"
+  },
+  "from_address": {
+    "name": "Scarnatti",
+    "company_name": "Scarnatti B.V.",
+    "address_line_1": "Veldstraat",
+    "house_number": "2",
+    "postal_code": "2930",
+    "city": "Brasschaat",
+    "country_code": "BE",
+    "phone_number": "+32495813358",
+    "email": "info@scarnatti.com"
+  },
+  "ship_with": {
+    "type": "shipping_option_code",
+    "properties": {
+      "shipping_option_code": "gls_eu:eurobusinessparcel,be/flexdelivery"
+    }
+  }
+}
+```
+
+## 🐛 Debug Logging
+
+Geliştirme sırasında debug logları Error Log'a yazılır:
+
+- **SendCloud Debug Payload**: API'ye gönderilen payload
+- **SendCloud API Response**: API'den dönen yanıt
+
+Production'da bu logları kapatmak için `sendcloud.py`'deki `frappe.log_error` satırlarını yorum satırı yapın.
+
+## 📁 Dosya Konumu
+
+```
+erpnext_shipping/
+└── erpnext_shipping/
+    └── doctype/
+        └── sendcloud/
+            ├── sendcloud.py      # Ana entegrasyon kodu
+            ├── sendcloud.json    # DocType tanımı
+            └── sendcloud.js      # Frontend kodu
+```
+
+## 🔧 Kurulum
+
+### Fork'tan Kurulum
+
+```bash
+cd ~/frappe-bench
+bench get-app https://github.com/omrakgn/erpnext-shipping.git --branch develop
+bench --site [SITE_ADI] install-app erpnext_shipping
+bench --site [SITE_ADI] migrate
+bench build
+bench restart
+```
+
+### Güncelleme
+
+```bash
+cd ~/frappe-bench/apps/erpnext_shipping
+git pull origin develop
+cd ~/frappe-bench
+bench --site [SITE_ADI] migrate
+bench restart
+```
+
+## 📝 Değişiklik Geçmişi
+
+### v1.0.0 (Ocak 2026)
+- ✅ Parcel items desteği eklendi
+- ✅ API v3 formatına güncellendi (`price` alanı)
+- ✅ `order_number` root seviyeye eklendi
+- ✅ Customer's Purchase Order desteği
+- ✅ Label notes (SKU[adet]) desteği
+- ✅ Bireysel/Kurumsal müşteri ayrımı
+- ✅ House number extraction (to_address)
+- ✅ Duplicate SKU birleştirme
+- ✅ Brand ID desteği
+- ✅ Debug logging
+
+## 🤝 Katkıda Bulunma
+
+Fork: [https://github.com/omrakgn/erpnext-shipping](https://github.com/omrakgn/erpnext-shipping)
+
+## 📄 Lisans
+
+MIT License - Orijinal frappe/erpnext-shipping lisansına tabidir.
