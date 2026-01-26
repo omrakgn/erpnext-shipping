@@ -510,7 +510,7 @@ class SendCloudUtils:
 			return {
 				"parcel_items": parcel_items,
 				"order_number": order_number,
-				"label_notes": "\n".join(sku_list) if sku_list else None,
+				"label_notes": sku_list if sku_list else None,  # List olarak gönder
 				"total_value": total_value
 			}
 
