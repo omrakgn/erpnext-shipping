@@ -100,6 +100,9 @@ class SendCloudUtils:
 		if not self.enabled or not self.api_key or not self.api_secret:
 			return []
 
+		# Shipment item bilgilerini bir kez al
+		shipment_items_data = self.get_shipment_items(shipment)
+		
 		parcels = []
 		for i, parcel in enumerate(json.loads(shipment_parcel), start=1):
 			parcel_count = parcel.get("count", 1)
@@ -108,6 +111,7 @@ class SendCloudUtils:
 					parcel,
 					shipment,
 					i,
+					shipment_items_data,
 				)
 				parcels.append(parcel_data)
 
@@ -164,8 +168,13 @@ class SendCloudUtils:
 		if pickup_contact.email_id:
 			from_address["email"] = pickup_contact.email_id
 
+		# Order number: Önce PO, yoksa SO, yoksa Shipment adı
+		api_order_number = shipment
+		if shipment_items_data and shipment_items_data.get("order_number"):
+			api_order_number = shipment_items_data["order_number"]
+
 		payload = {
-			"order_number": shipment,  # Root seviyede order_number gerekli
+			"order_number": api_order_number,
 			"parcels": parcels,
 			"to_address": to_address,
 			"from_address": from_address,
@@ -176,6 +185,11 @@ class SendCloudUtils:
 				},
 			},
 		}
+		
+		# Brand ID ekle (SendCloud Settings'ten al)
+		settings = frappe.get_single("SendCloud")
+		if hasattr(settings, 'brand_id') and settings.brand_id:
+			payload["brand_id"] = int(settings.brand_id)
 
 		# DEBUG: Payload'u logla
 		frappe.log_error(message=json.dumps(payload, indent=2, default=str), title="SendCloud Debug Payload")
@@ -405,7 +419,7 @@ class SendCloudUtils:
 		else:
 			return carrier_name.upper() if post_or_get == "get" else carrier_name.lower()
 
-	def get_parcel(self, parcel, shipment, index):
+	def get_parcel(self, parcel, shipment, index, shipment_items_data=None):
 		"""Parcel verilerini SendCloud API formatında hazırla"""
 		parcel_data = {
 			"dimensions": {
@@ -419,9 +433,12 @@ class SendCloudUtils:
 		}
 
 		# Item bilgilerini ekle
-		parcel_items = self.get_shipment_items(shipment)
-		if parcel_items:
-			parcel_data["parcel_items"] = parcel_items
+		if shipment_items_data and shipment_items_data.get("parcel_items"):
+			parcel_data["parcel_items"] = shipment_items_data["parcel_items"]
+			
+			# Label notes (SKU bilgileri)
+			if shipment_items_data.get("label_notes"):
+				parcel_data["label_notes"] = shipment_items_data["label_notes"]
 
 		return parcel_data
 
@@ -429,8 +446,19 @@ class SendCloudUtils:
 		"""
 		Shipment'a bağlı Delivery Note'lardan item bilgilerini al.
 		SendCloud API formatında parcel_items listesi döndürür.
+		
+		Returns:
+			dict: {
+				"parcel_items": [...],
+				"order_number": "PO veya SO numarası",
+				"label_notes": "SKU bilgileri",
+				"total_value": toplam değer
+			}
 		"""
 		parcel_items = []
+		sku_list = []
+		order_number = None
+		total_value = 0
 
 		try:
 			shipment_doc = frappe.get_doc("Shipment", shipment_name)
@@ -447,13 +475,44 @@ class SendCloudUtils:
 					continue
 
 				delivery_note = frappe.get_doc("Delivery Note", dn_row.delivery_note)
+				
+				# Sales Order'dan PO numarasını al
+				if not order_number:
+					for item in delivery_note.items:
+						if item.against_sales_order:
+							so = frappe.get_doc("Sales Order", item.against_sales_order)
+							# Öncelik: Customer's Purchase Order (po_no), yoksa Sales Order adı
+							if so.po_no:
+								order_number = so.po_no
+							else:
+								order_number = so.name
+							break
 
 				for item in delivery_note.items:
 					parcel_item = self.format_parcel_item(item, delivery_note.currency)
 					if parcel_item:
 						parcel_items.append(parcel_item)
+						total_value += item.amount
+						
+						# SKU listesi oluştur (label_notes için)
+						# Format: SKU[adet], SKU2[adet]
+						# Önce custom_sku, yoksa item_code
+						sku = None
+						if item.item_code:
+							item_doc = frappe.get_cached_doc("Item", item.item_code)
+							sku = item_doc.get("custom_sku") or item.item_code
+						if sku:
+							sku_list.append(f"{sku}[{int(item.qty)}]")
 
-			return parcel_items if parcel_items else None
+			if not parcel_items:
+				return None
+				
+			return {
+				"parcel_items": parcel_items,
+				"order_number": order_number,
+				"label_notes": "\n".join(sku_list) if sku_list else None,
+				"total_value": total_value
+			}
 
 		except Exception as e:
 			frappe.log_error(
