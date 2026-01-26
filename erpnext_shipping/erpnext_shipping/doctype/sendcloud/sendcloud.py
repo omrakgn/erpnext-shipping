@@ -451,14 +451,15 @@ class SendCloudUtils:
 			dict: {
 				"parcel_items": [...],
 				"order_number": "PO veya SO numarası",
-				"label_notes": "SKU bilgileri",
+				"label_notes": ["SKU[qty]", ...],
 				"total_value": toplam değer
 			}
 		"""
-		parcel_items = []
-		sku_list = []
+		items_dict = {}  # SKU bazlı birleştirme için
+		sku_qty_dict = {}  # Label notes için SKU -> toplam adet
 		order_number = None
 		total_value = 0
+		default_currency = "EUR"
 
 		try:
 			shipment_doc = frappe.get_doc("Shipment", shipment_name)
@@ -475,6 +476,7 @@ class SendCloudUtils:
 					continue
 
 				delivery_note = frappe.get_doc("Delivery Note", dn_row.delivery_note)
+				default_currency = delivery_note.currency or "EUR"
 				
 				# Sales Order'dan PO numarasını al
 				if not order_number:
@@ -489,28 +491,67 @@ class SendCloudUtils:
 							break
 
 				for item in delivery_note.items:
-					parcel_item = self.format_parcel_item(item, delivery_note.currency)
-					if parcel_item:
-						parcel_items.append(parcel_item)
-						total_value += item.amount
+					if not item.item_code:
+						continue
 						
-						# SKU listesi oluştur (label_notes için)
-						# Format: SKU[adet], SKU2[adet]
-						# Önce custom_sku, yoksa item_code
-						sku = None
-						if item.item_code:
-							item_doc = frappe.get_cached_doc("Item", item.item_code)
-							sku = item_doc.get("custom_sku") or item.item_code
-						if sku:
-							sku_list.append(f"{sku}[{int(item.qty)}]")
+					item_doc = frappe.get_cached_doc("Item", item.item_code)
+					sku = item_doc.get("custom_sku") or item.item_code
+					
+					# Aynı SKU'ları birleştir
+					if sku in items_dict:
+						# Mevcut item'a ekle
+						items_dict[sku]["quantity"] += int(item.qty)
+						items_dict[sku]["price"]["value"] += flt(item.amount, CURRENCY_DECIMALS)
+						items_dict[sku]["weight"]["value"] += flt(item.total_weight or 0, WEIGHT_DECIMALS)
+						sku_qty_dict[sku] += int(item.qty)
+					else:
+						# Yeni item oluştur
+						item_weight = item.total_weight or 0
+						if not item_weight and item.qty:
+							item_weight = item.qty * (item_doc.weight_per_unit or 0)
+						
+						items_dict[sku] = {
+							"description": (item.item_name or item.item_code or "Product")[:200],
+							"quantity": int(item.qty),
+							"price": {
+								"value": flt(item.amount, CURRENCY_DECIMALS),
+								"currency": default_currency
+							},
+							"weight": {
+								"value": flt(item_weight, WEIGHT_DECIMALS) if item_weight > 0 else 0.1,
+								"unit": "kg"
+							},
+							"sku": sku[:50]
+						}
+						
+						# HS Code ve Origin Country
+						if item_doc.customs_tariff_number:
+							items_dict[sku]["hs_code"] = item_doc.customs_tariff_number[:20]
+						if item_doc.country_of_origin:
+							country_code = frappe.db.get_value("Country", item_doc.country_of_origin, "code")
+							if country_code:
+								items_dict[sku]["origin_country"] = country_code.upper()
+						
+						sku_qty_dict[sku] = int(item.qty)
+					
+					total_value += item.amount
 
-			if not parcel_items:
+			if not items_dict:
 				return None
+			
+			# Label notes oluştur - SKU[toplam adet] formatında
+			label_notes = []
+			for sku, qty in sku_qty_dict.items():
+				note = f"{sku}[{qty}]"
+				# Max 50 karakter limiti
+				if len(note) > 50:
+					note = f"{sku[:45]}[{qty}]"
+				label_notes.append(note)
 				
 			return {
-				"parcel_items": parcel_items,
+				"parcel_items": list(items_dict.values()),
 				"order_number": order_number,
-				"label_notes": sku_list if sku_list else None,  # List olarak gönder
+				"label_notes": label_notes if label_notes else None,
 				"total_value": total_value
 			}
 
