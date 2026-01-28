@@ -187,9 +187,8 @@ class SendCloudUtils:
 		}
 		
 		# Brand ID ekle (SendCloud Settings'ten al)
-		settings = frappe.get_single("SendCloud")
-		if hasattr(settings, 'brand_id') and settings.brand_id:
-			payload["brand_id"] = int(settings.brand_id)
+		if self.get_brand_id():
+			payload["brand_id"] = self.get_brand_id()
 
 		# DEBUG: Payload'u logla
 		frappe.log_error(message=json.dumps(payload, indent=2, default=str), title="SendCloud Debug Payload")
@@ -418,6 +417,17 @@ class SendCloudUtils:
 			return "SendCloud" if post_or_get == "get" else "sendcloud"
 		else:
 			return carrier_name.upper() if post_or_get == "get" else carrier_name.lower()
+
+	def get_brand_id(self):
+		"""SendCloud Settings'ten brand_id al"""
+		try:
+			settings = frappe.get_single("SendCloud")
+			brand_id = settings.get("brand_id")
+			if brand_id:
+				return int(brand_id)
+		except Exception:
+			pass
+		return None
 
 	def get_parcel(self, parcel, shipment, index, shipment_items_data=None):
 		"""Parcel verilerini SendCloud API formatında hazırla"""
