@@ -246,31 +246,34 @@ def populate_parcels_from_delivery_notes(shipment: str):
 		)
 		item_weight = flt(frappe.db.get_value("Item", item_code, "weight_per_unit") or 0)
 
-		# Adet -> count (tam birim ise kutu başına 1 adet)
-		if qty == int(qty):
-			count = int(qty) or 1
-			box_qty = 1
-		else:
-			count = 1
-			box_qty = qty
+		# Her birim ayrı kutu: tam adet kadar ayrı koli satırı (count=1).
+		# Böylece her kutu bağımsız düzenlenebilir (örn. bir kutuya hediye eklenebilir).
+		whole = int(qty)
+		units = [1.0] * whole
+		remainder = flt(qty) - whole
+		if remainder > 0:
+			units.append(remainder)
+		if not units:  # qty <= 0 gibi uç durum
+			units = [flt(qty) or 1]
 
-		parcel_no += 1
-		shipment_doc.append(
-			"shipment_parcel",
-			{
-				"length": dims.get("length") or 0,
-				"width": dims.get("width") or 0,
-				"height": dims.get("height") or 0,
-				"weight": flt(dims.get("weight") or item_weight),
-				"count": count,
-				"parcel_template": template,
-			},
-		)
-		if has_parcel_items:
+		for unit_qty in units:
+			parcel_no += 1
 			shipment_doc.append(
-				"custom_parcel_items",
-				{"parcel_no": parcel_no, "item_code": item_code, "qty": box_qty},
+				"shipment_parcel",
+				{
+					"length": dims.get("length") or 0,
+					"width": dims.get("width") or 0,
+					"height": dims.get("height") or 0,
+					"weight": flt(dims.get("weight") or item_weight),
+					"count": 1,
+					"parcel_template": template,
+				},
 			)
+			if has_parcel_items:
+				shipment_doc.append(
+					"custom_parcel_items",
+					{"parcel_no": parcel_no, "item_code": item_code, "qty": unit_qty},
+				)
 
 	shipment_doc.save()
 

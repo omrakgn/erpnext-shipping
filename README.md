@@ -127,11 +127,13 @@ Her ürün, Item kartındaki **Shipment Parcel Template** alanı ile bir koli ş
 bağlanabilir. Shipment formunda (taslak halindeyken) **"Populate Parcels from Delivery
 Notes"** butonu:
 
-- Bağlı Delivery Note'lardaki her ürün için, şablon ölçüleriyle bir **Shipment Parcel**
-  satırı oluşturur (`count` = adet, kutu başına 1 adet).
-- Eşleşen **Parcel Items** satırlarını otomatik doldurur.
-- Sonuç tamamen **düzenlenebilir** — bir koliye elle başka ürün eklemek serbesttir
-  (engelleme yok, en fazla adet uyarısı çıkar).
+- Bağlı Delivery Note'lardaki her ürün için, **her birim ayrı kutu** olacak şekilde
+  şablon ölçüleriyle ayrı **Shipment Parcel** satırları oluşturur (`count = 1`). Örn.
+  2 adet yatak → 2 ayrı koli satırı.
+- Eşleşen **Parcel Items** satırlarını otomatik doldurur (kutu başına 1 adet).
+- Sonuç tamamen **düzenlenebilir** — belirli bir kutuya elle başka ürün (örn. **hediye**)
+  eklemek serbesttir. DN'de olmayan ekstra ürünler **uyarı vermez**; doğrulama yalnızca
+  DN'deki ürünlerin adetlerini kontrol eder.
 - Şablonu olmayan ürünler atlanır ve listelenir (ölçüleri elle girilmeli).
 - Tablolar doluysa buton **üzerine yazmadan önce onay** ister.
 

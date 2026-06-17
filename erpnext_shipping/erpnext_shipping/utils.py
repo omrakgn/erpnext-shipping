@@ -92,11 +92,11 @@ def validate_parcel_items(doc, method=None):
 		):
 			dn_totals[item.item_code] = dn_totals.get(item.item_code, 0) + (item.qty or 0)
 
-	# Karşılaştır
+	# Karşılaştır — yalnızca Delivery Note'ta olan ürünler kontrol edilir.
+	# Kolilere elle eklenen ekstra ürünler (örn. hediye) DN'de yoksa uyarı vermez.
 	mismatches = []
-	for item_code in sorted(set(assigned) | set(dn_totals)):
+	for item_code, d in sorted(dn_totals.items()):
 		a = assigned.get(item_code, 0)
-		d = dn_totals.get(item_code, 0)
 		if abs(a - d) > 0.001:
 			mismatches.append(
 				_("{0}: parcels {1}, Delivery Note {2}").format(item_code, f"{a:g}", f"{d:g}")
