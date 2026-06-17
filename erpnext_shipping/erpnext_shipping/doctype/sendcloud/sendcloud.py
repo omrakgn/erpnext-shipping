@@ -265,7 +265,7 @@ class SendCloudUtils:
 						"shipment_id": ", ".join(shipment_ids),
 						"carrier": self.get_carrier(service_info["carrier"], post_or_get="post"),
 						"carrier_service": service_info["service_name"],
-						"shipment_amount": service_info["total_price"],
+						"shipment_amount": service_info.get("total_price") or 0,
 						"awb_number": ", ".join(tracking_numbers),
 						"tracking_url": ", ".join(tracking_urls),
 					}
@@ -315,7 +315,7 @@ class SendCloudUtils:
 								"tracking_url": parcel_data.get("tracking_url", ""),
 								"carrier": self.get_carrier(service_info["carrier"], post_or_get="post"),
 								"carrier_service": service_info["service_name"],
-								"shipment_amount": service_info["total_price"],
+								"shipment_amount": service_info.get("total_price") or 0,
 							}
 						)
 				except Exception:
@@ -328,7 +328,7 @@ class SendCloudUtils:
 					),
 					"carrier": shipments_results[0]["carrier"],
 					"carrier_service": shipments_results[0]["carrier_service"],
-					"shipment_amount": service_info["total_price"],
+					"shipment_amount": service_info.get("total_price") or 0,
 					"awb_number": ", ".join(
 						item["awb_number"] for item in shipments_results if item.get("awb_number")
 					),

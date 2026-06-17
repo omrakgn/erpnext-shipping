@@ -178,7 +178,7 @@ def create_shipment(
 				"carrier": shipment_info.get("carrier"),
 				"carrier_service": shipment_info.get("carrier_service"),
 				"shipment_id": shipment_info.get("shipment_id"),
-				"shipment_amount": shipment_info.get("shipment_amount"),
+				"shipment_amount": flt(shipment_info.get("shipment_amount")),
 				"awb_number": shipment_info.get("awb_number"),
 				"status": "Booked",
 			}
