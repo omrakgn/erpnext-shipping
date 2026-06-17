@@ -67,6 +67,18 @@ def validate_parcel_items(doc, method=None):
 	Note'lardaki adetler uyuşmazsa kullanıcıyı uyar (engelleme yok)."""
 	parcel_items = doc.get("custom_parcel_items") or []
 	if not parcel_items:
+		# Birden fazla koli var ama eşleştirme yoksa: tüm ürünler her koliye gider.
+		# Bu genelde istenmeyen bir durumdur; kullanıcıyı uyar (engelleme yok).
+		if len(doc.get("shipment_parcel", [])) > 1:
+			frappe.msgprint(
+				_(
+					"This shipment has multiple parcels but no Parcel Items mapping, so all "
+					"Delivery Note items will be sent in every parcel. Use 'Populate Parcels "
+					"from Delivery Notes' or fill the Parcel Items table to assign items per parcel."
+				),
+				title=_("Parcel Items Not Set"),
+				indicator="orange",
+			)
 		return
 
 	# Her koli satırının (Shipment Parcel) count çarpanı: idx -> count
