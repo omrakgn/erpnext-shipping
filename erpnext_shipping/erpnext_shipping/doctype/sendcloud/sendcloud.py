@@ -637,9 +637,12 @@ class SendCloudUtils:
 				# Delivery Note yoksa None döndür
 				return None
 
+			seen_dns = set()
 			for dn_row in delivery_notes:
-				if not dn_row.delivery_note:
+				# Aynı DN birden fazla listelense bile bir kez işle (adet katlanmasın)
+				if not dn_row.delivery_note or dn_row.delivery_note in seen_dns:
 					continue
+				seen_dns.add(dn_row.delivery_note)
 
 				delivery_note = frappe.get_doc("Delivery Note", dn_row.delivery_note)
 				default_currency = delivery_note.currency or "EUR"

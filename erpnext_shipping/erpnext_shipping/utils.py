@@ -82,9 +82,12 @@ def validate_parcel_items(doc, method=None):
 
 	# Delivery Note'lardaki toplam adet - item_code bazında
 	dn_totals = {}
+	seen_dns = set()
 	for dn_row in doc.get("shipment_delivery_note", []):
-		if not dn_row.delivery_note:
+		# Aynı DN birden fazla listelense bile bir kez say (adet katlanmasın)
+		if not dn_row.delivery_note or dn_row.delivery_note in seen_dns:
 			continue
+		seen_dns.add(dn_row.delivery_note)
 		for item in frappe.get_all(
 			"Delivery Note Item",
 			filters={"parent": dn_row.delivery_note},

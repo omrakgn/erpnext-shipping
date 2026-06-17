@@ -204,9 +204,12 @@ def populate_parcels_from_delivery_notes(shipment: str):
 
 	# Bağlı Delivery Note'lardan ürün -> toplam adet (ilk görülme sırası korunur)
 	item_qty = {}
+	seen_dns = set()
 	for dn_row in shipment_doc.get("shipment_delivery_note", []):
-		if not dn_row.delivery_note:
+		# Aynı DN birden fazla listelense bile bir kez işle (adet katlanmasın)
+		if not dn_row.delivery_note or dn_row.delivery_note in seen_dns:
 			continue
+		seen_dns.add(dn_row.delivery_note)
 		for item in frappe.get_all(
 			"Delivery Note Item",
 			filters={"parent": dn_row.delivery_note},
