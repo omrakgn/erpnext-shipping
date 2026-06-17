@@ -56,7 +56,7 @@ Bu doküman, ERPNext için özelleştirilmiş SendCloud entegrasyonunun özellik
 Shipment oluşturulduğunda, bağlı Delivery Note'lardan ürün bilgileri otomatik olarak SendCloud'a gönderilir:
 
 - **Description**: Ürün adı
-- **SKU**: Öncelik sırası: `custom_sku` → `item_code`
+- **SKU**: `item_code` (ürün kodu doğrudan SKU olarak kullanılır)
 - **Quantity**: Ürün adedi (aynı SKU'lar birleştirilir)
 - **Price**: Ürün tutarı (EUR)
 - **Weight**: Ürün ağırlığı (kg)
@@ -105,6 +105,51 @@ Aynı siparişte birden fazla aynı ürün varsa:
 - Quantity, price ve weight toplanır
 - Label notes'da tek SKU ile toplam adet gösterilir
 
+### 7. Koli-Bazlı Ürün Eşleştirme (Parcel Items)
+Bir gönderi birden fazla koliye bölündüğünde, hangi ürünün hangi koliye / kaç adet
+konduğu **Shipment > Parcel Items** tablosundan belirlenir:
+
+| Alan | Açıklama |
+|------|----------|
+| `Parcel No` | Shipment Parcel tablosundaki koli sıra numarası (1, 2, 3 ...) |
+| `Item` | Ürün (Item) |
+| `Qty` | O koliye konan adet |
+
+- Tablo **doluysa**: SendCloud'a her koli için **sadece o kolideki ürün/adetler** gönderilir.
+  Birim fiyat ve ağırlık, bağlı Delivery Note'tan türetilip atanan adetle çarpılır.
+- Tablo **boşsa**: eski davranış korunur (tüm DN ürünleri her koliye gönderilir) —
+  tek koli senaryosu için doğru sonuç.
+- Atanan toplam adetler bağlı Delivery Note adetleriyle uyuşmazsa kayıt sırasında
+  **uyarı** gösterilir (engellenmez).
+
+### 8. Şablondan Otomatik Koli Doldurma
+Her ürün, Item kartındaki **Shipment Parcel Template** alanı ile bir koli şablonuna
+bağlanabilir. Shipment formunda (taslak halindeyken) **"Populate Parcels from Delivery
+Notes"** butonu:
+
+- Bağlı Delivery Note'lardaki her ürün için, şablon ölçüleriyle bir **Shipment Parcel**
+  satırı oluşturur (`count` = adet, kutu başına 1 adet).
+- Eşleşen **Parcel Items** satırlarını otomatik doldurur.
+- Sonuç tamamen **düzenlenebilir** — bir koliye elle başka ürün eklemek serbesttir
+  (engelleme yok, en fazla adet uyarısı çıkar).
+- Şablonu olmayan ürünler atlanır ve listelenir (ölçüleri elle girilmeli).
+- Tablolar doluysa buton **üzerine yazmadan önce onay** ister.
+
+> ⚠️ Buton, Shipment **kaydedildikten sonra** çalışır (kaydedilmemiş değişiklik varsa uyarır).
+
+### 9. Kargo Seçeneği Etiketi, Favoriler ve Filtre
+Fetch Shipping Rates penceresinde SendCloud seçenekleri için:
+
+- **Ayırt edici etiket**: Servis adının altında **shipping option kodu** gösterilir
+  (örn. `fedex:regional/economy,signature`). Aynı isimli FedEx varyantları artık ayırt edilir.
+- **Fiyatsız seçenekler**: Kendi sözleşmenizle kullandığınız taşıyıcılar (FedEx vb.) fiyat
+  döndürmese bile listelenir ("Price on request") ve seçilip gönderilebilir.
+- **Favoriler (★)**: Her SendCloud satırındaki yıldıza tıklayarak o seçeneği favorilere
+  ekler/çıkarırsınız. Favoriler **SendCloud Settings > Preferred Options** tablosunda saklanır
+  ve sonraki sorgularda **Preferred Services** bölümünde üstte görünür.
+- **Sadece favorileri göster**: SendCloud Settings'te **"Only show preferred options when
+  fetching rates"** işaretlenirse, sorguda yalnızca yıldızladığınız seçenekler listelenir.
+
 ## ⚙️ Yapılandırma
 
 ### SendCloud Settings
@@ -122,8 +167,8 @@ ERPNext'te `SendCloud` DocType'ında şu alanlar yapılandırılmalı:
 
 | Alan | Açıklama |
 |------|----------|
-| `custom_sku` | Özel SKU (öncelikli) |
-| `item_code` | Standart ürün kodu |
+| `item_code` | Ürün kodu (SKU olarak kullanılır) |
+| `custom_shipment_parcel_template` | Koli şablonu (otomatik doldurma için) |
 | `customs_tariff_number` | HS Code (gümrük) |
 | `country_of_origin` | Menşei ülke |
 | `weight_per_unit` | Birim ağırlığı |
@@ -261,6 +306,16 @@ bench restart
 ```
 
 ## 📝 Değişiklik Geçmişi
+
+### v1.1.0 (Haziran 2026)
+- ✅ Koli-bazlı ürün eşleştirme (Parcel Items tablosu) — çoklu kolide doğru ürün/adet
+- ✅ Item ↔ Shipment Parcel Template bağı + DN'den otomatik koli doldurma butonu
+- ✅ Koli adetleri ile Delivery Note adetleri uyuşmazlığında uyarı
+- ✅ Fiyatsız (kendi sözleşmeli) kargo seçenekleri artık gösteriliyor (FedEx vb.)
+- ✅ Seçenek etiketinde kod gösterimi + favori (★) kaydetme + "sadece favoriler" filtresi
+- ✅ `brand_id` artık SendCloud Settings'te gerçek bir alan
+- ✅ SKU kaynağı `item_code` (custom_sku kaldırıldı)
+- 🧹 Ölü kod (`format_parcel_item`) ve sürekli debug logları temizlendi
 
 ### v1.0.0 (Ocak 2026)
 - ✅ Parcel items desteği eklendi

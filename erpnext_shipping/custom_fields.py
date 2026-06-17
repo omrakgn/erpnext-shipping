@@ -3,6 +3,32 @@ from .utils import identity as _
 
 def get_custom_fields():
 	return {
+		"Item": [
+			{
+				"fieldname": "custom_shipment_parcel_template",
+				"label": _("Shipment Parcel Template"),
+				"fieldtype": "Link",
+				"options": "Shipment Parcel Template",
+				"insert_after": "weight_per_unit",
+				"description": _(
+					"Default parcel box template used when auto-populating Shipment parcels for this item."
+				),
+			},
+		],
+		"Shipment": [
+			{
+				"fieldname": "custom_parcel_items",
+				"label": _("Parcel Items"),
+				"fieldtype": "Table",
+				"options": "Shipment Parcel Item",
+				"insert_after": "shipment_parcel",
+				"description": _(
+					"Optional: map which items and quantities go into each parcel. "
+					"'Parcel No' matches the row number of the Shipment Parcel table above. "
+					"Leave empty to send all Delivery Note items in every parcel."
+				),
+			},
+		],
 		"Delivery Note": [
 			{
 				"fieldname": "shipping_sec_break",

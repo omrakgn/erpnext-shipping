@@ -62,6 +62,56 @@ def validate_parcels(doc, method=None):
 				)
 
 
+def validate_parcel_items(doc, method=None):
+	"""Koli içeriğindeki (custom_parcel_items) toplam adetler ile bağlı Delivery
+	Note'lardaki adetler uyuşmazsa kullanıcıyı uyar (engelleme yok)."""
+	parcel_items = doc.get("custom_parcel_items") or []
+	if not parcel_items:
+		return
+
+	# Her koli satırının (Shipment Parcel) count çarpanı: idx -> count
+	parcel_counts = {p.idx: (p.count or 1) for p in doc.get("shipment_parcel", [])}
+
+	# Kolilere atanan toplam adet (count çarpanı ile) - item_code bazında
+	assigned = {}
+	for row in parcel_items:
+		if not row.item_code:
+			continue
+		count = parcel_counts.get(int(row.parcel_no), 1) if row.parcel_no else 1
+		assigned[row.item_code] = assigned.get(row.item_code, 0) + (row.qty or 0) * count
+
+	# Delivery Note'lardaki toplam adet - item_code bazında
+	dn_totals = {}
+	for dn_row in doc.get("shipment_delivery_note", []):
+		if not dn_row.delivery_note:
+			continue
+		for item in frappe.get_all(
+			"Delivery Note Item",
+			filters={"parent": dn_row.delivery_note},
+			fields=["item_code", "qty"],
+		):
+			dn_totals[item.item_code] = dn_totals.get(item.item_code, 0) + (item.qty or 0)
+
+	# Karşılaştır
+	mismatches = []
+	for item_code in sorted(set(assigned) | set(dn_totals)):
+		a = assigned.get(item_code, 0)
+		d = dn_totals.get(item_code, 0)
+		if abs(a - d) > 0.001:
+			mismatches.append(
+				_("{0}: parcels {1}, Delivery Note {2}").format(item_code, f"{a:g}", f"{d:g}")
+			)
+
+	if mismatches:
+		frappe.msgprint(
+			_("Parcel item quantities do not match the Delivery Note quantities:")
+			+ "<br>"
+			+ "<br>".join(mismatches),
+			title=_("Parcel Items Warning"),
+			indicator="orange",
+		)
+
+
 def validate_phone(doc, method=None):
 	if doc.pickup_from_type == "Company":
 		phone_number = frappe.db.get_value("User", doc.pickup_contact_person, "phone")

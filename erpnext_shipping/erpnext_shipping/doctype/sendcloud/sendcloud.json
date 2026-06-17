@@ -7,7 +7,11 @@
  "field_order": [
   "enabled",
   "api_key",
-  "api_secret"
+  "api_secret",
+  "brand_id",
+  "preferred_options_section",
+  "only_show_preferred",
+  "preferred_shipping_options"
  ],
  "fields": [
   {
@@ -27,6 +31,31 @@
    "fieldtype": "Password",
    "label": "API Secret",
    "mandatory_depends_on": "enabled"
+  },
+  {
+   "fieldname": "brand_id",
+   "fieldtype": "Data",
+   "label": "Brand ID",
+   "description": "(Optional) SendCloud Brand ID used on the shipping label."
+  },
+  {
+   "fieldname": "preferred_options_section",
+   "fieldtype": "Section Break",
+   "label": "Preferred Shipping Options"
+  },
+  {
+   "default": "0",
+   "fieldname": "only_show_preferred",
+   "fieldtype": "Check",
+   "label": "Only show preferred options when fetching rates",
+   "description": "When enabled and at least one preferred option is saved, the Fetch Shipping Rates dialog shows only the saved (starred) SendCloud options."
+  },
+  {
+   "fieldname": "preferred_shipping_options",
+   "fieldtype": "Table",
+   "label": "Preferred Options",
+   "options": "SendCloud Preferred Option",
+   "description": "Frequently used SendCloud shipping options. Add via the star button in the Fetch Shipping Rates dialog, or edit here."
   }
  ],
  "index_web_pages_for_search": 1,

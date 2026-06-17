@@ -3,6 +3,24 @@
 
 frappe.ui.form.on("Shipment", {
 	refresh: function (frm) {
+		if (frm.doc.docstatus === 0 && (frm.doc.shipment_delivery_note || []).length) {
+			frm.add_custom_button(__("Populate Parcels from Delivery Notes"), function () {
+				const has_rows =
+					(frm.doc.shipment_parcel || []).length ||
+					(frm.doc.custom_parcel_items || []).length;
+				const run = () => frm.events.populate_parcels(frm);
+				if (has_rows) {
+					frappe.confirm(
+						__(
+							"This will replace the existing Shipment Parcel and Parcel Items rows. Continue?"
+						),
+						run
+					);
+				} else {
+					run();
+				}
+			});
+		}
 		if (frm.doc.docstatus === 1 && !frm.doc.shipment_id) {
 			frm.add_custom_button(__("Fetch Shipping Rates"), function () {
 				if (frm.doc.shipment_parcel.length > 1) {
@@ -97,6 +115,26 @@ frappe.ui.form.on("Shipment", {
 		}
 	},
 
+	populate_parcels: function (frm) {
+		if (frm.is_new() || frm.is_dirty()) {
+			frappe.msgprint(__("Please save the Shipment before populating parcels."));
+			return;
+		}
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.shipping.populate_parcels_from_delivery_notes",
+			freeze: true,
+			freeze_message: __("Populating Parcels"),
+			args: {
+				shipment: frm.doc.name,
+			},
+			callback: function (r) {
+				if (!r.exc) {
+					frm.reload_doc();
+				}
+			},
+		});
+	},
+
 	print_shipping_label: function (frm) {
 		frappe.call({
 			method: "erpnext_shipping.erpnext_shipping.shipping.print_shipping_label",
@@ -187,6 +225,30 @@ function select_from_available_services(frm, available_services) {
 		let service_index = cint($(this).attr("id").split("-")[2]);
 		let service_data = arranged_services[service_type][service_index];
 		frm.select_row(service_data);
+	});
+
+	dialog.$body.on("click", ".fav-btn", function () {
+		const btn = $(this);
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud.toggle_preferred_shipping_option",
+			args: {
+				code: btn.attr("data-code"),
+				service_label: btn.attr("data-label"),
+				carrier: btn.attr("data-carrier"),
+			},
+			callback: function (r) {
+				if (!r.exc) {
+					const pref = r.message && r.message.preferred;
+					btn.text(pref ? "★" : "☆");
+					btn.css("color", pref ? "#f0ad4e" : "#bbb");
+					btn.attr("title", pref ? __("Remove from preferred") : __("Add to preferred"));
+					frappe.show_alert({
+						message: pref ? __("Added to preferred") : __("Removed from preferred"),
+						indicator: "green",
+					});
+				}
+			},
+		});
 	});
 
 	frm.select_row = function (service_data) {

@@ -15,9 +15,20 @@
 						<tr id="data-preferred-{{i}}">
 							<td class="service-info" style="width:20%;">{{ data.preferred_services[i].service_provider }}</td>
 							<td class="service-info" style="width:20%;">{{ data.preferred_services[i].carrier }}</td>
-							<td class="service-info" style="width:40%;">{{ data.preferred_services[i].service_name }}</td>
-							<td class="service-info" style="width:20%;">{{ format_currency(data.preferred_services[i].total_price, data.preferred_services[i].currency, 2) }}</td>
-							<td style="width:10%;vertical-align: middle;">
+							<td class="service-info" style="width:40%;">
+								{{ data.preferred_services[i].service_name }}
+								<div class="text-muted" style="font-size: 11px;">{{ data.preferred_services[i].service_id }}</div>
+							</td>
+							<td class="service-info" style="width:20%;">{{ data.preferred_services[i].total_price == null ? __("Price on request") : format_currency(data.preferred_services[i].total_price, data.preferred_services[i].currency, 2) }}</td>
+							<td style="width:10%;vertical-align: middle; white-space: nowrap;">
+								{% if (data.preferred_services[i].service_provider == "SendCloud") { %}
+									<button class="fav-btn" type="button"
+										data-code="{{ data.preferred_services[i].service_id }}"
+										data-label="{{ data.preferred_services[i].service_name }}"
+										data-carrier="{{ data.preferred_services[i].carrier }}"
+										title="{{ __('Remove from preferred') }}"
+										style="border:none;background:none;color:#f0ad4e;font-size:18px;cursor:pointer;vertical-align:middle;">★</button>
+								{% } %}
 								<button
 									data-type="preferred_services"
 									id="data-preferred-{{i}}" type="button" class="btn">
@@ -50,9 +61,20 @@
 						<tr id="data-other-{{i}}">
 							<td class="service-info" style="width:20%;">{{ data.other_services[i].service_provider }}</td>
 							<td class="service-info" style="width:20%;">{{ data.other_services[i].carrier }}</td>
-							<td class="service-info" style="width:40%;">{{ data.other_services[i].service_name }}</td>
-							<td class="service-info" style="width:20%;">{{ format_currency(data.other_services[i].total_price, data.other_services[i].currency, 2) }}</td>
-							<td style="width:10%;vertical-align: middle;">
+							<td class="service-info" style="width:40%;">
+								{{ data.other_services[i].service_name }}
+								<div class="text-muted" style="font-size: 11px;">{{ data.other_services[i].service_id }}</div>
+							</td>
+							<td class="service-info" style="width:20%;">{{ data.other_services[i].total_price == null ? __("Price on request") : format_currency(data.other_services[i].total_price, data.other_services[i].currency, 2) }}</td>
+							<td style="width:10%;vertical-align: middle; white-space: nowrap;">
+								{% if (data.other_services[i].service_provider == "SendCloud") { %}
+									<button class="fav-btn" type="button"
+										data-code="{{ data.other_services[i].service_id }}"
+										data-label="{{ data.other_services[i].service_name }}"
+										data-carrier="{{ data.other_services[i].carrier }}"
+										title="{{ __('Add to preferred') }}"
+										style="border:none;background:none;color:#bbb;font-size:18px;cursor:pointer;vertical-align:middle;">☆</button>
+								{% } %}
 								<button
 									data-type="other_services"
 									id="data-other-{{i}}" type="button" class="btn">

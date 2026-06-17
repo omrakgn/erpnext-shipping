@@ -30,6 +30,37 @@ class SendCloud(Document):
 	pass
 
 
+@frappe.whitelist()
+def toggle_preferred_shipping_option(code, service_label=None, carrier=None):
+	"""Bir SendCloud shipping option kodunu favorilere ekle/çıkar.
+
+	Fetch Shipping Rates penceresindeki yıldız butonundan çağrılır. SendCloud
+	ayarları yalnızca System Manager'a açık olduğundan, kaydı izin atlayarak
+	yapar (yalnızca favori listesini günceller).
+	"""
+	if not code:
+		return {"preferred": False}
+
+	settings = frappe.get_doc("SendCloud", "SendCloud")
+	existing = next(
+		(r for r in (settings.preferred_shipping_options or []) if r.shipping_option_code == code),
+		None,
+	)
+
+	if existing:
+		settings.remove(existing)
+		preferred = False
+	else:
+		settings.append(
+			"preferred_shipping_options",
+			{"shipping_option_code": code, "service_label": service_label, "carrier": carrier},
+		)
+		preferred = True
+
+	settings.save(ignore_permissions=True)
+	return {"preferred": preferred}
+
+
 class SendCloudUtils:
 	def __init__(self):
 		settings = frappe.get_single("SendCloud")
@@ -100,9 +131,11 @@ class SendCloudUtils:
 		if not self.enabled or not self.api_key or not self.api_secret:
 			return []
 
-		# Shipment item bilgilerini bir kez al
-		shipment_items_data = self.get_shipment_items(shipment)
-		
+		# Shipment item bilgilerini ve koli-bazlı ürün eşleştirmesini bir kez al
+		shipment_doc = frappe.get_doc("Shipment", shipment)
+		shipment_items_data = self.get_shipment_items(shipment_doc)
+		parcel_item_map = self.get_parcel_item_map(shipment_doc)
+
 		parcels = []
 		for i, parcel in enumerate(json.loads(shipment_parcel), start=1):
 			parcel_count = parcel.get("count", 1)
@@ -112,6 +145,7 @@ class SendCloudUtils:
 					shipment,
 					i,
 					shipment_items_data,
+					parcel_item_map,
 				)
 				parcels.append(parcel_data)
 
@@ -187,11 +221,9 @@ class SendCloudUtils:
 		}
 		
 		# Brand ID ekle (SendCloud Settings'ten al)
-		if self.get_brand_id():
-			payload["brand_id"] = self.get_brand_id()
-
-		# DEBUG: Payload'u logla
-		frappe.log_error(message=json.dumps(payload, indent=2, default=str), title="SendCloud Debug Payload")
+		brand_id = self.get_brand_id()
+		if brand_id:
+			payload["brand_id"] = brand_id
 
 		if service_info.get("multicollo"):
 			# Multicollo Logic: All packages are processed in a single API call
@@ -202,11 +234,12 @@ class SendCloudUtils:
 					auth=(self.api_key, self.api_secret),
 				)
 				response_data = response.json()
-				
-				# DEBUG: API Response logla
-				frappe.log_error(message=json.dumps(response_data, indent=2, default=str), title="SendCloud API Response (multicollo)")
-				
+
 				if "errors" in response_data and response_data["errors"]:
+					frappe.log_error(
+						message=json.dumps(response_data, indent=2, default=str),
+						title="SendCloud Shipment Error (multicollo)",
+					)
 					error_details = [
 						f"Code: {err.get('code', 'N/A')}, Detail: {err.get('detail', 'N/A')}"
 						for err in response_data["errors"]
@@ -251,11 +284,12 @@ class SendCloudUtils:
 						auth=(self.api_key, self.api_secret),
 					)
 					response_data = response.json()
-					
-					# DEBUG: API Response logla
-					frappe.log_error(message=json.dumps(response_data, indent=2, default=str), title="SendCloud API Response (non-multicollo)")
-					
+
 					if "errors" in response_data and response_data["errors"]:
+						frappe.log_error(
+							message=json.dumps(response_data, indent=2, default=str),
+							title="SendCloud Shipment Error (non-multicollo)",
+						)
 						error_details = [
 							f"Code: {err.get('code', 'N/A')}, Detail: {err.get('detail', 'N/A')}"
 							for err in response_data["errors"]
@@ -395,18 +429,24 @@ class SendCloudUtils:
 		"""Returns a dictionary with service info."""
 		available_service = frappe._dict()
 		available_service.service_provider = "SendCloud"
-		available_service.carrier = service["carrier"]["name"]
-		available_service.service_name = service["product"]["name"]
-		available_service.service_id = service["code"]
-		available_service.multicollo = service["functionalities"].get("multicollo", False)
+		available_service.carrier = (service.get("carrier") or {}).get("name")
+		available_service.service_name = (service.get("product") or {}).get("name")
+		available_service.service_id = service.get("code")
+		available_service.multicollo = (service.get("functionalities") or {}).get("multicollo", False)
 
 		quotes = service.get("quotes", [])
 		if quotes:
-			price_data = quotes[0].get("price", {}).get("total", {})
+			price_data = (quotes[0].get("price") or {}).get("total") or {}
 			available_service.total_price = self.total_parcel_price(
 				float(price_data.get("value", 0)), parcels
 			)
 			available_service.currency = price_data.get("currency")
+		else:
+			# Bazı taşıyıcılar (örn. kendi sözleşmenizle FedEx) API'den fiyat (quote)
+			# döndürmez. Bu seçeneklerle de gönderi yapılabildiği için listede
+			# tutuyoruz; fiyat alanı boş gösterilir.
+			available_service.total_price = None
+			available_service.currency = None
 
 		return available_service
 
@@ -417,6 +457,19 @@ class SendCloudUtils:
 			return "SendCloud" if post_or_get == "get" else "sendcloud"
 		else:
 			return carrier_name.upper() if post_or_get == "get" else carrier_name.lower()
+
+	def get_preferred_codes(self):
+		"""SendCloud Settings'teki favori (yıldızlı) shipping option kodları."""
+		settings = frappe.get_single("SendCloud")
+		return {
+			row.shipping_option_code
+			for row in (settings.get("preferred_shipping_options") or [])
+			if row.shipping_option_code
+		}
+
+	def only_show_preferred(self):
+		"""Sadece favori seçenekler gösterilsin mi?"""
+		return bool(frappe.db.get_single_value("SendCloud", "only_show_preferred"))
 
 	def get_brand_id(self):
 		"""SendCloud Settings'ten brand_id al"""
@@ -429,8 +482,12 @@ class SendCloudUtils:
 			pass
 		return None
 
-	def get_parcel(self, parcel, shipment, index, shipment_items_data=None):
-		"""Parcel verilerini SendCloud API formatında hazırla"""
+	def get_parcel(self, parcel, shipment, index, shipment_items_data=None, parcel_item_map=None):
+		"""Parcel verilerini SendCloud API formatında hazırla.
+
+		`index`, Shipment Parcel tablosundaki koli sıra numarasıdır (1-based) ve
+		`parcel_item_map`'teki 'Parcel No' ile eşleşir.
+		"""
 		parcel_data = {
 			"dimensions": {
 				"length": parcel.get("length", 0),
@@ -442,27 +499,125 @@ class SendCloudUtils:
 			"order_number": f"{shipment}-{index}",
 		}
 
-		# Item bilgilerini ekle
+		# 1) Koli-bazlı eşleştirme aktifse: her koliye SADECE kendi ürün/adetleri
+		if parcel_item_map:
+			if index in parcel_item_map and shipment_items_data:
+				item_info = shipment_items_data.get("item_info") or {}
+				currency = shipment_items_data.get("currency", "EUR")
+				parcel_items, label_notes = self.build_parcel_items_from_map(
+					parcel_item_map[index], item_info, currency
+				)
+				if parcel_items:
+					parcel_data["parcel_items"] = parcel_items
+					if label_notes:
+						parcel_data["label_notes"] = label_notes
+			# Eşleştirme modunda haritada olmayan koli ürünsüz kalır
+			return parcel_data
+
+		# 2) Eşleştirme yoksa: eski davranış (tüm ürünler her koliye)
 		if shipment_items_data and shipment_items_data.get("parcel_items"):
 			parcel_data["parcel_items"] = shipment_items_data["parcel_items"]
-			
+
 			# Label notes (SKU bilgileri)
 			if shipment_items_data.get("label_notes"):
 				parcel_data["label_notes"] = shipment_items_data["label_notes"]
 
 		return parcel_data
 
-	def get_shipment_items(self, shipment_name):
+	def get_parcel_item_map(self, shipment_doc):
+		"""custom_parcel_items child tablosundan koli -> {item_code: qty} haritası çıkar.
+
+		Returns: {parcel_no(int): {item_code: qty}}. Tablo boşsa boş dict döner
+		ve eski (tüm ürünler her koliye) davranışı devreye girer.
+		"""
+		parcel_item_map = {}
+		for row in shipment_doc.get("custom_parcel_items") or []:
+			if not row.get("item_code") or not row.get("parcel_no"):
+				continue
+			qty = flt(row.qty)
+			if qty <= 0:
+				continue
+			parcel_no = int(row.parcel_no)
+			parcel_item_map.setdefault(parcel_no, {})
+			parcel_item_map[parcel_no][row.item_code] = (
+				parcel_item_map[parcel_no].get(row.item_code, 0) + qty
+			)
+		return parcel_item_map
+
+	def build_parcel_items_from_map(self, items_qty: dict, item_info: dict, currency="EUR"):
+		"""Bir koli için {item_code: qty} -> (SendCloud parcel_items, label_notes).
+
+		Birim fiyat/ağırlık DN'den türetilen `item_info`'dan alınır ve atanan
+		adetle çarpılır; DN'de yoksa Item master'dan fallback yapılır.
+		"""
+		parcel_items = []
+		label_notes = []
+
+		for item_code, qty in items_qty.items():
+			info = item_info.get(item_code) or self.get_item_info_fallback(item_code, currency)
+			qty_int = int(qty)
+
+			unit_weight = flt(info.get("unit_weight", 0))
+			item = {
+				"description": (info.get("description") or item_code)[:200],
+				"quantity": qty_int,
+				"price": {
+					"value": flt(info.get("unit_price", 0) * qty, CURRENCY_DECIMALS),
+					"currency": info.get("currency") or currency,
+				},
+				"weight": {
+					"value": flt(unit_weight * qty, WEIGHT_DECIMALS) if unit_weight > 0 else 0.1,
+					"unit": "kg",
+				},
+				"sku": item_code[:50],
+			}
+			if info.get("hs_code"):
+				item["hs_code"] = info["hs_code"][:20]
+			if info.get("origin_country"):
+				item["origin_country"] = info["origin_country"]
+			parcel_items.append(item)
+
+			# Label notes: SKU[adet], max 50 karakter
+			note = f"{item_code}[{qty_int}]"
+			if len(note) > 50:
+				note = f"{item_code[:45]}[{qty_int}]"
+			label_notes.append(note)
+
+		return parcel_items, label_notes
+
+	def get_item_info_fallback(self, item_code, currency="EUR"):
+		"""DN'de bulunamayan ürün için Item master'dan birim bilgi al."""
+		info = {"description": item_code, "unit_price": 0, "unit_weight": 0, "currency": currency}
+		try:
+			item_doc = frappe.get_cached_doc("Item", item_code)
+			info["description"] = item_doc.item_name or item_code
+			info["unit_price"] = flt(item_doc.get("standard_rate") or 0)
+			info["unit_weight"] = flt(item_doc.get("weight_per_unit") or 0)
+			if item_doc.customs_tariff_number:
+				info["hs_code"] = item_doc.customs_tariff_number
+			if item_doc.country_of_origin:
+				country_code = frappe.db.get_value("Country", item_doc.country_of_origin, "code")
+				if country_code:
+					info["origin_country"] = country_code.upper()
+		except Exception:
+			pass
+		return info
+
+	def get_shipment_items(self, shipment):
 		"""
 		Shipment'a bağlı Delivery Note'lardan item bilgilerini al.
 		SendCloud API formatında parcel_items listesi döndürür.
-		
+
+		`shipment` parametresi Shipment adı (str) ya da doc olabilir.
+
 		Returns:
 			dict: {
-				"parcel_items": [...],
+				"parcel_items": [...],          # tüm ürünler (eşleştirme yoksa fallback)
 				"order_number": "PO veya SO numarası",
 				"label_notes": ["SKU[qty]", ...],
-				"total_value": toplam değer
+				"total_value": toplam değer,
+				"item_info": {item_code: {unit_price, unit_weight, ...}},  # koli eşleştirmesi için
+				"currency": "EUR"
 			}
 		"""
 		items_dict = {}  # SKU bazlı birleştirme için
@@ -470,9 +625,10 @@ class SendCloudUtils:
 		order_number = None
 		total_value = 0
 		default_currency = "EUR"
+		shipment_name = shipment if isinstance(shipment, str) else shipment.name
 
 		try:
-			shipment_doc = frappe.get_doc("Shipment", shipment_name)
+			shipment_doc = frappe.get_doc("Shipment", shipment) if isinstance(shipment, str) else shipment
 
 			# Shipment'a bağlı Delivery Note'ları kontrol et
 			delivery_notes = shipment_doc.get("shipment_delivery_note", [])
@@ -505,8 +661,8 @@ class SendCloudUtils:
 						continue
 						
 					item_doc = frappe.get_cached_doc("Item", item.item_code)
-					sku = item_doc.get("custom_sku") or item.item_code
-					
+					sku = item.item_code
+
 					# Aynı SKU'ları birleştir
 					if sku in items_dict:
 						# Mevcut item'a ekle
@@ -548,7 +704,7 @@ class SendCloudUtils:
 
 			if not items_dict:
 				return None
-			
+
 			# Label notes oluştur - SKU[toplam adet] formatında
 			label_notes = []
 			for sku, qty in sku_qty_dict.items():
@@ -557,87 +713,34 @@ class SendCloudUtils:
 				if len(note) > 50:
 					note = f"{sku[:45]}[{qty}]"
 				label_notes.append(note)
-				
+
+			# item_info: koli-bazlı eşleştirme için birim fiyat/ağırlık türet
+			item_info = {}
+			for code, data in items_dict.items():
+				dn_qty = data["quantity"] or 1
+				item_info[code] = {
+					"description": data["description"],
+					"unit_price": flt(data["price"]["value"]) / dn_qty if dn_qty else 0,
+					"unit_weight": flt(data["weight"]["value"]) / dn_qty if dn_qty else 0,
+					"currency": default_currency,
+					"hs_code": data.get("hs_code"),
+					"origin_country": data.get("origin_country"),
+					"dn_qty": data["quantity"],
+				}
+
 			return {
 				"parcel_items": list(items_dict.values()),
 				"order_number": order_number,
 				"label_notes": label_notes if label_notes else None,
-				"total_value": total_value
+				"total_value": total_value,
+				"item_info": item_info,
+				"currency": default_currency,
 			}
 
 		except Exception as e:
 			frappe.log_error(
 				message=f"Error getting shipment items for {shipment_name}: {str(e)}",
 				title="SendCloud - Get Shipment Items Error"
-			)
-			return None
-
-	def format_parcel_item(self, item, currency="EUR"):
-		"""
-		Delivery Note Item'ı SendCloud API v3 parcel_item formatına dönüştür.
-
-		SendCloud API v3 formatı:
-		{
-			"description": "T-Shirt",
-			"hs_code": "6109",
-			"origin_country": "SE",
-			"product_id": "898678671",
-			"quantity": 2,
-			"sku": "TST-OD2019-B620",
-			"value": {"value": 19.95, "currency": "EUR"},
-			"weight": {"value": 0.9, "unit": "kg"}
-		}
-		"""
-		try:
-			# Temel item bilgileri
-			parcel_item = {
-				"description": (item.item_name or item.item_code or "Product")[:200],
-				"quantity": int(item.qty),
-				"price": {
-					"value": flt(item.amount, CURRENCY_DECIMALS),
-					"currency": currency or "EUR"
-				},
-			}
-
-			# Ağırlık hesapla
-			item_weight = 0
-			if item.total_weight:
-				item_weight = item.total_weight
-			elif item.qty and hasattr(item, 'weight_per_unit') and item.weight_per_unit:
-				item_weight = item.qty * item.weight_per_unit
-
-			# Ağırlık varsa ekle, yoksa varsayılan 0.1 kg
-			parcel_item["weight"] = {
-				"value": flt(item_weight, WEIGHT_DECIMALS) if item_weight > 0 else 0.1,
-				"unit": "kg"
-			}
-
-			# SKU ekle
-			if item.item_code:
-				parcel_item["sku"] = item.item_code[:50]
-
-			# Item master'dan ek bilgileri al
-			if item.item_code:
-				item_doc = frappe.get_cached_doc("Item", item.item_code)
-
-				# HS Code (Gümrük Tarife Numarası)
-				if item_doc.customs_tariff_number:
-					parcel_item["hs_code"] = item_doc.customs_tariff_number[:20]
-
-				# Menşei Ülke
-				if item_doc.country_of_origin:
-					country_code = frappe.db.get_value(
-						"Country", item_doc.country_of_origin, "code"
-					)
-					if country_code:
-						parcel_item["origin_country"] = country_code.upper()
-
-			return parcel_item
-
-		except Exception as e:
-			frappe.log_error(
-				message=f"Error formatting parcel item {item.item_code}: {str(e)}",
-				title="SendCloud - Format Parcel Item Error"
 			)
 			return None
 
