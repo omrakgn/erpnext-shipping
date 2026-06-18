@@ -255,7 +255,9 @@ function select_from_available_services(frm, available_services) {
 		let service_type = $(this).attr("data-type");
 		let service_index = cint($(this).attr("id").split("-")[2]);
 		let service_data = arranged_services[service_type][service_index];
-		frm.select_row(service_data);
+		pick_contract_then(service_data, function (sd) {
+			frm.select_row(sd);
+		});
 	});
 
 	dialog.$body.on("click", ".fav-btn", function () {
@@ -368,6 +370,58 @@ frappe.ui.form.on("Shipment Parcel", {
 	},
 });
 
+// SendCloud seçeneği seçildikten sonra, o carrier'ın birden fazla kontratı varsa
+// kullanıcıya kontratı seçtirir (panel'deki "Enabled contract" gibi), sonra onDone(sd).
+function pick_contract_then(sd, onDone) {
+	if (sd.service_provider !== "SendCloud") {
+		onDone(sd);
+		return;
+	}
+	frappe.call({
+		method: "erpnext_shipping.erpnext_shipping.shipping.get_sendcloud_contracts",
+		args: { carrier: sd.carrier_code || "" },
+		callback: function (r) {
+			const contracts = r.message || [];
+			if (contracts.length <= 1) {
+				if (contracts.length === 1) {
+					sd.contract_id = contracts[0].id;
+					sd.contract_name = contracts[0].name;
+				}
+				onDone(sd);
+				return;
+			}
+			const names = contracts.map((c) => c.name);
+			const current = (
+				contracts.find((c) => String(c.id) === String(sd.contract_id)) ||
+				contracts.find((c) => c.is_default) ||
+				contracts[0]
+			).name;
+			frappe.prompt(
+				[
+					{
+						fieldtype: "Select",
+						fieldname: "contract",
+						label: __("Contract"),
+						options: names.join("\n"),
+						default: current,
+						reqd: 1,
+					},
+				],
+				function (values) {
+					const chosen = contracts.find((c) => c.name === values.contract);
+					if (chosen) {
+						sd.contract_id = chosen.id;
+						sd.contract_name = chosen.name;
+					}
+					onDone(sd);
+				},
+				__("Select Contract"),
+				__("OK")
+			);
+		},
+	});
+}
+
 function select_parcel_carrier(frm, cdt, cdn, available_services) {
 	const arranged_services = available_services.reduce(
 		(prev, curr) => {
@@ -393,18 +447,20 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 	dialog.$body.on("click", ".btn", function () {
 		const service_type = $(this).attr("data-type");
 		const service_index = cint($(this).attr("id").split("-")[2]);
-		const sd = arranged_services[service_type][service_index];
-		frappe.model.set_value(cdt, cdn, "custom_shipping_option_code", sd.service_id);
-		frappe.model.set_value(cdt, cdn, "custom_shipping_carrier", sd.carrier);
-		frappe.model.set_value(cdt, cdn, "custom_shipping_service", sd.service_name);
-		frappe.model.set_value(cdt, cdn, "custom_shipping_price", sd.total_price || 0);
-		frappe.model.set_value(cdt, cdn, "custom_shipping_contract", sd.contract_name || "");
-		frappe.model.set_value(cdt, cdn, "custom_shipping_contract_id", sd.contract_id || "");
-		dialog.hide();
-		frm.save().then(() => {
-			frappe.show_alert({
-				message: __("Carrier set: {0}", [sd.service_name]),
-				indicator: "green",
+		const service_data = arranged_services[service_type][service_index];
+		pick_contract_then(service_data, function (sd) {
+			frappe.model.set_value(cdt, cdn, "custom_shipping_option_code", sd.service_id);
+			frappe.model.set_value(cdt, cdn, "custom_shipping_carrier", sd.carrier);
+			frappe.model.set_value(cdt, cdn, "custom_shipping_service", sd.service_name);
+			frappe.model.set_value(cdt, cdn, "custom_shipping_price", sd.total_price || 0);
+			frappe.model.set_value(cdt, cdn, "custom_shipping_contract", sd.contract_name || "");
+			frappe.model.set_value(cdt, cdn, "custom_shipping_contract_id", sd.contract_id || "");
+			dialog.hide();
+			frm.save().then(() => {
+				frappe.show_alert({
+					message: __("Carrier set: {0}", [sd.service_name]),
+					indicator: "green",
+				});
 			});
 		});
 	});

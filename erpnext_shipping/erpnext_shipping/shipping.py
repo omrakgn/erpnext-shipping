@@ -293,6 +293,12 @@ def populate_parcels_from_delivery_notes(shipment: str):
 
 
 @frappe.whitelist()
+def get_sendcloud_contracts(carrier=None):
+	"""Hesaptaki aktif SendCloud kontratlarını döndür (carrier koduyla filtrelenebilir)."""
+	return SendCloudUtils().get_contracts(carrier_code=carrier)
+
+
+@frappe.whitelist()
 def fetch_parcel_rates(shipment, parcel):
 	"""Tek bir koli için (kendi ağırlık/ölçüsüyle) SendCloud kargo seçeneklerini getir."""
 	if isinstance(parcel, str):

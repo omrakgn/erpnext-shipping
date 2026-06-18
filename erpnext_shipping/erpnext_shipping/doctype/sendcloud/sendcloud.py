@@ -24,6 +24,7 @@ SHIPMENTS_URL = f"{BASE_URL}/v3/shipments"
 SHIPMENTS_ANNOUNCE_URL = f"{BASE_URL}/v3/shipments/announce"
 LABELS_URL = f"{BASE_URL}/v2/labels"
 PARCELS_URL = f"{BASE_URL}/v2/parcels"
+CONTRACTS_URL = f"{BASE_URL}/v3/contracts"
 
 
 class SendCloud(Document):
@@ -591,6 +592,7 @@ class SendCloudUtils:
 		available_service = frappe._dict()
 		available_service.service_provider = "SendCloud"
 		available_service.carrier = (service.get("carrier") or {}).get("name")
+		available_service.carrier_code = (service.get("carrier") or {}).get("code")
 		available_service.service_name = (service.get("product") or {}).get("name")
 		available_service.service_id = service.get("code")
 		available_service.multicollo = (service.get("functionalities") or {}).get("multicollo", False)
@@ -623,6 +625,42 @@ class SendCloudUtils:
 			return "SendCloud" if post_or_get == "get" else "sendcloud"
 		else:
 			return carrier_name.upper() if post_or_get == "get" else carrier_name.lower()
+
+	def get_contracts(self, carrier_code=None):
+		"""Hesaptaki aktif kontratları döndür (panel'deki 'Enabled contract' listesi).
+
+		Returns: [{id, name, carrier_code, carrier_name, is_default, type}]
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return []
+		try:
+			response = requests.get(
+				CONTRACTS_URL, auth=(self.api_key, self.api_secret), headers={"Accept": "application/json"}
+			)
+			response.raise_for_status()
+			data = response.json().get("data", [])
+		except Exception:
+			show_error_alert("fetching SendCloud contracts")
+			return []
+
+		contracts = []
+		for c in data:
+			if c.get("state") and c.get("state") != "active":
+				continue
+			carrier = c.get("carrier") or {}
+			if carrier_code and carrier.get("code") != carrier_code:
+				continue
+			contracts.append(
+				{
+					"id": c.get("id"),
+					"name": c.get("name") or f"{carrier.get('name')} ({c.get('id')})",
+					"carrier_code": carrier.get("code"),
+					"carrier_name": carrier.get("name"),
+					"is_default": c.get("is_default_per_carrier"),
+					"type": c.get("type"),
+				}
+			)
+		return contracts
 
 	def get_preferred_codes(self):
 		"""SendCloud Settings'teki favori (yıldızlı) shipping option kodları."""
