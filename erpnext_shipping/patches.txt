@@ -3,4 +3,5 @@ erpnext_shipping.erpnext_shipping.patches.change_tracking_url_column_type
 erpnext_shipping.erpnext_shipping.patches.create_shipment_parcel_items_field # 2026-06-17
 erpnext_shipping.erpnext_shipping.patches.create_parcel_carrier_fields # 2026-06-18
 erpnext_shipping.erpnext_shipping.patches.update_parcel_carrier_listview # 2026-06-18
+erpnext_shipping.erpnext_shipping.patches.create_parcel_contract_fields # 2026-06-18
 execute:from erpnext_shipping.install import after_install;after_install()

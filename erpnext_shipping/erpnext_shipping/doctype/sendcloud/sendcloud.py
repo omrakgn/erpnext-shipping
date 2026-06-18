@@ -207,6 +207,11 @@ class SendCloudUtils:
 		if shipment_items_data and shipment_items_data.get("order_number"):
 			api_order_number = shipment_items_data["order_number"]
 
+		ship_with_properties = {"shipping_option_code": service_info["service_id"]}
+		# Sözleşme seçimi (panel'deki "Enabled contract"): varsa açıkça gönder
+		if service_info.get("contract_id"):
+			ship_with_properties["contract"] = service_info["contract_id"]
+
 		payload = {
 			"order_number": api_order_number,
 			"parcels": parcels,
@@ -214,9 +219,7 @@ class SendCloudUtils:
 			"from_address": from_address,
 			"ship_with": {
 				"type": "shipping_option_code",
-				"properties": {
-					"shipping_option_code": service_info["service_id"],
-				},
+				"properties": ship_with_properties,
 			},
 		}
 		
@@ -435,11 +438,15 @@ class SendCloudUtils:
 			parcel_count = parcel.get("count", 1)
 			for _j in range(parcel_count):
 				parcel_data = self.get_parcel(parcel, shipment, i, shipment_items_data, parcel_item_map)
+				ship_with_properties = {"shipping_option_code": service["service_id"]}
+				if service.get("contract_id"):
+					ship_with_properties["contract"] = service["contract_id"]
+
 				payload = dict(base_payload)
 				payload["parcels"] = [parcel_data]
 				payload["ship_with"] = {
 					"type": "shipping_option_code",
-					"properties": {"shipping_option_code": service["service_id"]},
+					"properties": ship_with_properties,
 				}
 				try:
 					response = requests.post(
@@ -587,6 +594,11 @@ class SendCloudUtils:
 		available_service.service_name = (service.get("product") or {}).get("name")
 		available_service.service_id = service.get("code")
 		available_service.multicollo = (service.get("functionalities") or {}).get("multicollo", False)
+
+		# Sözleşme (panel'deki "Enabled contract" karşılığı)
+		contract = service.get("contract") or {}
+		available_service.contract_id = contract.get("id")
+		available_service.contract_name = contract.get("name")
 
 		quotes = service.get("quotes", [])
 		if quotes:

@@ -351,6 +351,7 @@ def create_shipment_per_parcel(shipment):
 				"carrier": row.get("custom_shipping_carrier") or "sendcloud",
 				"service_name": row.get("custom_shipping_service") or code,
 				"total_price": row.get("custom_shipping_price") or 0,
+				"contract_id": row.get("custom_shipping_contract_id"),
 			}
 
 	if not parcel_services:

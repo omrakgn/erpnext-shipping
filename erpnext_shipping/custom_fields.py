@@ -67,6 +67,25 @@ def get_custom_fields():
 				"insert_after": "custom_shipping_service",
 				"allow_on_submit": 1,
 			},
+			{
+				"fieldname": "custom_shipping_contract",
+				"label": _("Contract"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"translatable": 0,
+				"insert_after": "custom_shipping_price",
+				"allow_on_submit": 1,
+			},
+			{
+				"fieldname": "custom_shipping_contract_id",
+				"label": _("Contract ID"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"hidden": 1,
+				"translatable": 0,
+				"insert_after": "custom_shipping_contract",
+				"allow_on_submit": 1,
+			},
 		],
 		"Shipment": [
 			{

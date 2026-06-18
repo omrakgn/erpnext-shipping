@@ -398,6 +398,8 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 		frappe.model.set_value(cdt, cdn, "custom_shipping_carrier", sd.carrier);
 		frappe.model.set_value(cdt, cdn, "custom_shipping_service", sd.service_name);
 		frappe.model.set_value(cdt, cdn, "custom_shipping_price", sd.total_price || 0);
+		frappe.model.set_value(cdt, cdn, "custom_shipping_contract", sd.contract_name || "");
+		frappe.model.set_value(cdt, cdn, "custom_shipping_contract_id", sd.contract_id || "");
 		dialog.hide();
 		frm.save().then(() => {
 			frappe.show_alert({
