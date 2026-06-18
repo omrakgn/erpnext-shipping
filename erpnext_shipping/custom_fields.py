@@ -29,6 +29,7 @@ def get_custom_fields():
 				"fieldtype": "Button",
 				"insert_after": "custom_carrier_section",
 				"allow_on_submit": 1,
+				"in_list_view": 1,
 			},
 			{
 				"fieldname": "custom_shipping_option_code",
@@ -56,6 +57,7 @@ def get_custom_fields():
 				"translatable": 0,
 				"insert_after": "custom_shipping_carrier",
 				"allow_on_submit": 1,
+				"in_list_view": 1,
 			},
 			{
 				"fieldname": "custom_shipping_price",
