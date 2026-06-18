@@ -645,19 +645,26 @@ class SendCloudUtils:
 
 		contracts = []
 		for c in data:
-			if c.get("state") and c.get("state") != "active":
-				continue
 			carrier = c.get("carrier") or {}
 			if carrier_code and carrier.get("code") != carrier_code:
 				continue
+
+			# Okunur etiket: isim boşsa carrier + tip + id; aktif değilse durumu ekle
+			ctype = c.get("type") or "contract"
+			name = c.get("name") or f"{carrier.get('name')} {ctype} ({c.get('id')})"
+			state = c.get("state")
+			if state and state != "active":
+				name = f"{name} [{state}]"
+
 			contracts.append(
 				{
 					"id": c.get("id"),
-					"name": c.get("name") or f"{carrier.get('name')} ({c.get('id')})",
+					"name": name,
 					"carrier_code": carrier.get("code"),
 					"carrier_name": carrier.get("name"),
 					"is_default": c.get("is_default_per_carrier"),
-					"type": c.get("type"),
+					"type": ctype,
+					"state": state,
 				}
 			)
 		return contracts
