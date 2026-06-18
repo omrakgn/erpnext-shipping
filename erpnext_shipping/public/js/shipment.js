@@ -36,6 +36,37 @@ frappe.ui.form.on("Shipment", {
 					frm.events.fetch_shipping_rates(frm);
 				}
 			});
+
+			const has_per_parcel = (frm.doc.shipment_parcel || []).some(
+				(p) => p.custom_shipping_option_code
+			);
+			if (has_per_parcel) {
+				frm.add_custom_button(__("Create Shipment (Per-Parcel Carriers)"), function () {
+					frappe.call({
+						method: "erpnext_shipping.erpnext_shipping.shipping.create_shipment_per_parcel",
+						freeze: true,
+						freeze_message: __("Creating Shipment"),
+						args: { shipment: frm.doc.name },
+						callback: function (r) {
+							if (!r.exc && r.message) {
+								frm.reload_doc();
+								frappe.msgprint({
+									message: __("Shipment {0} created with per-parcel carriers.", [
+										r.message.shipment_id ? r.message.shipment_id.bold() : "",
+									]),
+									title: __("Shipment Created"),
+									indicator: "green",
+								});
+								frm.events.update_tracking(
+									frm,
+									r.message.service_provider,
+									r.message.shipment_id
+								);
+							}
+						},
+					});
+				});
+			}
 		}
 		if (frm.doc.shipment_id) {
 			frm.add_custom_button(
@@ -295,5 +326,106 @@ function select_from_available_services(frm, available_services) {
 		});
 		dialog.hide();
 	};
+	dialog.show();
+}
+
+frappe.ui.form.on("Shipment Parcel", {
+	custom_select_carrier: function (frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (frm.is_new() || frm.is_dirty()) {
+			frappe.msgprint(__("Please save the Shipment before selecting a carrier."));
+			return;
+		}
+		if (!(row.length >= 1 && row.width >= 1 && row.height >= 1)) {
+			frappe.msgprint(__("Please set parcel dimensions (length/width/height) first."));
+			return;
+		}
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.shipping.fetch_parcel_rates",
+			freeze: true,
+			freeze_message: __("Fetching Shipping Rates"),
+			args: {
+				shipment: frm.doc.name,
+				parcel: JSON.stringify({
+					length: row.length,
+					width: row.width,
+					height: row.height,
+					weight: row.weight,
+					count: 1,
+				}),
+			},
+			callback: function (r) {
+				if (r.message && r.message.length) {
+					select_parcel_carrier(frm, cdt, cdn, r.message);
+				} else {
+					frappe.msgprint({
+						message: __("No Shipment Services available"),
+						title: __("Note"),
+					});
+				}
+			},
+		});
+	},
+});
+
+function select_parcel_carrier(frm, cdt, cdn, available_services) {
+	const arranged_services = available_services.reduce(
+		(prev, curr) => {
+			(curr.is_preferred ? prev.preferred_services : prev.other_services).push(curr);
+			return prev;
+		},
+		{ preferred_services: [], other_services: [] }
+	);
+
+	const dialog = new frappe.ui.Dialog({
+		title: __("Select Carrier for this Parcel"),
+		size: "extra-large",
+		fields: [{ fieldtype: "HTML", fieldname: "available_services" }],
+	});
+
+	dialog.fields_dict.available_services.$wrapper.html(
+		frappe.render_template("shipment_service_selector", {
+			header_columns: [__("Platform"), __("Carrier"), __("Parcel Service"), __("Price"), ""],
+			data: arranged_services,
+		})
+	);
+
+	dialog.$body.on("click", ".btn", function () {
+		const service_type = $(this).attr("data-type");
+		const service_index = cint($(this).attr("id").split("-")[2]);
+		const sd = arranged_services[service_type][service_index];
+		frappe.model.set_value(cdt, cdn, "custom_shipping_option_code", sd.service_id);
+		frappe.model.set_value(cdt, cdn, "custom_shipping_carrier", sd.carrier);
+		frappe.model.set_value(cdt, cdn, "custom_shipping_service", sd.service_name);
+		frappe.model.set_value(cdt, cdn, "custom_shipping_price", sd.total_price || 0);
+		dialog.hide();
+		frm.save().then(() => {
+			frappe.show_alert({
+				message: __("Carrier set: {0}", [sd.service_name]),
+				indicator: "green",
+			});
+		});
+	});
+
+	dialog.$body.on("click", ".fav-btn", function () {
+		const btn = $(this);
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud.toggle_preferred_shipping_option",
+			args: {
+				code: btn.attr("data-code"),
+				service_label: btn.attr("data-label"),
+				carrier: btn.attr("data-carrier"),
+			},
+			callback: function (r) {
+				if (!r.exc) {
+					const pref = r.message && r.message.preferred;
+					btn.text(pref ? "★" : "☆");
+					btn.css("color", pref ? "#f0ad4e" : "#bbb");
+					btn.attr("title", pref ? __("Remove from preferred") : __("Add to preferred"));
+				}
+			},
+		});
+	});
+
 	dialog.show();
 }

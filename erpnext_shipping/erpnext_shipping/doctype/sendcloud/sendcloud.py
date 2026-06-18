@@ -340,6 +340,160 @@ class SendCloudUtils:
 
 		return None
 
+	def build_addresses(
+		self, shipment, pickup_address, pickup_contact, delivery_address, delivery_contact, shipment_items_data
+	):
+		"""SendCloud to_address / from_address ve order_number'ı oluştur (create yollarında ortak)."""
+		# Müşteri tipi (Şirket / Bireysel)
+		customer_name = f"{delivery_contact.first_name} {delivery_contact.last_name}"
+		company_name = self.get_company_name(delivery_address, customer_name)
+
+		delivery_house_number, delivery_street = self.extract_house_number(delivery_address.address_line1)
+		to_address = {
+			"name": customer_name,
+			"address_line_1": delivery_street or delivery_address.address_line1,
+			"postal_code": delivery_address.pincode,
+			"city": delivery_address.city,
+			"country_code": delivery_address.country_code.upper(),
+		}
+		if delivery_house_number:
+			to_address["house_number"] = delivery_house_number
+		if company_name:
+			to_address["company_name"] = company_name
+		if delivery_contact.phone:
+			to_address["phone_number"] = delivery_contact.phone
+		if delivery_contact.email_id:
+			to_address["email"] = delivery_contact.email_id
+
+		house_number, address = self.extract_house_number(pickup_address.address_line1)
+		from_address = {
+			"name": f"{pickup_contact.first_name} {pickup_contact.last_name}",
+			"address_line_1": address or pickup_address.address_line1,
+			"house_number": house_number or " ",
+			"postal_code": pickup_address.pincode,
+			"city": pickup_address.city,
+			"country_code": pickup_address.country_code.upper(),
+		}
+		from_company = pickup_address.address_title
+		if from_company and not any(
+			word in from_company.lower() for word in ["straat", "laan", "weg", "street", "road", "avenue"]
+		):
+			from_address["company_name"] = from_company
+		else:
+			from_address["company_name"] = frappe.defaults.get_global_default("company") or "Scarnatti"
+		if pickup_contact.phone:
+			from_address["phone_number"] = pickup_contact.phone
+		if pickup_contact.email_id:
+			from_address["email"] = pickup_contact.email_id
+
+		# Order number: Önce PO, yoksa SO, yoksa Shipment adı
+		api_order_number = shipment
+		if shipment_items_data and shipment_items_data.get("order_number"):
+			api_order_number = shipment_items_data["order_number"]
+
+		return to_address, from_address, api_order_number
+
+	def create_shipment_per_parcel(
+		self,
+		shipment,
+		pickup_address,
+		pickup_contact,
+		delivery_address,
+		delivery_contact,
+		shipment_parcel,
+		parcel_services,
+	):
+		"""Her koliyi kendi seçilen SendCloud kargosuyla AYRI AYRI oluştur.
+
+		parcel_services: {parcel_no: {"service_id","carrier","service_name","total_price"}}
+		parcel_no, Shipment Parcel satırının sıra numarasıdır (1-based).
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return None
+
+		shipment_doc = frappe.get_doc("Shipment", shipment)
+		shipment_items_data = self.get_shipment_items(shipment_doc)
+		parcel_item_map = self.get_parcel_item_map(shipment_doc)
+		to_address, from_address, api_order_number = self.build_addresses(
+			shipment, pickup_address, pickup_contact, delivery_address, delivery_contact, shipment_items_data
+		)
+
+		base_payload = {
+			"order_number": api_order_number,
+			"to_address": to_address,
+			"from_address": from_address,
+		}
+		brand_id = self.get_brand_id()
+		if brand_id:
+			base_payload["brand_id"] = brand_id
+
+		results = []
+		for i, parcel in enumerate(json.loads(shipment_parcel), start=1):
+			service = parcel_services.get(str(i)) or parcel_services.get(i)
+			if not service or not service.get("service_id"):
+				continue  # Bu koli için kargo seçilmemiş, atla
+			parcel_count = parcel.get("count", 1)
+			for _j in range(parcel_count):
+				parcel_data = self.get_parcel(parcel, shipment, i, shipment_items_data, parcel_item_map)
+				payload = dict(base_payload)
+				payload["parcels"] = [parcel_data]
+				payload["ship_with"] = {
+					"type": "shipping_option_code",
+					"properties": {"shipping_option_code": service["service_id"]},
+				}
+				try:
+					response = requests.post(
+						SHIPMENTS_ANNOUNCE_URL, json=payload, auth=(self.api_key, self.api_secret)
+					)
+					response_data = response.json()
+
+					if "errors" in response_data and response_data["errors"]:
+						frappe.log_error(
+							message=json.dumps(response_data, indent=2, default=str),
+							title="SendCloud Per-Parcel Shipment Error",
+						)
+						errs = "; ".join(
+							f"{e.get('code', 'N/A')}: {e.get('detail', 'N/A')}"
+							for e in response_data["errors"]
+						)
+						frappe.msgprint(
+							_("Parcel {0} ({1}) error: {2}").format(i, service.get("service_name"), errs),
+							indicator="red",
+							alert=True,
+						)
+						continue
+
+					parcels_data = response_data.get("data", {}).get("parcels", [])
+					if parcels_data:
+						pd = parcels_data[0]
+						results.append(
+							{
+								"shipment_id": str(pd["id"]),
+								"awb_number": pd.get("tracking_number") or "",
+								"tracking_url": pd.get("tracking_url") or "",
+								"carrier": self.get_carrier(service["carrier"], post_or_get="post"),
+								"carrier_service": service["service_name"],
+								"shipment_amount": service.get("total_price") or 0,
+							}
+						)
+				except Exception:
+					show_error_alert(f"creating SendCloud per-parcel shipment {i}")
+
+		if not results:
+			return None
+
+		carriers = sorted({r["carrier"] for r in results})
+		services = sorted({r["carrier_service"] for r in results})
+		return {
+			"service_provider": "SendCloud",
+			"shipment_id": ", ".join(r["shipment_id"] for r in results if r.get("shipment_id")),
+			"carrier": ", ".join(carriers),
+			"carrier_service": ", ".join(services),
+			"shipment_amount": sum(flt(r.get("shipment_amount")) for r in results),
+			"awb_number": ", ".join(r["awb_number"] for r in results if r.get("awb_number")),
+			"tracking_url": ", ".join(r["tracking_url"] for r in results if r.get("tracking_url")),
+		}
+
 	def get_label(self, shipment_id):
 		# Retrieve shipment label from SendCloud
 		shipment_id_list = shipment_id.split(", ")

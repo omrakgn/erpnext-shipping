@@ -292,6 +292,112 @@ def populate_parcels_from_delivery_notes(shipment: str):
 	return {"created": parcel_no, "skipped": skipped}
 
 
+@frappe.whitelist()
+def fetch_parcel_rates(shipment, parcel):
+	"""Tek bir koli için (kendi ağırlık/ölçüsüyle) SendCloud kargo seçeneklerini getir."""
+	if isinstance(parcel, str):
+		parcel = json.loads(parcel)
+
+	if not frappe.db.get_single_value("SendCloud", "enabled"):
+		return []
+
+	shipment_doc = frappe.get_doc("Shipment", shipment)
+	pickup_address = get_address(shipment_doc.pickup_address_name)
+	delivery_address = get_address(shipment_doc.delivery_address_name)
+
+	sendcloud = SendCloudUtils()
+	prices = (
+		sendcloud.get_available_services(
+			delivery_address=delivery_address, pickup_address=pickup_address, parcels=[parcel]
+		)
+		or []
+	)
+	prices = match_parcel_service_type_carrier(prices, "carrier", "service_name")
+
+	preferred_codes = sendcloud.get_preferred_codes()
+	if preferred_codes:
+		for price in prices:
+			if price.get("service_id") in preferred_codes:
+				price.is_preferred = 1
+		if sendcloud.only_show_preferred():
+			prices = [p for p in prices if p.get("service_id") in preferred_codes]
+
+	prices = [p for p in prices if "total_price" in p]
+	prices = sorted(prices, key=lambda k: (k.get("total_price") is None, k.get("total_price") or 0))
+	return prices
+
+
+@frappe.whitelist()
+def create_shipment_per_parcel(shipment):
+	"""Her koliyi, Shipment Parcel satırında seçilmiş kargo ile ayrı ayrı oluştur."""
+	shipment_doc = frappe.get_doc("Shipment", shipment)
+
+	parcels = []
+	parcel_services = {}
+	for i, row in enumerate(shipment_doc.get("shipment_parcel") or [], start=1):
+		parcels.append(
+			{
+				"length": row.length,
+				"width": row.width,
+				"height": row.height,
+				"weight": row.weight,
+				"count": row.count or 1,
+			}
+		)
+		code = row.get("custom_shipping_option_code")
+		if code:
+			parcel_services[i] = {
+				"service_id": code,
+				"carrier": row.get("custom_shipping_carrier") or "sendcloud",
+				"service_name": row.get("custom_shipping_service") or code,
+				"total_price": row.get("custom_shipping_price") or 0,
+			}
+
+	if not parcel_services:
+		frappe.throw(_("No per-parcel carrier selected. Use 'Select Carrier' on each parcel first."))
+
+	pickup_address = get_address(shipment_doc.pickup_address_name)
+	delivery_address = get_address(shipment_doc.delivery_address_name)
+
+	if shipment_doc.pickup_from_type != "Company":
+		pickup_contact = get_contact(shipment_doc.pickup_contact_name)
+	else:
+		pickup_contact = get_company_contact(user=shipment_doc.pickup_contact_person)
+		pickup_contact.email_id = pickup_contact.pop("email", None)
+	delivery_contact = get_contact(shipment_doc.delivery_contact_name)
+
+	sendcloud = SendCloudUtils()
+	shipment_info = sendcloud.create_shipment_per_parcel(
+		shipment=shipment,
+		pickup_address=pickup_address,
+		pickup_contact=pickup_contact,
+		delivery_address=delivery_address,
+		delivery_contact=delivery_contact,
+		shipment_parcel=json.dumps(parcels),
+		parcel_services=parcel_services,
+	)
+
+	if shipment_info:
+		shipment_doc.db_set(
+			{
+				"service_provider": shipment_info.get("service_provider"),
+				"carrier": shipment_info.get("carrier"),
+				"carrier_service": shipment_info.get("carrier_service"),
+				"shipment_id": shipment_info.get("shipment_id"),
+				"shipment_amount": flt(shipment_info.get("shipment_amount")),
+				"awb_number": shipment_info.get("awb_number"),
+				"status": "Booked",
+			}
+		)
+		delivery_notes = list(
+			{d.delivery_note for d in (shipment_doc.get("shipment_delivery_note") or []) if d.delivery_note}
+		)
+		if delivery_notes:
+			update_delivery_note(delivery_notes=delivery_notes, shipment_info=shipment_info)
+
+	return shipment_info
+
+
 def get_delivery_company_name(shipment: str) -> str | None:
 	shipment_doc = frappe.get_doc("Shipment", shipment)
 	if shipment_doc.delivery_customer:

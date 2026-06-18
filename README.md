@@ -152,6 +152,19 @@ Fetch Shipping Rates penceresinde SendCloud seçenekleri için:
 - **Sadece favorileri göster**: SendCloud Settings'te **"Only show preferred options when
   fetching rates"** işaretlenirse, sorguda yalnızca yıldızladığınız seçenekler listelenir.
 
+### 10. Koli Başına Farklı Kargo Seçimi
+Her koli için **ayrı bir kargo** seçilebilir (örn. bir kutu FedEx, diğeri DPD):
+
+- Shipment Parcel tablosunda her satırda **"Select Carrier"** butonu vardır. Tıklayınca
+  o kolinin **kendi ağırlık/ölçüsüyle** fiyat sorgulanır ve bir kargo seçersin; seçim
+  satıra yazılır (kod, taşıyıcı, servis, fiyat).
+- Tüm koliler için seçim yapıldıktan sonra, üstteki **"Create Shipment (Per-Parcel
+  Carriers)"** butonu her koliyi **kendi kargosuyla ayrı ayrı** SendCloud'a gönderir.
+- SendCloud'da `ship_with` gönderi seviyesinde olduğundan, her koli ayrı bir API
+  çağrısıyla (announce) oluşturulur. Sonuçlar (shipment_id, takip no, URL) birleştirilir.
+- Bu özellik **SendCloud** içindir. Tek kargoyla göndermek istersen normal **"Fetch
+  Shipping Rates"** akışı aynen çalışır.
+
 ## ⚙️ Yapılandırma
 
 ### SendCloud Settings
@@ -315,6 +328,7 @@ bench restart
 - ✅ Koli adetleri ile Delivery Note adetleri uyuşmazlığında uyarı
 - ✅ Fiyatsız (kendi sözleşmeli) kargo seçenekleri artık gösteriliyor (FedEx vb.)
 - ✅ Seçenek etiketinde kod gösterimi + favori (★) kaydetme + "sadece favoriler" filtresi
+- ✅ Koli başına farklı kargo seçimi (her kutu ayrı taşıyıcı/servis ile gönderilir)
 - ✅ `brand_id` artık SendCloud Settings'te gerçek bir alan
 - ✅ SKU kaynağı `item_code` (custom_sku kaldırıldı)
 - 🧹 Ölü kod (`format_parcel_item`) ve sürekli debug logları temizlendi
