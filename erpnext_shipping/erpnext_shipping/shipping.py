@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import flt, get_datetime
 from erpnext.stock.doctype.shipment.shipment import get_company_contact
 
 from erpnext_shipping.erpnext_shipping.doctype.letmeship.letmeship import (
@@ -405,6 +405,59 @@ def create_shipment_per_parcel(shipment):
 	return shipment_info
 
 
+@frappe.whitelist()
+def get_delivery_note_shipment_tracking(delivery_note):
+	"""Bu Delivery Note'a bağlı Shipment'ların parça-bazlı takip satırlarını döndür.
+
+	Satırlar Shipment'taki custom_tracking_details JSON'ından gelir; JSON yoksa
+	(eski/teslim edilmiş gönderiler) SendCloud'dan bir kez canlı çekilip saklanır.
+	"""
+	links = frappe.get_all(
+		"Shipment Delivery Note",
+		filters={"delivery_note": delivery_note, "parenttype": "Shipment"},
+		fields=["parent"],
+	)
+	shipment_names = list({link.parent for link in links})
+
+	rows = []
+	for name in shipment_names:
+		sh = frappe.get_doc("Shipment", name)
+		if sh.docstatus == 2:
+			continue
+
+		parcels = []
+		details = sh.get("custom_tracking_details")
+		if details:
+			try:
+				parcels = json.loads(details)
+			except Exception:
+				parcels = []
+
+		# JSON yoksa ve SendCloud ise canlı çek + sakla
+		if not parcels and sh.service_provider == SENDCLOUD_PROVIDER and sh.shipment_id:
+			data = SendCloudUtils().get_tracking_data(sh.shipment_id) or {}
+			parcels = data.get("parcels") or []
+			if parcels:
+				sh.db_set("custom_tracking_details", json.dumps(parcels))
+				if data.get("delivered_at"):
+					sh.db_set("custom_delivered_at", get_datetime(data["delivered_at"]))
+
+		for p in parcels:
+			rows.append(
+				{
+					"shipment": name,
+					"sku": p.get("sku"),
+					"carrier": p.get("carrier") or sh.carrier,
+					"tracking_number": p.get("tracking_number"),
+					"tracking_url": p.get("tracking_url"),
+					"status": p.get("status"),
+					"delivered_at": p.get("delivered_at"),
+				}
+			)
+
+	return rows
+
+
 def get_delivery_company_name(shipment: str) -> str | None:
 	shipment_doc = frappe.get_doc("Shipment", shipment)
 	if shipment_doc.delivery_customer:
@@ -475,17 +528,19 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 		return
 
 	shipment = frappe.get_doc("Shipment", shipment)
-	shipment.db_set(
-		{
-			"awb_number": tracking_data.get("awb_number"),
-			"tracking_status": tracking_data.get("tracking_status"),
-			"tracking_status_info": tracking_data.get("tracking_status_info"),
-			"tracking_url": tracking_data.get("tracking_url"),
-		}
-	)
-
-	if delivery_notes:
-		update_delivery_note(delivery_notes=delivery_notes, tracking_info=tracking_data)
+	updates = {
+		"awb_number": tracking_data.get("awb_number"),
+		"tracking_status": tracking_data.get("tracking_status"),
+		"tracking_status_info": tracking_data.get("tracking_status_info"),
+		"tracking_url": tracking_data.get("tracking_url"),
+	}
+	# Parça-bazlı detaylar (SKU/carrier/status/teslim zamanı) — Delivery Note tablosu bundan beslenir
+	if "parcels" in tracking_data:
+		updates["custom_tracking_details"] = json.dumps(tracking_data.get("parcels") or [])
+	delivered_at = tracking_data.get("delivered_at")
+	if delivered_at:
+		updates["custom_delivered_at"] = get_datetime(delivered_at)
+	shipment.db_set(updates)
 
 
 def update_delivery_note(delivery_notes, shipment_info=None, tracking_info=None):
@@ -499,8 +554,5 @@ def update_delivery_note(delivery_notes, shipment_info=None, tracking_info=None)
 			dl_doc.db_set("delivery_type", "Parcel Service")
 			dl_doc.db_set("parcel_service", shipment_info.get("carrier"))
 			dl_doc.db_set("parcel_service_type", shipment_info.get("carrier_service"))
-		if tracking_info:
-			dl_doc.db_set("tracking_number", tracking_info.get("awb_number"))
-			dl_doc.db_set("tracking_url", tracking_info.get("tracking_url"))
-			dl_doc.db_set("tracking_status", tracking_info.get("tracking_status"))
-			dl_doc.db_set("tracking_status_info", tracking_info.get("tracking_status_info"))
+		# Tracking artık DN'de düz alanlarda tutulmuyor; canlı tablo (custom_shipment_tracking)
+		# bağlı Shipment'ın custom_tracking_details JSON'ından çiziliyor.

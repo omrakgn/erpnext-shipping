@@ -100,6 +100,22 @@ def get_custom_fields():
 					"Leave empty to send all Delivery Note items in every parcel."
 				),
 			},
+			{
+				"fieldname": "custom_delivered_at",
+				"label": _("Delivered At"),
+				"fieldtype": "Datetime",
+				"read_only": 1,
+				"insert_after": "tracking_status",
+			},
+			{
+				"fieldname": "custom_tracking_details",
+				"label": _("Tracking Details (JSON)"),
+				"fieldtype": "Long Text",
+				"read_only": 1,
+				"hidden": 1,
+				"translatable": 0,
+				"insert_after": "custom_delivered_at",
+			},
 		],
 		"Delivery Note": [
 			{
@@ -134,41 +150,10 @@ def get_custom_fields():
 				"insert_after": "parcel_service",
 			},
 			{
-				"fieldname": "shipping_col_break",
-				"fieldtype": "Column Break",
+				"fieldname": "custom_shipment_tracking",
+				"label": _("Shipment Tracking"),
+				"fieldtype": "HTML",
 				"insert_after": "parcel_service_type",
-			},
-			{
-				"fieldname": "tracking_number",
-				"label": _("Tracking Number"),
-				"fieldtype": "Data",
-				"read_only": 1,
-				"translatable": 0,
-				"insert_after": "shipping_col_break",
-			},
-			{
-				"fieldname": "tracking_url",
-				"label": _("Tracking URL"),
-				"fieldtype": "Small Text",
-				"read_only": 1,
-				"translatable": 0,
-				"insert_after": "tracking_number",
-			},
-			{
-				"fieldname": "tracking_status",
-				"label": _("Tracking Status"),
-				"fieldtype": "Data",
-				"read_only": 1,
-				"translatable": 0,
-				"insert_after": "tracking_url",
-			},
-			{
-				"fieldname": "tracking_status_info",
-				"label": _("Tracking Status Information"),
-				"fieldtype": "Data",
-				"read_only": 1,
-				"translatable": 0,
-				"insert_after": "tracking_status",
 			},
 		]
 	}

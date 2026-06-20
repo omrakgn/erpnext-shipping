@@ -543,9 +543,11 @@ class SendCloudUtils:
 			)
 
 	def get_tracking_data(self, shipment_id):
-		# return SendCloud tracking data
+		# return SendCloud tracking data (combined + per-parcel details)
 		shipment_id_list = shipment_id.split(", ")
 		awb_number, tracking_status, tracking_urls = [], [], []
+		parcels = []
+		delivered_times = []
 
 		for ship_id in shipment_id_list:
 			try:
@@ -570,15 +572,44 @@ class SendCloudUtils:
 			if tracking_number:
 				awb_number.append(tracking_number)
 
-			status_message = parcel_data.get("status", {}).get("message")
+			status_message = (parcel_data.get("status") or {}).get("message")
 			if status_message:
 				tracking_status.append(status_message)
+
+			# Parçadaki ürün SKU'ları
+			skus = [it.get("sku") for it in (parcel_data.get("parcel_items") or []) if it.get("sku")]
+
+			# Teslim zamanı: parça Delivered ise son güncelleme zamanı (date_updated)
+			delivered_at = None
+			if status_message == "Delivered":
+				delivered_at = parcel_data.get("date_updated")
+				if delivered_at:
+					delivered_times.append(delivered_at)
+
+			parcels.append(
+				{
+					"parcel_id": str(parcel_data.get("id") or ship_id),
+					"sku": ", ".join(skus),
+					"carrier": (parcel_data.get("carrier") or {}).get("name")
+					or (parcel_data.get("carrier") or {}).get("code"),
+					"tracking_number": tracking_number or "",
+					"tracking_url": tracking_url or "",
+					"status": status_message or "",
+					"delivered_at": delivered_at,
+				}
+			)
+
+		# Shipment geneli: tüm parçalar Delivered ise teslim zamanı = en geç parça zamanı
+		all_delivered = bool(parcels) and all(p["status"] == "Delivered" for p in parcels)
+		shipment_delivered_at = max(delivered_times) if (all_delivered and delivered_times) else None
 
 		return {
 			"awb_number": ", ".join(awb_number),
 			"tracking_status": ", ".join(tracking_status),
 			"tracking_status_info": ", ".join(tracking_status),
 			"tracking_url": ", ".join(tracking_urls),
+			"parcels": parcels,
+			"delivered_at": shipment_delivered_at,
 		}
 
 	def total_parcel_price(self, parcel_price, parcels: list[dict]):
