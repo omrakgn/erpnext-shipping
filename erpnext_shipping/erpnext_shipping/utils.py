@@ -191,10 +191,10 @@ def show_error_alert(action):
 	)
 
 
-def update_tracking_info_daily():
-	"""Daily scheduled event to update Tracking info for not delivered Shipments
+def update_tracking_info():
+	"""Scheduled event (hourly) to update Tracking info for not-delivered Shipments.
 
-	Also Updates the related Delivery Notes.
+	Also updates the related Delivery Notes.
 	"""
 	from erpnext_shipping.erpnext_shipping.shipping import update_tracking
 

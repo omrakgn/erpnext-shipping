@@ -100,7 +100,7 @@ after_install = "erpnext_shipping.install.after_install"
 # Scheduled Tasks
 # ---------------
 
-scheduler_events = {"daily": ["erpnext_shipping.erpnext_shipping.utils.update_tracking_info_daily"]}
+scheduler_events = {"hourly": ["erpnext_shipping.erpnext_shipping.utils.update_tracking_info"]}
 
 # Testing
 # -------
