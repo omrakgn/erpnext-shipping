@@ -208,15 +208,25 @@ def update_tracking_info_daily():
 		},
 	)
 	for shipment in shipments:
-		shipment_doc = frappe.get_doc("Shipment", shipment.name)
-		tracking_info = update_tracking(
-			shipment.name,
-			shipment_doc.service_provider,
-			shipment_doc.shipment_id,
-			shipment_doc.shipment_delivery_note,
-		)
-
-		if tracking_info:
-			fields = ["awb_number", "tracking_status", "tracking_status_info", "tracking_url"]
-			for field in fields:
-				shipment_doc.db_set(field, tracking_info.get(field))
+		# Her shipment'ı ayrı ele al: biri hata verse bile diğerleri güncellensin
+		try:
+			shipment_doc = frappe.get_doc("Shipment", shipment.name)
+			# Delivery Note ADLARINI geçir (child satır nesnelerini değil),
+			# yoksa update_delivery_note içinde get_doc patlar ve döngü durur.
+			delivery_notes = [
+				row.delivery_note
+				for row in (shipment_doc.shipment_delivery_note or [])
+				if row.delivery_note
+			]
+			# update_tracking, shipment'ın takip alanlarını kendi içinde db_set eder
+			update_tracking(
+				shipment.name,
+				shipment_doc.service_provider,
+				shipment_doc.shipment_id,
+				delivery_notes,
+			)
+		except Exception:
+			frappe.log_error(
+				title="Shipment tracking auto-update failed",
+				message=f"Shipment: {shipment.name}\n{frappe.get_traceback()}",
+			)
