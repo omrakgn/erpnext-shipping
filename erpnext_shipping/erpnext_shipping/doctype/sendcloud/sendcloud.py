@@ -882,12 +882,30 @@ class SendCloudUtils:
 				msg = json.dumps(response_data, default=str)[:500]
 			frappe.throw(_("SendCloud Ship an Order failed: {0}").format(msg))
 
-		# Yanıt 'data' sarmalı olabilir ya da olmayabilir; ikisini de destekle
-		data = response_data.get("data") if isinstance(response_data, dict) else None
-		data = data or response_data
-		parcel = data.get("parcel") or data
+		# Yanıt çeşitli biçimlerde gelebilir: {"data": {...}}, {"data": [ {...} ]},
+		# ya da JSON:API {"data": [{"attributes": {...}}]}. Hepsini normalize et.
+		data = response_data.get("data") if isinstance(response_data, dict) else response_data
+		if data is None:
+			data = response_data
+		if isinstance(data, list):
+			data = data[0] if data else {}
+		if not isinstance(data, dict):
+			data = {}
+		if isinstance(data.get("attributes"), dict):
+			data = data["attributes"]
+
+		parcel = data.get("parcel")
+		if not isinstance(parcel, dict):
+			parcel = data
 		parcel_id = parcel.get("parcel_id") or parcel.get("id")
-		label = data.get("label") or {}
+		label = parcel.get("label") or data.get("label") or {}
+
+		# Hiç parcel_id bulunamazsa yanıtı logla ki yapıyı görebilelim
+		if not parcel_id:
+			frappe.log_error(
+				message=json.dumps(response_data, indent=2, default=str),
+				title="SendCloud Ship an Order - unparsed response",
+			)
 
 		carrier = parcel.get("carrier") or {}
 		return {
