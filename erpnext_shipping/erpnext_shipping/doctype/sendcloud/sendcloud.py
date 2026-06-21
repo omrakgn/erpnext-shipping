@@ -828,9 +828,11 @@ class SendCloudUtils:
 			"order": order_ref,
 		}
 		if shipping_option_code:
+			# NOT: Ship an Order, Shipments API'den farklı olarak properties içinde
+			# "contract" değil "contract_id" anahtarını bekler.
 			properties = {"shipping_option_code": shipping_option_code}
 			if contract_id:
-				properties["contract"] = contract_id
+				properties["contract_id"] = contract_id
 			payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
 		brand_id = self.get_brand_id()
 		if brand_id:
