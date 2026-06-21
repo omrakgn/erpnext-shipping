@@ -37,6 +37,19 @@ frappe.ui.form.on("Shipment", {
 				}
 			});
 
+			if ((frm.doc.shipment_delivery_note || []).length) {
+				frm.add_custom_button(__("Fulfill SendCloud Order"), function () {
+					frappe.confirm(
+						__(
+							"Find the SendCloud order matching this shipment's PO number, update it with the ERPNext weight/dimensions/carrier/contract and create the label. Continue?"
+						),
+						function () {
+							frm.events.fulfill_sendcloud_order(frm);
+						}
+					);
+				});
+			}
+
 			const has_per_parcel = (frm.doc.shipment_parcel || []).some(
 				(p) => p.custom_shipping_option_code
 			);
@@ -190,6 +203,20 @@ frappe.ui.form.on("Shipment", {
 							window.open(r.message);
 						}
 					}
+				}
+			},
+		});
+	},
+
+	fulfill_sendcloud_order: function (frm) {
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.shipping.fulfill_sendcloud_order",
+			freeze: true,
+			freeze_message: __("Fulfilling SendCloud Order"),
+			args: { shipment: frm.doc.name },
+			callback: function (r) {
+				if (!r.exc && r.message) {
+					frm.reload_doc();
 				}
 			},
 		});

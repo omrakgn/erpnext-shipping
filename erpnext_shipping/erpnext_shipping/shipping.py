@@ -458,6 +458,109 @@ def get_delivery_note_shipment_tracking(delivery_note):
 	return rows
 
 
+def get_shipment_po_no(shipment_doc):
+	"""Shipment'a bağlı Delivery Note -> Sales Order -> po_no (Customer's PO No)."""
+	for dn_row in shipment_doc.get("shipment_delivery_note") or []:
+		if not dn_row.delivery_note:
+			continue
+		so_rows = frappe.get_all(
+			"Delivery Note Item",
+			filters={"parent": dn_row.delivery_note, "against_sales_order": ["!=", ""]},
+			fields=["against_sales_order"],
+			limit=1,
+		)
+		if so_rows:
+			po_no = frappe.db.get_value("Sales Order", so_rows[0].against_sales_order, "po_no")
+			if po_no:
+				return po_no
+	return None
+
+
+@frappe.whitelist()
+def fulfill_sendcloud_order(shipment):
+	"""Shipment'ın po_no'su ile eşleşen SendCloud incoming order'ı bul, ERPNext
+	bilgileriyle (ağırlık/ölçü/kargo/sözleşme) güncelle ve label oluştur.
+
+	Ship an Order API (create-label-sync) kullanır; pazaryeri (Amazon/Bol/Shopify)
+	bağı korunduğu için teslim feedback'i SendCloud üzerinden akmaya devam eder.
+	"""
+	shipment_doc = frappe.get_doc("Shipment", shipment)
+
+	po_no = get_shipment_po_no(shipment_doc)
+	if not po_no:
+		frappe.throw(
+			_("No Customer's Purchase Order (po_no) found on the linked Sales Order(s).")
+		)
+
+	sendcloud = SendCloudUtils()
+	order = sendcloud.find_order_by_number(po_no)
+	if not order:
+		frappe.throw(
+			_("No SendCloud order found with order number {0}.").format(frappe.bold(po_no))
+		)
+
+	# ERPNext'ten: ilk koliden ağırlık/ölçü; kargo seçimi olan ilk koliden method/sözleşme
+	weight, dimensions = None, None
+	shipping_option_code, contract_id = None, None
+	for row in shipment_doc.get("shipment_parcel") or []:
+		if weight is None:
+			weight = row.weight
+			dimensions = {"length": row.length, "width": row.width, "height": row.height}
+		if row.get("custom_shipping_option_code"):
+			shipping_option_code = row.get("custom_shipping_option_code")
+			contract_id = row.get("custom_shipping_contract_id")
+			break
+
+	shipment_info = sendcloud.ship_order(
+		order,
+		shipping_option_code=shipping_option_code,
+		contract_id=contract_id,
+		weight=weight,
+		dimensions=dimensions,
+	)
+	if not shipment_info:
+		return None
+
+	# Label'ı (base64) Shipment'a ekle
+	label_file = shipment_info.pop("label_file", None)
+	shipment_info.pop("label_mime_type", None)
+	if label_file:
+		try:
+			import base64
+
+			save_label_as_attachment(shipment, base64.b64decode(label_file))
+		except Exception:
+			frappe.log_error(title="SendCloud label decode error")
+
+	shipment_doc.db_set(
+		{
+			"service_provider": shipment_info.get("service_provider"),
+			"carrier": shipment_info.get("carrier"),
+			"carrier_service": shipment_info.get("carrier_service"),
+			"shipment_id": shipment_info.get("shipment_id"),
+			"awb_number": shipment_info.get("awb_number"),
+			"tracking_url": shipment_info.get("tracking_url"),
+			"status": "Booked",
+		}
+	)
+
+	# Takip bilgilerini çek + sakla (parça-bazlı tablo bundan beslenir)
+	if shipment_info.get("shipment_id"):
+		try:
+			update_tracking(shipment, SENDCLOUD_PROVIDER, shipment_info["shipment_id"])
+		except Exception:
+			frappe.log_error(title="SendCloud fulfill tracking error")
+
+	frappe.msgprint(
+		_("SendCloud order {0} shipped (parcel {1}).").format(
+			frappe.bold(po_no), frappe.bold(shipment_info.get("shipment_id") or "")
+		),
+		title=_("Order Fulfilled"),
+		indicator="green",
+	)
+	return shipment_info
+
+
 def get_delivery_company_name(shipment: str) -> str | None:
 	shipment_doc = frappe.get_doc("Shipment", shipment)
 	if shipment_doc.delivery_customer:

@@ -25,6 +25,8 @@ SHIPMENTS_ANNOUNCE_URL = f"{BASE_URL}/v3/shipments/announce"
 LABELS_URL = f"{BASE_URL}/v2/labels"
 PARCELS_URL = f"{BASE_URL}/v2/parcels"
 CONTRACTS_URL = f"{BASE_URL}/v3/contracts"
+ORDERS_URL = f"{BASE_URL}/v3/orders"
+CREATE_LABEL_SYNC_URL = f"{BASE_URL}/v3/orders/create-label-sync"
 
 
 class SendCloud(Document):
@@ -723,6 +725,161 @@ class SendCloudUtils:
 		except Exception:
 			pass
 		return None
+
+	def find_order_by_number(self, order_number):
+		"""SendCloud incoming order'ı order_number (ERPNext po_no) ile bul.
+
+		Pazaryeri entegrasyonlarından (Amazon/Bol/Shopify) gelen siparişleri arar.
+		Bulursa order dict döner, yoksa None.
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return None
+		try:
+			response = requests.get(
+				ORDERS_URL,
+				params={"order_number": order_number},
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json"},
+			)
+			response.raise_for_status()
+			data = response.json().get("data", [])
+		except Exception:
+			show_error_alert("finding SendCloud order")
+			return None
+
+		# order_number tam eşleşeni öncele; bulunamazsa ilk sonucu döndür
+		for order in data:
+			if str(order.get("order_number")) == str(order_number):
+				return order
+		return data[0] if data else None
+
+	def get_order_integration_id(self, order):
+		"""Order dict'inden integration id'yi güvenli biçimde çıkar."""
+		integration = (order.get("order_details") or {}).get("integration") or {}
+		integration_id = integration.get("id") or order.get("integration_id")
+		return integration_id
+
+	def update_order_measurements(self, order_id, weight=None, dimensions=None):
+		"""Order'ın ağırlık/ölçü bilgilerini ERPNext değerleriyle güncelle (PATCH).
+
+		Ship an Order (create-label) çağrısı parça ağırlığı/ölçüsünü desteklemediği
+		için, label oluşturmadan ÖNCE order bu bilgilerle güncellenir.
+		"""
+		measurement = {}
+		if weight:
+			measurement["weight"] = {"value": flt(weight, WEIGHT_DECIMALS), "unit": "kg"}
+		if dimensions and any(flt(dimensions.get(k)) for k in ("length", "width", "height")):
+			measurement["dimensions"] = {
+				"length": flt(dimensions.get("length") or 0),
+				"width": flt(dimensions.get("width") or 0),
+				"height": flt(dimensions.get("height") or 0),
+				"unit": "cm",
+			}
+		if not measurement:
+			return True
+
+		payload = {"shipping_details": {"measurement": measurement}}
+		try:
+			response = requests.patch(
+				f"{ORDERS_URL}/{order_id}",
+				json=payload,
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json", "Content-Type": "application/json"},
+			)
+			if response.status_code >= 400:
+				frappe.log_error(
+					message=f"PATCH {ORDERS_URL}/{order_id}\n{json.dumps(payload)}\n\n{response.text}",
+					title="SendCloud Order Update Error",
+				)
+				return False
+			return True
+		except Exception:
+			show_error_alert("updating SendCloud order measurements")
+			return False
+
+	def ship_order(self, order, shipping_option_code=None, contract_id=None, weight=None, dimensions=None):
+		"""Mevcut bir SendCloud order'ı ERPNext bilgileriyle sevk et (label oluştur).
+
+		Akış: (1) order ağırlık/ölçüsünü güncelle, (2) create-label-sync ile label
+		oluştur (Shipping method = shipping_option_code, Enabled contract = contract_id).
+		Pazaryeri (Amazon/Bol/Shopify) bağı korunur; teslim feedback'i SendCloud'dan akar.
+
+		Returns: shipment_info dict (label_file base64 dahil) ya da None.
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return None
+
+		order_id = order.get("id")
+		order_number = order.get("order_number")
+		integration_id = self.get_order_integration_id(order)
+		if not integration_id:
+			frappe.throw(_("Could not determine the SendCloud integration for this order."))
+
+		# 1) Ağırlık/ölçüyü ERPNext değerleriyle güncelle
+		self.update_order_measurements(order_id, weight=weight, dimensions=dimensions)
+
+		# 2) Label oluştur (create-label-sync)
+		order_ref = {"order_id": str(order_id)} if order_id else {"order_number": str(order_number)}
+		payload = {
+			"integration_id": int(integration_id),
+			"label": {"mime_type": "application/pdf", "dpi": 72},
+			"order": order_ref,
+		}
+		if shipping_option_code:
+			ship_with = {"shipping_option_code": shipping_option_code}
+			if contract_id:
+				ship_with["contract_id"] = contract_id
+			payload["ship_with"] = ship_with
+		brand_id = self.get_brand_id()
+		if brand_id:
+			payload["brand_id"] = brand_id
+
+		try:
+			response = requests.post(
+				CREATE_LABEL_SYNC_URL,
+				json=payload,
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json", "Content-Type": "application/json"},
+			)
+			response_data = response.json()
+		except Exception:
+			show_error_alert("shipping SendCloud order")
+			return None
+
+		if response.status_code >= 400 or (isinstance(response_data, dict) and response_data.get("errors")):
+			frappe.log_error(
+				message=f"POST {CREATE_LABEL_SYNC_URL}\n{json.dumps(payload)}\n\n"
+				+ json.dumps(response_data, indent=2, default=str),
+				title="SendCloud Ship an Order Error",
+			)
+			errors = response_data.get("errors") if isinstance(response_data, dict) else None
+			if errors:
+				msg = "; ".join(
+					f"{e.get('code', 'N/A')}: {e.get('detail', e)}" if isinstance(e, dict) else str(e)
+					for e in errors
+				)
+			else:
+				msg = json.dumps(response_data, default=str)[:500]
+			frappe.throw(_("SendCloud Ship an Order failed: {0}").format(msg))
+
+		# Yanıt 'data' sarmalı olabilir ya da olmayabilir; ikisini de destekle
+		data = response_data.get("data") if isinstance(response_data, dict) else None
+		data = data or response_data
+		parcel = data.get("parcel") or data
+		parcel_id = parcel.get("parcel_id") or parcel.get("id")
+		label = data.get("label") or {}
+
+		carrier = parcel.get("carrier") or {}
+		return {
+			"service_provider": "SendCloud",
+			"shipment_id": str(parcel_id) if parcel_id else "",
+			"awb_number": parcel.get("tracking_number") or "",
+			"tracking_url": parcel.get("tracking_url") or "",
+			"carrier": carrier.get("name") or carrier.get("code") or "sendcloud",
+			"carrier_service": (parcel.get("shipment") or {}).get("name") or shipping_option_code or "",
+			"label_file": label.get("file"),
+			"label_mime_type": label.get("mime_type"),
+		}
 
 	def get_parcel(self, parcel, shipment, index, shipment_items_data=None, parcel_item_map=None):
 		"""Parcel verilerini SendCloud API formatında hazırla.
