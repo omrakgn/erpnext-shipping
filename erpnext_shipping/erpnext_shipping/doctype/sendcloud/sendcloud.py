@@ -820,9 +820,17 @@ class SendCloudUtils:
 
 		# 2) Label oluştur (create-label-sync)
 		# NOT: ship_with, Shipments API ile aynı yapıda olmalı: {type, properties}.
-		# contract, properties içinde "contract" anahtarıyla gönderilir (contract_id DEĞİL).
+		# contract, properties içinde "contract_id" anahtarıyla (integer) gönderilir.
 		# Bu endpoint top-level "label" kabul etmiyor (varsayılan PDF döner).
-		order_ref = {"order_id": str(order_id)} if order_id else {"order_number": str(order_number)}
+		# Order referansı: order_number kullan (dahili `id` create-label'da 404 verir).
+		# Order'ı zaten order_number=po_no ile bulduğumuz için bu güvenilir; yoksa
+		# order'ın kendi `order_id` (harici/pazaryeri) alanına düş.
+		if order_number:
+			order_ref = {"order_number": str(order_number)}
+		elif order.get("order_id"):
+			order_ref = {"order_id": str(order.get("order_id"))}
+		else:
+			order_ref = {"order_id": str(order_id)}
 		payload = {
 			"integration_id": int(integration_id),
 			"order": order_ref,
