@@ -819,17 +819,19 @@ class SendCloudUtils:
 		self.update_order_measurements(order_id, weight=weight, dimensions=dimensions)
 
 		# 2) Label oluştur (create-label-sync)
+		# NOT: ship_with, Shipments API ile aynı yapıda olmalı: {type, properties}.
+		# contract, properties içinde "contract" anahtarıyla gönderilir (contract_id DEĞİL).
+		# Bu endpoint top-level "label" kabul etmiyor (varsayılan PDF döner).
 		order_ref = {"order_id": str(order_id)} if order_id else {"order_number": str(order_number)}
 		payload = {
 			"integration_id": int(integration_id),
-			"label": {"mime_type": "application/pdf", "dpi": 72},
 			"order": order_ref,
 		}
 		if shipping_option_code:
-			ship_with = {"shipping_option_code": shipping_option_code}
+			properties = {"shipping_option_code": shipping_option_code}
 			if contract_id:
-				ship_with["contract_id"] = contract_id
-			payload["ship_with"] = ship_with
+				properties["contract"] = contract_id
+			payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
 		brand_id = self.get_brand_id()
 		if brand_id:
 			payload["brand_id"] = brand_id
@@ -854,10 +856,14 @@ class SendCloudUtils:
 			)
 			errors = response_data.get("errors") if isinstance(response_data, dict) else None
 			if errors:
-				msg = "; ".join(
-					f"{e.get('code', 'N/A')}: {e.get('detail', e)}" if isinstance(e, dict) else str(e)
-					for e in errors
-				)
+				parts = []
+				for e in errors:
+					if isinstance(e, dict):
+						pointer = (e.get("source") or {}).get("pointer", "")
+						parts.append(f"{pointer + ': ' if pointer else ''}{e.get('detail', e)}")
+					else:
+						parts.append(str(e))
+				msg = "; ".join(parts)
 			else:
 				msg = json.dumps(response_data, default=str)[:500]
 			frappe.throw(_("SendCloud Ship an Order failed: {0}").format(msg))
