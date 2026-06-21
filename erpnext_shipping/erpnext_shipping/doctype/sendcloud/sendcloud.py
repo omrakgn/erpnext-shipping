@@ -768,8 +768,10 @@ class SendCloudUtils:
 		measurement = {}
 		if weight:
 			measurement["weight"] = {"value": flt(weight, WEIGHT_DECIMALS), "unit": "kg"}
+		# NOT: SendCloud order measurement'ı "dimension" (TEKİL) anahtarı bekliyor
+		# (order_items[].measurement.dimension ile aynı yapı), "dimensions" değil.
 		if dimensions and any(flt(dimensions.get(k)) for k in ("length", "width", "height")):
-			measurement["dimensions"] = {
+			measurement["dimension"] = {
 				"length": flt(dimensions.get("length") or 0),
 				"width": flt(dimensions.get("width") or 0),
 				"height": flt(dimensions.get("height") or 0),
