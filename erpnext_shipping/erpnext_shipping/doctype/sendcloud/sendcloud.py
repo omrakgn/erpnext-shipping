@@ -799,7 +799,68 @@ class SendCloudUtils:
 			show_error_alert("updating SendCloud order measurements")
 			return False
 
-	def ship_order(self, order, shipping_option_code=None, contract_id=None, weight=None, dimensions=None):
+	def update_order_details(self, order_id, order, item_weights=None, notes=None):
+		"""Order'ın order_details'ını güncelle: notes (Delivery notes) + order_items
+		birim ağırlıkları (Unit weight).
+
+		- notes: SendCloud'daki "Delivery notes" alanı = order_details.notes (string).
+		- item_weights: {sku: birim_ağırlık_kg}. Her order_item'ın measurement.weight'i
+		  ERPNext birim ağırlığıyla güncellenir (SKU=item_code ile eşleşir).
+
+		Measurement (parcel weight/dimension) PATCH'inden AYRI tutulur ki kanıtlanmış
+		o akış bu deneysel alanlardan etkilenmesin.
+		"""
+		order_details = {}
+		if notes is not None:
+			order_details["notes"] = notes
+
+		if item_weights:
+			existing_items = (order.get("order_details") or {}).get("order_items") or []
+			new_items, changed = [], False
+			for it in existing_items:
+				it = dict(it)
+				unit_w = item_weights.get(it.get("sku"))
+				if unit_w:
+					meas = dict(it.get("measurement") or {})
+					meas["weight"] = {"value": flt(unit_w, WEIGHT_DECIMALS), "unit": "kg"}
+					it["measurement"] = meas
+					changed = True
+				new_items.append(it)
+			if changed:
+				order_details["order_items"] = new_items
+
+		if not order_details:
+			return True
+
+		payload = {"order_details": order_details}
+		try:
+			response = requests.patch(
+				f"{ORDERS_URL}/{order_id}",
+				json=payload,
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json", "Content-Type": "application/json"},
+			)
+			if response.status_code >= 400:
+				frappe.log_error(
+					message=f"PATCH {ORDERS_URL}/{order_id}\n{json.dumps(payload, default=str)}\n\n{response.text}",
+					title="SendCloud Order Details Update Error",
+				)
+				return False
+			return True
+		except Exception:
+			show_error_alert("updating SendCloud order details")
+			return False
+
+	def ship_order(
+		self,
+		order,
+		shipping_option_code=None,
+		contract_id=None,
+		weight=None,
+		dimensions=None,
+		item_weights=None,
+		notes=None,
+	):
 		"""Mevcut bir SendCloud order'ı ERPNext bilgileriyle sevk et (label oluştur).
 
 		Akış: (1) order ağırlık/ölçüsünü güncelle, (2) create-label-sync ile label
@@ -817,8 +878,10 @@ class SendCloudUtils:
 		if not integration_id:
 			frappe.throw(_("Could not determine the SendCloud integration for this order."))
 
-		# 1) Ağırlık/ölçüyü ERPNext değerleriyle güncelle
+		# 1) Parcel weight/dimension (shipping_details.measurement) — kanıtlanmış akış
 		self.update_order_measurements(order_id, weight=weight, dimensions=dimensions)
+		# 1b) Delivery notes + Unit weight (order_details) — ayrı/best-effort PATCH
+		self.update_order_details(order_id, order, item_weights=item_weights, notes=notes)
 
 		# 2) Label oluştur (create-label-sync)
 		# NOT: ship_with, Shipments API ile aynı yapıda olmalı: {type, properties}.

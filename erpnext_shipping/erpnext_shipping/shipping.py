@@ -499,7 +499,8 @@ def fulfill_sendcloud_order(shipment):
 			_("No SendCloud order found with order number {0}.").format(frappe.bold(po_no))
 		)
 
-	# ERPNext'ten: ilk koliden ağırlık/ölçü; kargo seçimi olan ilk koliden method/sözleşme
+	# ERPNext'ten: ilk koliden ağırlık/ölçü (= parcel weight); kargo seçimi olan ilk
+	# koliden method/sözleşme
 	weight, dimensions = None, None
 	shipping_option_code, contract_id = None, None
 	for row in shipment_doc.get("shipment_parcel") or []:
@@ -511,12 +512,28 @@ def fulfill_sendcloud_order(shipment):
 			contract_id = row.get("custom_shipping_contract_id")
 			break
 
+	# Birim ağırlık (Unit weight) + Delivery notes: order'daki SKU'ları ERPNext Item ile
+	# eşle. SKU = item_code (uygulama konvansiyonu). weight_per_unit varsa unit weight'i
+	# onunla güncelle; notes = sevk edilen item code'lar.
+	item_weights, note_codes = {}, []
+	for it in (order.get("order_details") or {}).get("order_items") or []:
+		sku = it.get("sku")
+		if not sku:
+			continue
+		note_codes.append(sku)
+		unit_w = frappe.db.get_value("Item", sku, "weight_per_unit")
+		if unit_w:
+			item_weights[sku] = flt(unit_w)
+	notes = ", ".join(dict.fromkeys(note_codes)) if note_codes else None
+
 	shipment_info = sendcloud.ship_order(
 		order,
 		shipping_option_code=shipping_option_code,
 		contract_id=contract_id,
 		weight=weight,
 		dimensions=dimensions,
+		item_weights=item_weights,
+		notes=notes,
 	)
 	if not shipment_info:
 		return None
