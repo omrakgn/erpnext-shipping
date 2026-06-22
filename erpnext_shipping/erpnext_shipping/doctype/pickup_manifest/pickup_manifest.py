@@ -6,6 +6,30 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
+# Carrier adlarını tek biçime indir (dpd/DPD -> DPD, fedex/FedEx -> FedEx) ki
+# büyük/küçük harf farkı yüzünden ayrı manifestolar oluşmasın.
+CARRIER_CANONICAL = {
+	"dpd": "DPD",
+	"fedex": "FedEx",
+	"ups": "UPS",
+	"dhl": "DHL",
+	"dhl_express": "DHL Express",
+	"gls": "GLS",
+	"postnl": "PostNL",
+	"bpost": "bpost",
+	"colissimo": "Colissimo",
+	"chronopost": "Chronopost",
+	"sendcloud": "SendCloud",
+}
+
+
+def _canon_carrier(name):
+	"""Carrier adını tek biçime getir (bilinmeyenler stripped haliyle kalır)."""
+	if not name:
+		return ""
+	name = name.strip()
+	return CARRIER_CANONICAL.get(name.lower(), name)
+
 
 class PickupManifest(Document):
 	def validate(self):
@@ -161,7 +185,7 @@ def generate_pickup_manifests(pickup_date, company=None):
 		pickup_company = sh.get("pickup_company") or fallback_company
 
 		def _add_pkg(pcarrier, tracking, items):
-			pcarrier = (pcarrier or "").strip() or (sh.carrier or "")
+			pcarrier = _canon_carrier(pcarrier or sh.carrier)
 			carrier_packages.setdefault(pcarrier, []).append(
 				{
 					"shipment": sh.name,
