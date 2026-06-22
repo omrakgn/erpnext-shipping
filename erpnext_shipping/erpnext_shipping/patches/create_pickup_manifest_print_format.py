@@ -3,7 +3,9 @@ import frappe
 PRINT_FORMAT_NAME = "Pickup Manifest"
 
 HTML = r"""
-{% set logo = frappe.db.get_value("Company", doc.company, "company_logo") if doc.company else None %}
+{%- set comp = doc.company or frappe.defaults.get_global_default("default_company") -%}
+{%- set logo = frappe.db.get_value("Company", comp, "company_logo") if comp else None -%}
+{%- if not logo -%}{%- set logo = frappe.db.get_value("Letter Head", {"is_default": 1}, "image") -%}{%- endif -%}
 <div style="margin-bottom:10px;">
 	<table style="width:100%; border:none;">
 		<tr>

@@ -18,11 +18,13 @@
    "description": "Paket sıra numarası (aynı pakete ait ürünler aynı numarayı paylaşır)",
    "fieldname": "package_no",
    "fieldtype": "Int",
+   "hidden": 1,
    "label": "Package No"
   },
   {
    "fieldname": "shipment",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Shipment",
    "options": "Shipment"
   },
