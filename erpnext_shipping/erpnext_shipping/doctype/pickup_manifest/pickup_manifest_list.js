@@ -9,15 +9,8 @@ frappe.listview_settings["Pickup Manifest"] = {
 				fields: [
 					{
 						fieldtype: "Date",
-						fieldname: "from_date",
-						label: __("From Pickup Date"),
-						default: frappe.datetime.get_today(),
-						reqd: 1,
-					},
-					{
-						fieldtype: "Date",
-						fieldname: "to_date",
-						label: __("To Pickup Date"),
+						fieldname: "pickup_date",
+						label: __("Pickup Date"),
 						default: frappe.datetime.get_today(),
 						reqd: 1,
 					},
@@ -28,7 +21,7 @@ frappe.listview_settings["Pickup Manifest"] = {
 						method: "erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.generate_pickup_manifests",
 						freeze: true,
 						freeze_message: __("Generating Pickup Manifests"),
-						args: { from_date: values.from_date, to_date: values.to_date },
+						args: { pickup_date: values.pickup_date },
 						callback: function (r) {
 							if (r.exc || !r.message) return;
 							d.hide();

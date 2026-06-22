@@ -4,33 +4,30 @@ PRINT_FORMAT_NAME = "Pickup Manifest"
 
 HTML = r"""
 {% set logo = frappe.db.get_value("Company", doc.company, "company_logo") if doc.company else None %}
-<div style="margin-bottom:12px;">
+<div style="margin-bottom:10px;">
 	<table style="width:100%; border:none;">
 		<tr>
-			<td style="border:none; vertical-align:top; width:50%;">
-				{% if logo %}<img src="{{ logo }}" style="max-height:60px;">{% endif %}
+			<td style="border:none; vertical-align:middle; width:55%;">
+				{% if logo %}<img src="{{ logo }}" style="max-height:55px;">{% endif %}
 			</td>
-			<td style="border:none; vertical-align:top; text-align:right; width:50%; font-size:13px;">
+			<td style="border:none; vertical-align:middle; text-align:right; width:45%; font-size:12px;">
 				<div><strong>{{ _("Carrier") }}:</strong> {{ doc.carrier }}</div>
-				<div><strong>{{ _("Pickup Date") }}:</strong>
-					{{ doc.get_formatted("from_date") }}{% if doc.to_date and doc.to_date != doc.from_date %} &ndash; {{ doc.get_formatted("to_date") }}{% endif %}
-				</div>
+				<div><strong>{{ _("Pickup Date") }}:</strong> {{ doc.get_formatted("pickup_date") }}</div>
 				<div><strong>{{ _("Document") }}:</strong> {{ doc.name }}</div>
 			</td>
 		</tr>
 	</table>
-	<h2 style="text-align:center; margin:8px 0;">{{ _("Pickup Manifest") }}</h2>
+	<h3 style="text-align:center; margin:6px 0;">{{ _("Pickup Manifest") }}</h3>
 </div>
 
-<table style="width:100%; border-collapse:collapse;" border="1">
+<table style="width:100%; border-collapse:collapse; font-size:12px;" border="1">
 	<thead>
 		<tr style="background:#f5f5f5;">
-			<th style="padding:4px;">{{ _("No") }}</th>
-			<th style="padding:4px;">{{ _("Company Name") }}</th>
-			<th style="padding:4px;">{{ _("Contact Person") }}</th>
-			<th style="padding:4px;">{{ _("Carrier") }}</th>
-			<th style="padding:4px;">{{ _("Item Name") }}</th>
-			<th style="padding:4px; text-align:right;">{{ _("Qty") }}</th>
+			<th style="padding:3px 5px; width:5%;">{{ _("No") }}</th>
+			<th style="padding:3px 5px; width:25%;">{{ _("Tracking Number") }}</th>
+			<th style="padding:3px 5px; width:30%;">{{ _("Contact Person") }}</th>
+			<th style="padding:3px 5px;">{{ _("Item Code") }}</th>
+			<th style="padding:3px 5px; width:8%; text-align:right;">{{ _("Qty") }}</th>
 		</tr>
 	</thead>
 	<tbody>
@@ -44,35 +41,32 @@ HTML = r"""
 				{% set ns.new = False %}
 			{% endif %}
 			<tr>
-				<td style="padding:4px; text-align:center;">{% if ns.new %}{{ ns.seq }}{% endif %}</td>
-				<td style="padding:4px;">{% if ns.new %}{{ row.company_name or "" }}{% endif %}</td>
-				<td style="padding:4px;">{% if ns.new %}{{ row.contact_person or "" }}{% endif %}</td>
-				<td style="padding:4px;">{% if ns.new %}{{ row.carrier or "" }}{% endif %}</td>
-				<td style="padding:4px;">{{ row.item_name or "" }}</td>
-				<td style="padding:4px; text-align:right;">{{ row.qty }}</td>
+				<td style="padding:3px 5px; text-align:center;">{% if ns.new %}{{ ns.seq }}{% endif %}</td>
+				<td style="padding:3px 5px;">{% if ns.new %}{{ row.tracking_number or "" }}{% endif %}</td>
+				<td style="padding:3px 5px;">{% if ns.new %}{{ row.contact_person or "" }}{% endif %}</td>
+				<td style="padding:3px 5px;">{{ row.item_code or "" }}</td>
+				<td style="padding:3px 5px; text-align:right;">{{ row.qty }}</td>
 			</tr>
 		{% endfor %}
 	</tbody>
 </table>
 
-<div style="margin-top:24px;">
-	<table style="width:100%; border:none;">
-		<tr>
-			<td style="border:none; width:50%; vertical-align:top; font-size:13px;">
-				<div><strong>{{ _("Total Packages") }}:</strong> {{ doc.total_packages }}</div>
-				<div><strong>{{ _("Total Quantity") }}:</strong> {{ doc.total_qty }}</div>
-			</td>
-			<td style="border:none; width:50%; vertical-align:top;">
-				<div style="border:1px solid #333; padding:10px;">
-					<div style="font-weight:bold; margin-bottom:6px;">{{ _("Received by (Courier)") }}</div>
-					<div style="margin-bottom:8px;">{{ _("Name") }}: {{ doc.courier_name or "____________________" }}</div>
-					<div style="margin-bottom:8px;">{{ _("Vehicle Plate") }}: {{ doc.vehicle_plate or "____________________" }}</div>
-					<div style="margin-top:24px;">{{ _("Signature") }}: ____________________</div>
-				</div>
-			</td>
-		</tr>
-	</table>
-</div>
+<table style="width:100%; border:none; margin-top:18px;">
+	<tr>
+		<td style="border:none; width:55%; vertical-align:bottom; font-size:12px;">
+			<div><strong>{{ _("Total Packages") }}:</strong> {{ doc.total_packages }}</div>
+			<div><strong>{{ _("Total Quantity") }}:</strong> {{ doc.total_qty }}</div>
+		</td>
+		<td style="border:none; width:45%; vertical-align:top;">
+			<div style="border:1px solid #333; padding:8px; font-size:12px;">
+				<div style="font-weight:bold; margin-bottom:6px;">{{ _("Received by (Courier)") }}</div>
+				<div style="margin-bottom:10px;">{{ _("Name") }}: {{ doc.courier_name or "____________________" }}</div>
+				<div style="margin-bottom:10px;">{{ _("Vehicle Plate") }}: {{ doc.vehicle_plate or "____________________" }}</div>
+				<div style="margin-top:22px;">{{ _("Signature") }}: ____________________</div>
+			</div>
+		</td>
+	</tr>
+</table>
 """
 
 
@@ -91,8 +85,8 @@ def execute():
 	pf.html = HTML
 	pf.save(ignore_permissions=True)
 
-	# Bu DocType için varsayılan baskı formatı yap (Property Setter ile; DocType'ta
-	# native default_print_format kolonu yok). Kritik değil, hata olursa yut.
+	# Bu DocType için varsayılan baskı formatı yap (Property Setter; DocType'ta native
+	# default_print_format kolonu yok). Kritik değil, hata olursa yut.
 	try:
 		frappe.make_property_setter(
 			{

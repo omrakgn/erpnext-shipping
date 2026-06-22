@@ -28,6 +28,29 @@ CONTRACTS_URL = f"{BASE_URL}/v3/contracts"
 ORDERS_URL = f"{BASE_URL}/v3/orders"
 CREATE_LABEL_SYNC_URL = f"{BASE_URL}/v3/orders/create-label-sync"
 
+# shipping_option_code önekinden okunur carrier adı (örn. "dpd:classic/b2b" -> "DPD").
+CARRIER_DISPLAY = {
+	"dpd": "DPD",
+	"fedex": "FedEx",
+	"ups": "UPS",
+	"dhl": "DHL",
+	"dhl_express": "DHL Express",
+	"gls": "GLS",
+	"postnl": "PostNL",
+	"bpost": "bpost",
+	"colissimo": "Colissimo",
+	"chronopost": "Chronopost",
+	"sendcloud": "SendCloud",
+}
+
+
+def carrier_display_from_code(shipping_option_code):
+	"""shipping_option_code önekinden okunur carrier adı döndür (yoksa None)."""
+	if not shipping_option_code or ":" not in shipping_option_code:
+		return None
+	prefix = shipping_option_code.split(":")[0].strip().lower()
+	return CARRIER_DISPLAY.get(prefix, prefix.upper())
+
 
 class SendCloud(Document):
 	pass
@@ -972,13 +995,21 @@ class SendCloudUtils:
 				title="SendCloud Ship an Order - unparsed response",
 			)
 
+		# Gerçek carrier'ı belirle: yanıttaki carrier > option kodu öneki > "SendCloud".
+		# (Ship an Order yanıtı genelde carrier döndürmüyor; o yüzden koddan türetiyoruz.)
 		carrier = parcel.get("carrier") or {}
+		carrier_name = (
+			carrier.get("name")
+			or carrier_display_from_code(shipping_option_code)
+			or carrier.get("code")
+			or "SendCloud"
+		)
 		return {
 			"service_provider": "SendCloud",
 			"shipment_id": str(parcel_id) if parcel_id else "",
 			"awb_number": parcel.get("tracking_number") or "",
 			"tracking_url": parcel.get("tracking_url") or "",
-			"carrier": carrier.get("name") or carrier.get("code") or "sendcloud",
+			"carrier": carrier_name,
 			"carrier_service": (parcel.get("shipment") or {}).get("name") or shipping_option_code or "",
 			"label_file": label.get("file"),
 			"label_mime_type": label.get("mime_type"),

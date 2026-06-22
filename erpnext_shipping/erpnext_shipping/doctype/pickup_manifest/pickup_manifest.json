@@ -5,8 +5,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "from_date",
-  "to_date",
+  "pickup_date",
   "carrier",
   "company",
   "column_break_handover",
@@ -23,20 +22,11 @@
  "fields": [
   {
    "default": "Today",
-   "fieldname": "from_date",
+   "fieldname": "pickup_date",
    "fieldtype": "Date",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "From Pickup Date",
-   "reqd": 1
-  },
-  {
-   "default": "Today",
-   "fieldname": "to_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "To Pickup Date",
+   "label": "Pickup Date",
    "reqd": 1
   },
   {
@@ -108,7 +98,7 @@
   }
  ],
  "links": [],
- "modified": "2026-06-22 00:00:00.000000",
+ "modified": "2026-06-22 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Pickup Manifest",
