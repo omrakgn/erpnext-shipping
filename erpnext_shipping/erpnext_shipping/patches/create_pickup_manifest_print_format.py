@@ -80,6 +80,9 @@ def execute():
 	pf.doc_type = "Pickup Manifest"
 	pf.module = "ERPNext Shipping"
 	pf.print_format_type = "Jinja"
+	# KRİTİK: custom_format=1 olmadan Frappe html alanını yok sayar ve otomatik
+	# (Standard) alan-tablosu çizer. Bunu işaretlemek html'imizi kullandırır.
+	pf.custom_format = 1
 	pf.standard = "No"
 	pf.disabled = 0
 	pf.html = HTML
