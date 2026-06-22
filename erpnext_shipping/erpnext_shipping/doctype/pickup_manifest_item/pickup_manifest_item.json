@@ -1,0 +1,73 @@
+{
+ "actions": [],
+ "creation": "2026-06-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "package_no",
+  "shipment",
+  "company_name",
+  "contact_person",
+  "carrier",
+  "item_name",
+  "qty"
+ ],
+ "fields": [
+  {
+   "description": "Paket sıra numarası (aynı pakete ait ürünler aynı numarayı paylaşır)",
+   "fieldname": "package_no",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Package No"
+  },
+  {
+   "fieldname": "shipment",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shipment",
+   "options": "Shipment"
+  },
+  {
+   "fieldname": "company_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Company Name"
+  },
+  {
+   "fieldname": "contact_person",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Contact Person"
+  },
+  {
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "label": "Carrier"
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Name"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Pickup Manifest Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

@@ -5,4 +5,7 @@ erpnext_shipping.erpnext_shipping.patches.create_parcel_carrier_fields # 2026-06
 erpnext_shipping.erpnext_shipping.patches.update_parcel_carrier_listview # 2026-06-18
 erpnext_shipping.erpnext_shipping.patches.create_parcel_contract_fields # 2026-06-18
 erpnext_shipping.erpnext_shipping.patches.create_dn_tracking_table # 2026-06-19
+
+[post_model_sync]
+erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format # 2026-06-22
 execute:from erpnext_shipping.install import after_install;after_install()

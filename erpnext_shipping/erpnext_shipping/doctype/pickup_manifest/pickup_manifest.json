@@ -1,0 +1,156 @@
+{
+ "actions": [],
+ "autoname": "PICKUP-.YYYY.-.#####",
+ "creation": "2026-06-22 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "from_date",
+  "to_date",
+  "carrier",
+  "company",
+  "column_break_handover",
+  "courier_name",
+  "vehicle_plate",
+  "signed_document",
+  "totals_section",
+  "total_packages",
+  "column_break_totals",
+  "total_qty",
+  "items_section",
+  "items"
+ ],
+ "fields": [
+  {
+   "default": "Today",
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "From Pickup Date",
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "To Pickup Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Carrier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_handover",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Teslim alan kurye - Ad Soyad",
+   "fieldname": "courier_name",
+   "fieldtype": "Data",
+   "label": "Courier Name"
+  },
+  {
+   "fieldname": "vehicle_plate",
+   "fieldtype": "Data",
+   "label": "Vehicle Plate"
+  },
+  {
+   "description": "İmzalanmış teslim tutanağının taranmış kopyası",
+   "fieldname": "signed_document",
+   "fieldtype": "Attach",
+   "label": "Signed Document"
+  },
+  {
+   "fieldname": "totals_section",
+   "fieldtype": "Section Break",
+   "label": "Totals"
+  },
+  {
+   "fieldname": "total_packages",
+   "fieldtype": "Int",
+   "label": "Total Packages",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_qty",
+   "fieldtype": "Float",
+   "label": "Total Quantity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Shipments"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Shipments",
+   "options": "Pickup Manifest Item"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Pickup Manifest",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "carrier",
+ "track_changes": 1
+}
