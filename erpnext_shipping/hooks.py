@@ -32,6 +32,13 @@ app_include_js = "shipping.bundle.js"
 
 # include js in doctype views
 doctype_js = {"Shipment": "public/js/shipment.js", "Delivery Note": "public/js/delivery_note.js"}
+
+# Jinja (print format) yardımcı metotları
+jinja = {
+	"methods": [
+		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_company_logo_src"
+	]
+}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}

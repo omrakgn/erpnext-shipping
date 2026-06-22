@@ -14,6 +14,35 @@ class PickupManifest(Document):
 		self.total_qty = sum(flt(row.qty) for row in self.items)
 
 
+def get_company_logo_src(company=None):
+	"""Şirket logosunu print/PDF için güvenli kaynak döndür.
+
+	Private dosyalar wkhtmltopdf'te (PDF) görünmediğinden, dosya içeriği base64
+	data URI olarak gömülür. Logosu olan şirket yoksa boş string döner.
+	"""
+	import base64
+	import mimetypes
+
+	if not company:
+		company = frappe.db.get_value("Company", {"company_logo": ["is", "set"]}, "name") or frappe.db.get_value(
+			"Company", {}, "name"
+		)
+	logo = frappe.db.get_value("Company", company, "company_logo") if company else None
+	if not logo:
+		return ""
+	try:
+		fdoc = frappe.get_all("File", filters={"file_url": logo}, fields=["name"], limit=1)
+		if fdoc:
+			content = frappe.get_doc("File", fdoc[0].name).get_content()
+			if isinstance(content, str):
+				content = content.encode()
+			mime = mimetypes.guess_type(logo)[0] or "image/png"
+			return f"data:{mime};base64,{base64.b64encode(content).decode()}"
+	except Exception:
+		pass
+	return logo  # fallback: ham URL (public ise çalışır)
+
+
 def _clean_contact(name):
 	"""'Cathrin Ralfs-Cathrin Ralfs' gibi yinelenmiş ad-soyad'ı tekille (X-X -> X)."""
 	name = (name or "").strip()
@@ -97,19 +126,22 @@ def generate_pickup_manifests(pickup_date, company=None):
 	if not by_carrier:
 		frappe.throw(_("All shipments for this date are already in a pickup manifest."))
 
-	if not company:
-		company = (
-			frappe.defaults.get_user_default("Company")
-			or frappe.db.get_single_value("Global Defaults", "default_company")
-			or frappe.db.get_value("Company", {}, "name")  # varsayılan yoksa ilk şirket
-		)
+	fallback_company = (
+		company
+		or frappe.defaults.get_user_default("Company")
+		or frappe.db.get_single_value("Global Defaults", "default_company")
+		or frappe.db.get_value("Company", {"company_logo": ["is", "set"]}, "name")
+		or frappe.db.get_value("Company", {}, "name")
+	)
 
 	created = []
 	for carrier, names in by_carrier.items():
+		# Manifesto şirketi = gönderen (pickup) şirket; yoksa logolu/ilk şirkete düş
+		mfst_company = frappe.db.get_value("Shipment", names[0], "pickup_company") or fallback_company
 		manifest = frappe.new_doc("Pickup Manifest")
 		manifest.pickup_date = pickup_date
 		manifest.carrier = carrier
-		manifest.company = company
+		manifest.company = mfst_company
 
 		package_no = 0
 		for name in names:
