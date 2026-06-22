@@ -202,11 +202,12 @@ def populate_parcels_from_delivery_notes(shipment: str):
 	"""
 	shipment_doc = frappe.get_doc("Shipment", shipment)
 
-	# Bağlı Delivery Note'lardan ürün -> toplam adet (ilk görülme sırası korunur).
-	# Product Bundle (paket) ürünleri DN'de parent olarak görünür; asıl fiziksel
-	# ürünler Packed Item (bileşenler) tablosundadır. Bundle'ları bileşenlerine
-	# açıyoruz ki her bileşen kendi parcel template'iyle koliye dönüşsün.
-	item_qty = {}
+	# Bağlı Delivery Note'lardan "paketlenebilir birim"ler çıkar (ilk görülme sırası).
+	# - Normal ürün: kutu = ürünün template'i, içinde ürünün kendisi.
+	# - Product Bundle (paket): DN'de parent olarak görünür, bileşenler Packed Item'da.
+	#   Bundle TEK koli olarak gider: kutu = BUNDLE'ın template'i, içinde tüm bileşenler.
+	# unit = {"template_item": code, "qty": n, "contents": {component_code: kutu_başına_adet}}
+	units = []
 	seen_dns = set()
 	for dn_row in shipment_doc.get("shipment_delivery_note", []):
 		# Aynı DN birden fazla listelense bile bir kez işle (adet katlanmasın)
@@ -230,16 +231,21 @@ def populate_parcels_from_delivery_notes(shipment: str):
 			fields=["item_code", "qty"],
 			order_by="idx",
 		):
-			if not item.item_code:
+			code = item.item_code
+			qty = flt(item.qty)
+			if not code:
 				continue
-			if item.item_code in packed_by_parent:
-				# Bundle: bileşenlerine açıl
-				for comp in packed_by_parent[item.item_code]:
-					item_qty[comp.item_code] = item_qty.get(comp.item_code, 0) + (comp.qty or 0)
+			if code in packed_by_parent:
+				# Bundle: kutu başına bileşen adedi = toplam bileşen / bundle adedi
+				contents = {}
+				for comp in packed_by_parent[code]:
+					per_box = (flt(comp.qty) / qty) if qty else flt(comp.qty)
+					contents[comp.item_code] = contents.get(comp.item_code, 0) + per_box
+				units.append({"template_item": code, "qty": qty, "contents": contents})
 			else:
-				item_qty[item.item_code] = item_qty.get(item.item_code, 0) + (item.qty or 0)
+				units.append({"template_item": code, "qty": qty, "contents": {code: 1.0}})
 
-	if not item_qty:
+	if not units:
 		frappe.throw(_("No items found in the linked Delivery Notes."))
 
 	has_parcel_items = shipment_doc.meta.has_field("custom_parcel_items")
@@ -251,10 +257,10 @@ def populate_parcels_from_delivery_notes(shipment: str):
 
 	skipped = []
 	parcel_no = 0
-	for item_code, qty in item_qty.items():
-		template = frappe.db.get_value("Item", item_code, "custom_shipment_parcel_template")
+	for unit in units:
+		template = frappe.db.get_value("Item", unit["template_item"], "custom_shipment_parcel_template")
 		if not template:
-			skipped.append(item_code)
+			skipped.append(unit["template_item"])
 			continue
 
 		dims = (
@@ -266,19 +272,23 @@ def populate_parcels_from_delivery_notes(shipment: str):
 			)
 			or {}
 		)
-		item_weight = flt(frappe.db.get_value("Item", item_code, "weight_per_unit") or 0)
+		# Kutu ağırlığı: template ağırlığı; yoksa içindeki ürünlerin weight_per_unit toplamı
+		box_weight = flt(dims.get("weight") or 0)
+		if not box_weight:
+			for code, q in unit["contents"].items():
+				box_weight += flt(frappe.db.get_value("Item", code, "weight_per_unit") or 0) * q
 
-		# Her birim ayrı kutu: tam adet kadar ayrı koli satırı (count=1).
-		# Böylece her kutu bağımsız düzenlenebilir (örn. bir kutuya hediye eklenebilir).
+		# Her birim ayrı kutu (count=1); bundle ise kutu = bundle, içinde bileşenler.
+		qty = unit["qty"]
 		whole = int(qty)
-		units = [1.0] * whole
+		box_fractions = [1.0] * whole
 		remainder = flt(qty) - whole
 		if remainder > 0:
-			units.append(remainder)
-		if not units:  # qty <= 0 gibi uç durum
-			units = [flt(qty) or 1]
+			box_fractions.append(remainder)
+		if not box_fractions:
+			box_fractions = [flt(qty) or 1]
 
-		for unit_qty in units:
+		for frac in box_fractions:
 			parcel_no += 1
 			shipment_doc.append(
 				"shipment_parcel",
@@ -286,16 +296,17 @@ def populate_parcels_from_delivery_notes(shipment: str):
 					"length": dims.get("length") or 0,
 					"width": dims.get("width") or 0,
 					"height": dims.get("height") or 0,
-					"weight": flt(dims.get("weight") or item_weight),
+					"weight": box_weight,
 					"count": 1,
 					"parcel_template": template,
 				},
 			)
 			if has_parcel_items:
-				shipment_doc.append(
-					"custom_parcel_items",
-					{"parcel_no": parcel_no, "item_code": item_code, "qty": unit_qty},
-				)
+				for code, q in unit["contents"].items():
+					shipment_doc.append(
+						"custom_parcel_items",
+						{"parcel_no": parcel_no, "item_code": code, "qty": flt(q) * frac},
+					)
 
 	shipment_doc.save()
 
