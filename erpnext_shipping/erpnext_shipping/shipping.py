@@ -520,30 +520,68 @@ def fulfill_sendcloud_order(shipment):
 
 	# ERPNext'ten: ilk koliden ağırlık/ölçü (= parcel weight); kargo seçimi olan ilk
 	# koliden method/sözleşme
-	weight, dimensions = None, None
+	# Ağırlık = TÜM kolilerin toplamı (ilk koli değil); ölçü = ilk dolu koli.
+	# Kargo/sözleşme = ilk seçimi olan koliden.
+	total_weight = 0.0
+	dimensions = None
 	shipping_option_code, contract_id = None, None
 	for row in shipment_doc.get("shipment_parcel") or []:
-		if weight is None:
-			weight = row.weight
+		total_weight += flt(row.weight) * (row.count or 1)
+		if dimensions is None and (row.length or row.width or row.height):
 			dimensions = {"length": row.length, "width": row.width, "height": row.height}
-		if row.get("custom_shipping_option_code"):
+		if not shipping_option_code and row.get("custom_shipping_option_code"):
 			shipping_option_code = row.get("custom_shipping_option_code")
 			contract_id = row.get("custom_shipping_contract_id")
-			break
+	if total_weight <= 0:
+		frappe.throw(
+			_("Set parcel weight(s) on the Shipment before fulfilling — total weight is 0.")
+		)
+	weight = total_weight
 
-	# Birim ağırlık (Unit weight) + Delivery notes: order'daki SKU'ları ERPNext Item ile
-	# eşle. SKU = item_code (uygulama konvansiyonu). weight_per_unit varsa unit weight'i
-	# onunla güncelle; notes = sevk edilen item code'lar.
-	item_weights, note_codes = {}, []
+	# Delivery notes = ERPNext item code'ları (custom_parcel_items, yoksa bağlı DN'ler;
+	# bundle'lar bileşenlerine açılır). SendCloud order'ının SKU'su pazaryeri barkodu
+	# (EAN) olabilir; biz ERPNext kodlarını gönderiyoruz.
+	erp_item_qty = {}
+	for r in shipment_doc.get("custom_parcel_items") or []:
+		if r.item_code:
+			erp_item_qty[r.item_code] = erp_item_qty.get(r.item_code, 0) + flt(r.qty)
+	if not erp_item_qty:
+		seen = set()
+		for d in shipment_doc.get("shipment_delivery_note") or []:
+			if not d.delivery_note or d.delivery_note in seen:
+				continue
+			seen.add(d.delivery_note)
+			packed = {}
+			for p in frappe.get_all(
+				"Packed Item",
+				filters={"parent": d.delivery_note, "parenttype": "Delivery Note"},
+				fields=["parent_item", "item_code", "qty"],
+			):
+				if p.item_code:
+					packed.setdefault(p.parent_item, []).append(p)
+			for it in frappe.get_all(
+				"Delivery Note Item", filters={"parent": d.delivery_note}, fields=["item_code", "qty"]
+			):
+				if it.item_code in packed:
+					for c in packed[it.item_code]:
+						erp_item_qty[c.item_code] = erp_item_qty.get(c.item_code, 0) + flt(c.qty)
+				elif it.item_code:
+					erp_item_qty[it.item_code] = erp_item_qty.get(it.item_code, 0) + flt(it.qty)
+	notes = ", ".join(erp_item_qty.keys()) if erp_item_qty else None
+
+	# Birim ağırlık: order item'ını ERPNext'e item_code VEYA barkod (EAN) ile eşle.
+	item_weights = {}
 	for it in (order.get("order_details") or {}).get("order_items") or []:
 		sku = it.get("sku")
 		if not sku:
 			continue
-		note_codes.append(sku)
-		unit_w = frappe.db.get_value("Item", sku, "weight_per_unit")
-		if unit_w:
-			item_weights[sku] = flt(unit_w)
-	notes = ", ".join(dict.fromkeys(note_codes)) if note_codes else None
+		erp_code = sku if frappe.db.exists("Item", sku) else frappe.db.get_value(
+			"Item Barcode", {"barcode": sku}, "parent"
+		)
+		if erp_code:
+			unit_w = frappe.db.get_value("Item", erp_code, "weight_per_unit")
+			if unit_w:
+				item_weights[sku] = flt(unit_w)
 
 	shipment_info = sendcloud.ship_order(
 		order,
