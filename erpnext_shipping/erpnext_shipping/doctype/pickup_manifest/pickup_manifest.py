@@ -98,8 +98,10 @@ def generate_pickup_manifests(pickup_date, company=None):
 		frappe.throw(_("All shipments for this date are already in a pickup manifest."))
 
 	if not company:
-		company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value(
-			"Global Defaults", "default_company"
+		company = (
+			frappe.defaults.get_user_default("Company")
+			or frappe.db.get_single_value("Global Defaults", "default_company")
+			or frappe.db.get_value("Company", {}, "name")  # varsayılan yoksa ilk şirket
 		)
 
 	created = []
