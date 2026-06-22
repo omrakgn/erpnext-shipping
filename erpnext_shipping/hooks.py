@@ -36,7 +36,8 @@ doctype_js = {"Shipment": "public/js/shipment.js", "Delivery Note": "public/js/d
 # Jinja (print format) yardımcı metotları
 jinja = {
 	"methods": [
-		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_company_logo_src"
+		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_company_logo_src",
+		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_manifest_packages",
 	]
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}

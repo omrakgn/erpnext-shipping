@@ -43,6 +43,27 @@ def get_company_logo_src(company=None):
 	return logo  # fallback: ham URL (public ise çalışır)
 
 
+def get_manifest_packages(manifest):
+	"""Pickup Manifest satırlarını pakete göre grupla (print için tek hücrede alt alta).
+
+	Returns: [{seq, tracking, contact, items: [{item_code, qty}]}]
+	"""
+	doc = manifest if hasattr(manifest, "items") else frappe.get_doc("Pickup Manifest", manifest)
+	groups, order = {}, []
+	for row in doc.items:
+		key = row.package_no
+		if key not in groups:
+			groups[key] = {
+				"seq": len(order) + 1,
+				"tracking": row.tracking_number or "",
+				"contact": row.contact_person or "",
+				"items": [],
+			}
+			order.append(key)
+		groups[key]["items"].append({"item_code": row.item_code or "", "qty": "%g" % flt(row.qty)})
+	return [groups[k] for k in order]
+
+
 def _clean_contact(name):
 	"""'Cathrin Ralfs-Cathrin Ralfs' gibi yinelenmiş ad-soyad'ı tekille (X-X -> X)."""
 	name = (name or "").strip()
@@ -90,12 +111,13 @@ def _shipment_items(sh):
 
 @frappe.whitelist()
 def generate_pickup_manifests(pickup_date, company=None):
-	"""Belirli bir pickup tarihindeki gönderileri carrier'a göre gruplayıp her
-	carrier için ayrı bir Pickup Manifest (kurye teslim tutanağı) oluştur.
+	"""Belirli bir pickup tarihindeki gönderileri carrier'a göre ayrı manifestolara böl.
 
-	Her Shipment Parcel (koli) ayrı bir paket satırı olur; bir kolideki ürünler
-	o paketin altında listelenir. Daha önce bir manifestoya eklenmiş gönderiler
-	atlanır. Returns: [{name, carrier, packages}].
+	Bölme PARCEL seviyesindedir: bir Shipment'ta farklı kolilerde farklı kargo
+	şirketi varsa (örn. dpd + fedex), her koli kendi carrier'ının manifestosuna
+	gider. Her koli ayrı bir paket satırı olur; kolideki ürünler tek hücrede alt
+	alta listelenir. Daha önce manifestoya eklenmiş gönderiler atlanır.
+	Returns: [{name, carrier, packages}].
 	"""
 	shipments = frappe.get_all(
 		"Shipment",
@@ -104,8 +126,8 @@ def generate_pickup_manifests(pickup_date, company=None):
 			"docstatus": ["<", 2],
 			"carrier": ["is", "set"],
 		},
-		fields=["name", "carrier"],
-		order_by="carrier asc, name asc",
+		fields=["name"],
+		order_by="name asc",
 	)
 	if not shipments:
 		frappe.throw(_("No shipments with a carrier found for the selected pickup date."))
@@ -117,15 +139,6 @@ def generate_pickup_manifests(pickup_date, company=None):
 		)
 	}
 
-	by_carrier = {}
-	for sh in shipments:
-		if sh.name in already:
-			continue
-		by_carrier.setdefault(sh.carrier, []).append(sh.name)
-
-	if not by_carrier:
-		frappe.throw(_("All shipments for this date are already in a pickup manifest."))
-
 	fallback_company = (
 		company
 		or frappe.defaults.get_user_default("Company")
@@ -134,62 +147,75 @@ def generate_pickup_manifests(pickup_date, company=None):
 		or frappe.db.get_value("Company", {}, "name")
 	)
 
+	# carrier -> [paket, ...]; her paket = {shipment, tracking, contact, company, items}
+	carrier_packages = {}
+	for sh_row in shipments:
+		if sh_row.name in already:
+			continue
+		sh = frappe.get_doc("Shipment", sh_row.name)
+		contact = _clean_contact(sh.get("delivery_contact_name"))
+		trackings = [t for t in (sh.awb_number or "").split(", ") if t]
+		pmap = _parcel_item_map(sh)
+		parcels = sh.get("shipment_parcel") or []
+		all_items = _shipment_items(sh)
+		pickup_company = sh.get("pickup_company") or fallback_company
+
+		def _add_pkg(pcarrier, tracking, items):
+			pcarrier = (pcarrier or "").strip() or (sh.carrier or "")
+			carrier_packages.setdefault(pcarrier, []).append(
+				{
+					"shipment": sh.name,
+					"tracking": tracking,
+					"contact": contact,
+					"company": pickup_company,
+					"items": items or [{"item_code": "", "qty": 0}],
+				}
+			)
+
+		if parcels:
+			track_idx = 0
+			for i, prow in enumerate(parcels, start=1):
+				for _c in range(int(prow.count or 1)):
+					tracking = trackings[track_idx] if track_idx < len(trackings) else (sh.awb_number or "")
+					track_idx += 1
+					# Koli kendi carrier'ı (per-parcel seçimi) yoksa gönderinin carrier'ı
+					pcarrier = prow.get("custom_shipping_carrier") or sh.carrier
+					if pmap:
+						items = [{"item_code": c, "qty": q} for c, q in (pmap.get(i) or {}).items()]
+					elif len(parcels) == 1:
+						items = [dict(it) for it in all_items]
+					else:
+						items = []
+					_add_pkg(pcarrier, tracking, items)
+		else:
+			_add_pkg(sh.carrier, sh.awb_number or "", [dict(it) for it in all_items])
+
+	if not carrier_packages:
+		frappe.throw(_("All shipments for this date are already in a pickup manifest."))
+
 	created = []
-	for carrier, names in by_carrier.items():
-		# Manifesto şirketi = gönderen (pickup) şirket; yoksa logolu/ilk şirkete düş
-		mfst_company = frappe.db.get_value("Shipment", names[0], "pickup_company") or fallback_company
+	for carrier, packages in carrier_packages.items():
 		manifest = frappe.new_doc("Pickup Manifest")
 		manifest.pickup_date = pickup_date
 		manifest.carrier = carrier
-		manifest.company = mfst_company
+		manifest.company = packages[0]["company"]
 
 		package_no = 0
-		for name in names:
-			sh = frappe.get_doc("Shipment", name)
-			contact = _clean_contact(sh.get("delivery_contact_name"))
-			trackings = [t for t in (sh.awb_number or "").split(", ") if t]
-			pmap = _parcel_item_map(sh)
-			parcels = sh.get("shipment_parcel") or []
-			all_items = _shipment_items(sh)
-
-			def _add(pkg_no, tracking, item_code, qty):
+		for pkg in packages:
+			package_no += 1
+			for it in pkg["items"]:
 				manifest.append(
 					"items",
 					{
-						"package_no": pkg_no,
-						"shipment": name,
-						"tracking_number": tracking,
-						"contact_person": contact,
+						"package_no": package_no,
+						"shipment": pkg["shipment"],
+						"tracking_number": pkg["tracking"],
+						"contact_person": pkg["contact"],
 						"carrier": carrier,
-						"item_code": item_code,
-						"qty": qty,
+						"item_code": it["item_code"],
+						"qty": it["qty"],
 					},
 				)
-
-			if parcels:
-				track_idx = 0
-				for i, prow in enumerate(parcels, start=1):
-					for _c in range(int(prow.count or 1)):
-						package_no += 1
-						tracking = trackings[track_idx] if track_idx < len(trackings) else (sh.awb_number or "")
-						track_idx += 1
-						if pmap:
-							rows = [{"item_code": c, "qty": q} for c, q in (pmap.get(i) or {}).items()]
-						elif len(parcels) == 1:
-							rows = all_items
-						else:
-							rows = []
-						if not rows:
-							rows = [{"item_code": "", "qty": 0}]
-						for it in rows:
-							_add(package_no, tracking, it["item_code"], it["qty"])
-			else:
-				package_no += 1
-				tracking = sh.awb_number or ""
-				rows = all_items or [{"item_code": "", "qty": 0}]
-				for it in rows:
-					_add(package_no, tracking, it["item_code"], it["qty"])
-
 		manifest.insert(ignore_permissions=True)
 		created.append({"name": manifest.name, "carrier": carrier, "packages": package_no})
 

@@ -8,7 +8,7 @@ HTML = r"""
 	<table style="width:100%; border:none;">
 		<tr>
 			<td style="border:none; vertical-align:middle; width:55%;">
-				{% if logo %}<img src="{{ logo }}" style="max-height:55px;">{% endif %}
+				{% if logo %}<img src="{{ logo }}" style="max-height:38px;">{% endif %}
 			</td>
 			<td style="border:none; vertical-align:middle; text-align:right; width:45%; font-size:12px;">
 				<div><strong>{{ _("Carrier") }}:</strong> {{ doc.carrier }}</div>
@@ -31,21 +31,13 @@ HTML = r"""
 		</tr>
 	</thead>
 	<tbody>
-		{% set ns = namespace(prev=None, seq=0, new=False) %}
-		{% for row in doc.items %}
-			{% if row.package_no != ns.prev %}
-				{% set ns.seq = ns.seq + 1 %}
-				{% set ns.prev = row.package_no %}
-				{% set ns.new = True %}
-			{% else %}
-				{% set ns.new = False %}
-			{% endif %}
+		{% for p in get_manifest_packages(doc.name) %}
 			<tr>
-				<td style="padding:3px 5px; text-align:center;">{% if ns.new %}{{ ns.seq }}{% endif %}</td>
-				<td style="padding:3px 5px;">{% if ns.new %}{{ row.tracking_number or "" }}{% endif %}</td>
-				<td style="padding:3px 5px;">{% if ns.new %}{{ row.contact_person or "" }}{% endif %}</td>
-				<td style="padding:3px 5px;">{{ row.item_code or "" }}</td>
-				<td style="padding:3px 5px; text-align:right;">{{ row.qty }}</td>
+				<td style="padding:3px 5px; text-align:center;">{{ p['seq'] }}</td>
+				<td style="padding:3px 5px;">{{ p['tracking'] }}</td>
+				<td style="padding:3px 5px;">{{ p['contact'] }}</td>
+				<td style="padding:3px 5px;">{% for it in p['items'] %}{{ it['item_code'] }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+				<td style="padding:3px 5px; text-align:right;">{% for it in p['items'] %}{{ it['qty'] }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
 			</tr>
 		{% endfor %}
 	</tbody>
@@ -55,7 +47,7 @@ HTML = r"""
 	<tr>
 		<td style="border:none; width:55%; vertical-align:bottom; font-size:12px;">
 			<div><strong>{{ _("Total Packages") }}:</strong> {{ doc.total_packages }}</div>
-			<div><strong>{{ _("Total Quantity") }}:</strong> {{ doc.total_qty }}</div>
+			<div><strong>{{ _("Total Quantity") }}:</strong> {{ "%g"|format(doc.total_qty or 0) }}</div>
 		</td>
 		<td style="border:none; width:45%; vertical-align:top;">
 			<div style="border:1px solid #333; padding:8px; font-size:12px;">
