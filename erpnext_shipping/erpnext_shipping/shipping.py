@@ -716,10 +716,25 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 		return
 
 	shipment = frappe.get_doc("Shipment", shipment)
+	# Shipment.tracking_status sabit seçenekli (Select: "", In Progress, Delivered,
+	# Returned, Lost). SendCloud'un ham durumu ("Ready to send", "Announced" vb.)
+	# buraya yazılamaz — izin verilen değere eşle; ham detayı tracking_status_info'da tut.
+	raw_status = (tracking_data.get("tracking_status") or "").strip()
+	low = raw_status.lower()
+	if tracking_data.get("delivered_at"):
+		mapped_status = "Delivered"
+	elif "return" in low:
+		mapped_status = "Returned"
+	elif "lost" in low:
+		mapped_status = "Lost"
+	elif raw_status:
+		mapped_status = "In Progress"
+	else:
+		mapped_status = ""
 	updates = {
 		"awb_number": tracking_data.get("awb_number"),
-		"tracking_status": tracking_data.get("tracking_status"),
-		"tracking_status_info": tracking_data.get("tracking_status_info"),
+		"tracking_status": mapped_status,
+		"tracking_status_info": raw_status or tracking_data.get("tracking_status_info"),
 		"tracking_url": tracking_data.get("tracking_url"),
 	}
 	# Parça-bazlı detaylar (SKU/carrier/status/teslim zamanı) — Delivery Note tablosu bundan beslenir
