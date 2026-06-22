@@ -59,6 +59,10 @@ doctype_js = {"Shipment": "public/js/shipment.js", "Delivery Note": "public/js/d
 # before_install = "erpnext_shipping.install.before_install"
 after_install = "erpnext_shipping.install.after_install"
 
+# Her migrate'te Pickup Manifest print format'ını güncel tut (patch'ler bir kez
+# çalıştığından, format değişiklikleri ancak böyle yayılır).
+after_migrate = ["erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format.execute"]
+
 # Desk Notifications
 # ------------------
 # See frappe.core.notifications.get_notification_config
