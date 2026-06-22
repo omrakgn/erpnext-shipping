@@ -202,7 +202,10 @@ def populate_parcels_from_delivery_notes(shipment: str):
 	"""
 	shipment_doc = frappe.get_doc("Shipment", shipment)
 
-	# Bağlı Delivery Note'lardan ürün -> toplam adet (ilk görülme sırası korunur)
+	# Bağlı Delivery Note'lardan ürün -> toplam adet (ilk görülme sırası korunur).
+	# Product Bundle (paket) ürünleri DN'de parent olarak görünür; asıl fiziksel
+	# ürünler Packed Item (bileşenler) tablosundadır. Bundle'ları bileşenlerine
+	# açıyoruz ki her bileşen kendi parcel template'iyle koliye dönüşsün.
 	item_qty = {}
 	seen_dns = set()
 	for dn_row in shipment_doc.get("shipment_delivery_note", []):
@@ -210,6 +213,17 @@ def populate_parcels_from_delivery_notes(shipment: str):
 		if not dn_row.delivery_note or dn_row.delivery_note in seen_dns:
 			continue
 		seen_dns.add(dn_row.delivery_note)
+
+		packed_by_parent = {}
+		for p in frappe.get_all(
+			"Packed Item",
+			filters={"parent": dn_row.delivery_note, "parenttype": "Delivery Note"},
+			fields=["parent_item", "item_code", "qty"],
+			order_by="idx",
+		):
+			if p.item_code:
+				packed_by_parent.setdefault(p.parent_item, []).append(p)
+
 		for item in frappe.get_all(
 			"Delivery Note Item",
 			filters={"parent": dn_row.delivery_note},
@@ -218,7 +232,12 @@ def populate_parcels_from_delivery_notes(shipment: str):
 		):
 			if not item.item_code:
 				continue
-			item_qty[item.item_code] = item_qty.get(item.item_code, 0) + (item.qty or 0)
+			if item.item_code in packed_by_parent:
+				# Bundle: bileşenlerine açıl
+				for comp in packed_by_parent[item.item_code]:
+					item_qty[comp.item_code] = item_qty.get(comp.item_code, 0) + (comp.qty or 0)
+			else:
+				item_qty[item.item_code] = item_qty.get(item.item_code, 0) + (item.qty or 0)
 
 	if not item_qty:
 		frappe.throw(_("No items found in the linked Delivery Notes."))
