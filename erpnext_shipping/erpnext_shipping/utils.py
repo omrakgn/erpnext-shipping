@@ -199,11 +199,14 @@ def update_tracking_info():
 	from erpnext_shipping.erpnext_shipping.shipping import update_tracking
 
 	# shipment_id'si olan, teslim edilmemiş tüm onaylı gönderiler. status="Booked"
-	# kısıtını kaldırdık: "Submitted" statüsünde kalanlar da güncellenmeli.
+	# kısıtını kaldırdık ("Submitted" kalanlar da güncellensin). docstatus=1 zaten
+	# iptal edilenleri (docstatus=2) hariç tutar; ek olarak Cancelled/Completed
+	# statülerini de açıkça eliyoruz.
 	shipments = frappe.get_all(
 		"Shipment",
 		filters={
 			"docstatus": 1,
+			"status": ["not in", ["Cancelled", "Completed"]],
 			"shipment_id": ["!=", ""],
 			"tracking_status": ["!=", "Delivered"],
 		},
