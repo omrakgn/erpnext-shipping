@@ -547,6 +547,13 @@ def fulfill_sendcloud_order(shipment):
 		frappe.throw(
 			_("Set parcel weight(s) on the Shipment before fulfilling — total weight is 0.")
 		)
+	# Kargo seçilmemişse SendCloud, ship_with olmadan Shipping Defaults'a düşer
+	# (carrier "SendCloud", ağırlık 1kg) ve ERPNext verisini yok sayar. Engelle.
+	if not shipping_option_code:
+		frappe.throw(
+			_("Select a carrier on a parcel before fulfilling (use 'Select Carrier'). "
+			  "Without it SendCloud falls back to shipping defaults (1kg).")
+		)
 	weight = total_weight
 
 	# Delivery notes = ERPNext item code'ları (custom_parcel_items, yoksa bağlı DN'ler;
