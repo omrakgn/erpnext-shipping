@@ -776,6 +776,34 @@ class SendCloudUtils:
 				return order
 		return data[0] if data else None
 
+	def find_parcel_by_order_number(self, order_number):
+		"""order_number ile eşleşen, İPTAL EDİLMEMİŞ en güncel parcel'ı (label) bul.
+
+		Label SendCloud'da (panel/pazaryeri) oluşturulur; ERPNext bununla tracking
+		bilgisini çeker. Aynı order için birden çok parcel olabilir (iptaller dahil);
+		Cancelled olmayan en güncel (en büyük id) olanı seçeriz.
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return None
+		try:
+			response = requests.get(
+				PARCELS_URL,
+				params={"order_number": order_number},
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json"},
+			)
+			response.raise_for_status()
+			parcels = response.json().get("parcels", [])
+		except Exception:
+			show_error_alert("finding SendCloud parcel by order number")
+			return None
+
+		if not parcels:
+			return None
+		active = [p for p in parcels if (p.get("status") or {}).get("message") != "Cancelled"]
+		pool = active or parcels
+		return max(pool, key=lambda p: p.get("id") or 0)
+
 	def get_order_integration_id(self, order):
 		"""Order dict'inden integration id'yi güvenli biçimde çıkar."""
 		integration = (order.get("order_details") or {}).get("integration") or {}

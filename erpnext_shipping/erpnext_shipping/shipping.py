@@ -653,6 +653,58 @@ def fulfill_sendcloud_order(shipment):
 	return shipment_info
 
 
+@frappe.whitelist()
+def sync_sendcloud_label(shipment):
+	"""Shipment'ın po_no'su ile eşleşen SendCloud parcel'ını (label) bulup tracking
+	bilgisini ERPNext'e çeker.
+
+	Label SendCloud'da (panel/pazaryeri) doğru ağırlık + marketplace bağıyla
+	oluşturulur; ERPNext label OLUŞTURMAZ, sadece order_number = po_no ile eşleşen
+	iptal-olmayan en güncel parcel'ı bulup tracking/carrier/durum bilgisini alır.
+	Böylece Ship an Order'ın parcel ağırlığı kısıtına takılmayız.
+	"""
+	shipment_doc = frappe.get_doc("Shipment", shipment)
+	po_no = get_shipment_po_no(shipment_doc)
+	if not po_no:
+		frappe.throw(_("No Customer's Purchase Order (po_no) found on the linked Sales Order(s)."))
+
+	parcel = SendCloudUtils().find_parcel_by_order_number(po_no)
+	if not parcel:
+		frappe.throw(
+			_("No SendCloud label found for order number {0}.").format(frappe.bold(po_no))
+		)
+
+	pid = str(parcel.get("id"))
+	carrier = parcel.get("carrier") or {}
+	shipment_doc.db_set(
+		{
+			"service_provider": SENDCLOUD_PROVIDER,
+			"carrier": carrier.get("name") or carrier.get("code") or "SendCloud",
+			"shipment_id": pid,
+			"awb_number": parcel.get("tracking_number") or "",
+			"tracking_url": parcel.get("tracking_url") or "",
+			"status": "Booked",
+		}
+	)
+
+	# Tam tracking detayını çek (parça-bazlı JSON, delivered_at, durum eşlemesi)
+	try:
+		update_tracking(shipment, SENDCLOUD_PROVIDER, pid)
+	except Exception:
+		frappe.log_error(title="SendCloud sync tracking error")
+
+	frappe.msgprint(
+		_("Synced SendCloud label {0} (tracking {1}, {2} kg).").format(
+			frappe.bold(pid),
+			frappe.bold(parcel.get("tracking_number") or "-"),
+			frappe.bold(parcel.get("weight") or "?"),
+		),
+		title=_("Label Synced"),
+		indicator="green",
+	)
+	return {"shipment_id": pid, "tracking_number": parcel.get("tracking_number")}
+
+
 def get_delivery_company_name(shipment: str) -> str | None:
 	shipment_doc = frappe.get_doc("Shipment", shipment)
 	if shipment_doc.delivery_customer:

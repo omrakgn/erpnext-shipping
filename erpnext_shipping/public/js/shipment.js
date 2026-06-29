@@ -38,6 +38,22 @@ frappe.ui.form.on("Shipment", {
 			});
 
 			if ((frm.doc.shipment_delivery_note || []).length) {
+				frm.add_custom_button(__("Sync SendCloud Label"), function () {
+					frappe.call({
+						method: "erpnext_shipping.erpnext_shipping.shipping.sync_sendcloud_label",
+						freeze: true,
+						freeze_message: __("Syncing SendCloud Label"),
+						args: { shipment: frm.doc.name },
+						callback: function (r) {
+							if (!r.exc && r.message) {
+								frm.reload_doc();
+							}
+						},
+					});
+				});
+			}
+
+			if ((frm.doc.shipment_delivery_note || []).length) {
 				frm.add_custom_button(__("Fulfill SendCloud Order"), function () {
 					frappe.confirm(
 						__(
