@@ -116,6 +116,17 @@ def get_custom_fields():
 				"translatable": 0,
 				"insert_after": "custom_delivered_at",
 			},
+			{
+				"fieldname": "custom_label_removed",
+				"label": _("Label Removed"),
+				"fieldtype": "Check",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"insert_after": "custom_tracking_details",
+				"description": _(
+					"Auto-set when the SendCloud parcel is no longer found (e.g. deleted by the carrier)."
+				),
+			},
 		],
 		"Delivery Note": [
 			{

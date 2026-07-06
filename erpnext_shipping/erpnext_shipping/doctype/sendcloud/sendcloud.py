@@ -573,6 +573,7 @@ class SendCloudUtils:
 		awb_number, tracking_status, tracking_urls = [], [], []
 		parcels = []
 		delivered_times = []
+		missing_parcel_ids = []
 
 		for ship_id in shipment_id_list:
 			try:
@@ -582,8 +583,9 @@ class SendCloudUtils:
 					headers={"Accept": "application/json"},
 				)
 				# Parcel SendCloud'dan silinmişse (ör. carrier tarafından) 404 döner;
-				# bu beklenen bir durum, sessizce atla (saatlik job'u loglarla doldurma).
+				# beklenen bir durum: loglama, ama "silinmiş" olarak raporla.
 				if response.status_code == 404:
+					missing_parcel_ids.append(ship_id)
 					continue
 				response.raise_for_status()
 				tracking_data = response.json()
@@ -639,6 +641,10 @@ class SendCloudUtils:
 			"tracking_url": ", ".join(tracking_urls),
 			"parcels": parcels,
 			"delivered_at": shipment_delivered_at,
+			# Bulunamayan (silinmiş) parça id'leri. Hiç parça kalmadıysa etiket
+			# tamamen silinmiş demektir; çağıran taraf Shipment'ı işaretleyebilir.
+			"missing_parcel_ids": missing_parcel_ids,
+			"all_parcels_missing": bool(missing_parcel_ids) and not parcels,
 		}
 
 	def total_parcel_price(self, parcel_price, parcels: list[dict]):

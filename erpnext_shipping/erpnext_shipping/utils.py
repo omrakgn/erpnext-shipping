@@ -209,6 +209,8 @@ def update_tracking_info():
 			"status": ["not in", ["Cancelled", "Completed"]],
 			"shipment_id": ["!=", ""],
 			"tracking_status": ["!=", "Delivered"],
+			# SendCloud'dan silindiği tespit edilenleri (etiket yok) tekrar sorgulama.
+			"custom_label_removed": 0,
 		},
 	)
 	for shipment in shipments:

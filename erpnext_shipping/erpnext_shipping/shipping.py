@@ -775,6 +775,22 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 		return
 
 	shipment = frappe.get_doc("Shipment", shipment)
+
+	# SendCloud parçası bulunamıyorsa (ör. carrier etiketi silmiş) — hepsi silinmişse
+	# Shipment'ı "Label Removed" olarak işaretle. Böylece listede filtrelenebilir ve
+	# saatlik job onları tekrar sorgulamaz. Parça(lar) geri gelirse işareti kaldır.
+	if tracking_data.get("all_parcels_missing"):
+		if not shipment.get("custom_label_removed"):
+			shipment.db_set("custom_label_removed", 1)
+			frappe.log_error(
+				title="SendCloud label removed",
+				message=f"Shipment {shipment.name}: parcel(s) "
+				f"{tracking_data.get('missing_parcel_ids')} not found in SendCloud (deleted?).",
+			)
+		return
+	elif shipment.get("custom_label_removed"):
+		# Etiket tekrar erişilebilir; işareti temizle.
+		shipment.db_set("custom_label_removed", 0)
 	# Shipment.tracking_status sabit seçenekli (Select: "", In Progress, Delivered,
 	# Returned, Lost). SendCloud'un ham durumu ("Ready to send", "Announced" vb.)
 	# buraya yazılamaz — izin verilen değere eşle; ham detayı tracking_status_info'da tut.
