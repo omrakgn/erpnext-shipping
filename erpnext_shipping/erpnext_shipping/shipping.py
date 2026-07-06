@@ -668,41 +668,51 @@ def sync_sendcloud_label(shipment):
 	if not po_no:
 		frappe.throw(_("No Customer's Purchase Order (po_no) found on the linked Sales Order(s)."))
 
-	parcel = SendCloudUtils().find_parcel_by_order_number(po_no)
-	if not parcel:
+	# Bir gönderi SendCloud'da boyut/ağırlık nedeniyle birden çok label'a bölünmüş
+	# olabilir; hepsi aynı order_number'a bağlı. Tüm aktif parcel'ları çekip
+	# birleştiriyoruz (shipment_id/awb/tracking_url virgülle) — tek label düşmesin.
+	parcels = SendCloudUtils().find_parcels_by_order_number(po_no)
+	if not parcels:
 		frappe.throw(
 			_("No SendCloud label found for order number {0}.").format(frappe.bold(po_no))
 		)
 
-	pid = str(parcel.get("id"))
-	carrier = parcel.get("carrier") or {}
+	pids = [str(p.get("id")) for p in parcels]
+	tracking_numbers = [p.get("tracking_number") for p in parcels if p.get("tracking_number")]
+	tracking_urls = [p.get("tracking_url") for p in parcels if p.get("tracking_url")]
+	first_carrier = parcels[0].get("carrier") or {}
+	total_weight = sum(flt(p.get("weight")) for p in parcels)
+
+	shipment_ids = ", ".join(pids)
 	shipment_doc.db_set(
 		{
 			"service_provider": SENDCLOUD_PROVIDER,
-			"carrier": carrier.get("name") or carrier.get("code") or "SendCloud",
-			"shipment_id": pid,
-			"awb_number": parcel.get("tracking_number") or "",
-			"tracking_url": parcel.get("tracking_url") or "",
+			"carrier": first_carrier.get("name") or first_carrier.get("code") or "SendCloud",
+			"shipment_id": shipment_ids,
+			"awb_number": ", ".join(tracking_numbers),
+			"tracking_url": ", ".join(tracking_urls),
 			"status": "Booked",
 		}
 	)
 
-	# Tam tracking detayını çek (parça-bazlı JSON, delivered_at, durum eşlemesi)
+	# Tam tracking detayını çek (parça-bazlı JSON, delivered_at, durum eşlemesi).
+	# get_tracking_data virgülle ayrılmış shipment_id'yi tüm parçalar için işler.
 	try:
-		update_tracking(shipment, SENDCLOUD_PROVIDER, pid)
+		update_tracking(shipment, SENDCLOUD_PROVIDER, shipment_ids)
 	except Exception:
 		frappe.log_error(title="SendCloud sync tracking error")
 
 	frappe.msgprint(
-		_("Synced SendCloud label {0} (tracking {1}, {2} kg).").format(
-			frappe.bold(pid),
-			frappe.bold(parcel.get("tracking_number") or "-"),
-			frappe.bold(parcel.get("weight") or "?"),
+		_("Synced {0} SendCloud label(s) for order {1} (tracking {2}, total {3} kg).").format(
+			frappe.bold(len(pids)),
+			frappe.bold(po_no),
+			frappe.bold(", ".join(tracking_numbers) or "-"),
+			frappe.bold(total_weight or "?"),
 		),
 		title=_("Label Synced"),
 		indicator="green",
 	)
-	return {"shipment_id": pid, "tracking_number": parcel.get("tracking_number")}
+	return {"shipment_id": shipment_ids, "tracking_number": ", ".join(tracking_numbers)}
 
 
 def get_delivery_company_name(shipment: str) -> str | None:
