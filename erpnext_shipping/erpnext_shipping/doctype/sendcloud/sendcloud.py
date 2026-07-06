@@ -581,6 +581,10 @@ class SendCloudUtils:
 					auth=(self.api_key, self.api_secret),
 					headers={"Accept": "application/json"},
 				)
+				# Parcel SendCloud'dan silinmişse (ör. carrier tarafından) 404 döner;
+				# bu beklenen bir durum, sessizce atla (saatlik job'u loglarla doldurma).
+				if response.status_code == 404:
+					continue
 				response.raise_for_status()
 				tracking_data = response.json()
 			except Exception:
