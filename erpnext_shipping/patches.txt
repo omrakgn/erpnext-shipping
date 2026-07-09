@@ -9,5 +9,6 @@ erpnext_shipping.erpnext_shipping.patches.create_dn_tracking_table # 2026-06-19
 erpnext_shipping.erpnext_shipping.patches.create_label_removed_field # 2026-06-23
 
 [post_model_sync]
+erpnext_shipping.erpnext_shipping.patches.create_shipping_cost_fields # 2026-07-09
 erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format # 2026-06-22
 execute:from erpnext_shipping.install import after_install;after_install()

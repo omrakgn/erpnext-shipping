@@ -127,6 +127,34 @@ def get_custom_fields():
 					"Auto-set when the SendCloud parcel is no longer found (e.g. deleted by the carrier)."
 				),
 			},
+			{
+				"fieldname": "custom_shipping_cost",
+				"label": _("Shipping Cost (Net)"),
+				"fieldtype": "Currency",
+				"read_only": 1,
+				"options": "custom_shipping_cost_currency",
+				"insert_after": "custom_label_removed",
+				"description": _(
+					"Net carrier cost rolled up from imported invoice lines (Shipping Cost Entry)."
+				),
+			},
+			{
+				"fieldname": "custom_shipping_cost_currency",
+				"label": _("Shipping Cost Currency"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"hidden": 1,
+				"translatable": 0,
+				"default": "EUR",
+				"insert_after": "custom_shipping_cost",
+			},
+			{
+				"fieldname": "custom_shipping_cost_updated",
+				"label": _("Shipping Cost Updated"),
+				"fieldtype": "Datetime",
+				"read_only": 1,
+				"insert_after": "custom_shipping_cost_currency",
+			},
 		],
 		"Delivery Note": [
 			{
@@ -165,6 +193,16 @@ def get_custom_fields():
 				"label": _("Shipment Tracking"),
 				"fieldtype": "HTML",
 				"insert_after": "parcel_service_type",
+			},
+			{
+				"fieldname": "custom_shipping_cost",
+				"label": _("Shipping Cost (Net)"),
+				"fieldtype": "Currency",
+				"read_only": 1,
+				"insert_after": "custom_shipment_tracking",
+				"description": _(
+					"Net carrier cost of the linked Shipment (from imported invoice lines)."
+				),
 			},
 		]
 	}

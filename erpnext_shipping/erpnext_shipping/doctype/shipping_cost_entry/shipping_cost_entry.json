@@ -1,0 +1,280 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "prompt",
+ "creation": "2026-07-09 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "parcel_number",
+  "invoice_number",
+  "carrier",
+  "scan_date",
+  "product_name",
+  "country",
+  "reference_1",
+  "column_break_main",
+  "total_net_amount",
+  "currency",
+  "vat_rate",
+  "is_correction",
+  "matched",
+  "shipment",
+  "delivery_note",
+  "receiver_section",
+  "receiver_name",
+  "receiver_street",
+  "receiver_zip",
+  "column_break_receiver",
+  "receiver_city",
+  "measurements_section",
+  "invoicing_weight",
+  "corrected_weight",
+  "girth",
+  "column_break_measure",
+  "length",
+  "width",
+  "height",
+  "breakdown_section",
+  "charge_breakdown",
+  "source_file"
+ ],
+ "fields": [
+  {
+   "fieldname": "parcel_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Parcel Number",
+   "reqd": 1,
+   "description": "DPD parcel / tracking number (14 digits). Primary key for matching the Shipment."
+  },
+  {
+   "fieldname": "invoice_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Invoice Number"
+  },
+  {
+   "default": "DPD",
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Carrier"
+  },
+  {
+   "fieldname": "scan_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Scan Date"
+  },
+  {
+   "fieldname": "product_name",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Product / Service"
+  },
+  {
+   "fieldname": "country",
+   "fieldtype": "Data",
+   "label": "Country"
+  },
+  {
+   "fieldname": "reference_1",
+   "fieldtype": "Data",
+   "label": "Reference"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_net_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Total Net Amount",
+   "options": "currency"
+  },
+  {
+   "default": "EUR",
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency"
+  },
+  {
+   "fieldname": "vat_rate",
+   "fieldtype": "Percent",
+   "label": "VAT Rate"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_correction",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Correction",
+   "description": "Set for credit / correction invoice lines (invoice starting with 4 or negative amount)."
+  },
+  {
+   "default": "0",
+   "fieldname": "matched",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Matched",
+   "description": "A Shipment was found for this parcel number."
+  },
+  {
+   "fieldname": "shipment",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Shipment",
+   "options": "Shipment"
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "label": "Delivery Note",
+   "options": "Delivery Note"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "receiver_section",
+   "fieldtype": "Section Break",
+   "label": "Receiver"
+  },
+  {
+   "fieldname": "receiver_name",
+   "fieldtype": "Data",
+   "label": "Name"
+  },
+  {
+   "fieldname": "receiver_street",
+   "fieldtype": "Data",
+   "label": "Street + Home Number"
+  },
+  {
+   "fieldname": "receiver_zip",
+   "fieldtype": "Data",
+   "label": "Zip Code"
+  },
+  {
+   "fieldname": "column_break_receiver",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "receiver_city",
+   "fieldtype": "Data",
+   "label": "City"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "measurements_section",
+   "fieldtype": "Section Break",
+   "label": "Measurements"
+  },
+  {
+   "fieldname": "invoicing_weight",
+   "fieldtype": "Float",
+   "label": "Invoicing Weight (kg)"
+  },
+  {
+   "fieldname": "corrected_weight",
+   "fieldtype": "Float",
+   "label": "Corrected Weight (kg)"
+  },
+  {
+   "fieldname": "girth",
+   "fieldtype": "Float",
+   "label": "Girth (cm)"
+  },
+  {
+   "fieldname": "column_break_measure",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "length",
+   "fieldtype": "Float",
+   "label": "Length (cm)"
+  },
+  {
+   "fieldname": "width",
+   "fieldtype": "Float",
+   "label": "Width (cm)"
+  },
+  {
+   "fieldname": "height",
+   "fieldtype": "Float",
+   "label": "Height (cm)"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "breakdown_section",
+   "fieldtype": "Section Break",
+   "label": "Charge Breakdown"
+  },
+  {
+   "fieldname": "charge_breakdown",
+   "fieldtype": "Long Text",
+   "label": "Charge Breakdown (JSON)",
+   "read_only": 1,
+   "description": "Per-surcharge component breakdown from the DPD invoice."
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "label": "Source File",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Shipping Cost Entry",
+ "naming_rule": "Set by user",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "scan_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
