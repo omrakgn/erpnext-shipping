@@ -19,6 +19,11 @@ def get_columns(group_by):
 			{"label": _("Shipment"), "fieldname": "shipment", "fieldtype": "Link", "options": "Shipment", "width": 150},
 			{"label": _("Delivery Note"), "fieldname": "delivery_note", "fieldtype": "Link", "options": "Delivery Note", "width": 150},
 		]
+	elif group_by == "Delivery Note":
+		key = [
+			{"label": _("Delivery Note"), "fieldname": "delivery_note", "fieldtype": "Link", "options": "Delivery Note", "width": 160},
+			{"label": _("Shipment"), "fieldname": "shipment", "fieldtype": "Link", "options": "Shipment", "width": 140},
+		]
 	elif group_by == "Invoice":
 		key = [{"label": _("Invoice"), "fieldname": "invoice_number", "fieldtype": "Data", "width": 130}]
 	else:  # Parcel
@@ -75,6 +80,9 @@ def get_data(filters, group_by):
 	if group_by == "Shipment":
 		group_col = "shipment"
 		select_extra = "shipment, any_value(delivery_note) as delivery_note,"
+	elif group_by == "Delivery Note":
+		group_col = "delivery_note"
+		select_extra = "delivery_note, any_value(shipment) as shipment,"
 	elif group_by == "Invoice":
 		group_col = "invoice_number"
 		select_extra = "invoice_number,"

@@ -17,7 +17,7 @@ frappe.query_reports["Shipping Costs"] = {
 			fieldname: "group_by",
 			label: __("Group By"),
 			fieldtype: "Select",
-			options: ["Parcel", "Shipment", "Invoice"],
+			options: ["Parcel", "Shipment", "Delivery Note", "Invoice"],
 			default: "Parcel",
 			reqd: 1,
 		},
