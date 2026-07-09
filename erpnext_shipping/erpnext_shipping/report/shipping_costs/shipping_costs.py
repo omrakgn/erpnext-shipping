@@ -32,6 +32,7 @@ def get_columns(group_by):
 		{"label": _("Net Cost"), "fieldname": "net_cost", "fieldtype": "Currency", "options": "currency", "width": 120},
 		{"label": _("Currency"), "fieldname": "currency", "fieldtype": "Data", "width": 80},
 		{"label": _("Matched"), "fieldname": "matched", "fieldtype": "Check", "width": 80},
+		{"label": _("Match Method"), "fieldname": "match_method", "fieldtype": "Data", "width": 110},
 	]
 
 
@@ -59,6 +60,9 @@ def _conditions(filters):
 	if filters.get("matched") in ("0", "1", 0, 1):
 		conds.append("matched = %(matched)s")
 		values["matched"] = filters.matched
+	if filters.get("match_method"):
+		conds.append("match_method = %(match_method)s")
+		values["match_method"] = filters.match_method
 	if filters.get("only_corrections"):
 		conds.append("is_correction = 1")
 	where = (" where " + " and ".join(conds)) if conds else ""
@@ -86,7 +90,8 @@ def get_data(filters, group_by):
 			count(*) as lines,
 			sum(total_net_amount) as net_cost,
 			any_value(currency) as currency,
-			min(matched) as matched
+			min(matched) as matched,
+			any_value(match_method) as match_method
 		from `tabShipping Cost Entry`
 		{where}
 		group by {group_col}

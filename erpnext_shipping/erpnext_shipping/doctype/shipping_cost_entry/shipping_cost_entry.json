@@ -19,6 +19,7 @@
   "vat_rate",
   "is_correction",
   "matched",
+  "match_method",
   "shipment",
   "delivery_note",
   "receiver_section",
@@ -124,6 +125,15 @@
    "in_standard_filter": 1,
    "label": "Matched",
    "description": "A Shipment was found for this parcel number."
+  },
+  {
+   "fieldname": "match_method",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Match Method",
+   "options": "\nTracking\nOrder Number\nManual",
+   "read_only": 1,
+   "description": "How the Shipment was matched: by tracking (parcel) number, by order number (po_no via Reference), or set manually."
   },
   {
    "fieldname": "shipment",

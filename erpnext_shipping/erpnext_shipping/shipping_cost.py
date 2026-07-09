@@ -136,6 +136,54 @@ def find_shipment_by_parcel(parcel_number: str):
 	return None
 
 
+def build_po_no_index() -> dict:
+	"""Return {normalised po_no -> set(shipment names)} for the order-number
+	fallback. po_no lives on the Sales Order; we reach the Shipment via
+	Delivery Note Item.against_sales_order -> Shipment Delivery Note."""
+	rows = frappe.db.sql(
+		"""
+		select so.po_no as po_no, sdn.parent as shipment
+		from `tabSales Order` so
+		join `tabDelivery Note Item` dni on dni.against_sales_order = so.name
+		join `tabShipment Delivery Note` sdn on sdn.delivery_note = dni.parent
+		where ifnull(so.po_no, '') != '' and sdn.parenttype = 'Shipment'
+		""",
+		as_dict=True,
+	)
+	index = {}
+	for r in rows:
+		key = (r.po_no or "").strip().lower()
+		if not key:
+			continue
+		index.setdefault(key, set()).add(r.shipment)
+	return index
+
+
+def match_shipment(parcel_number, reference_1, po_index=None):
+	"""Match an invoice line to a Shipment.
+
+	1) By tracking: parcel number in awb_number  -> method "Tracking".
+	2) Fallback by order number: Reference 1 == Sales Order po_no, but ONLY when
+	   it resolves to exactly one Shipment -> method "Order Number".
+	Returns (shipment_name_or_None, status) where status is one of
+	"tracking", "order", "ambiguous", "none".
+	"""
+	shipment = find_shipment_by_parcel(parcel_number)
+	if shipment:
+		return shipment, "tracking"
+
+	ref = (reference_1 or "").strip()
+	if ref:
+		if po_index is None:
+			po_index = build_po_no_index()
+		cands = po_index.get(ref.lower())
+		if cands:
+			if len(cands) == 1:
+				return next(iter(cands)), "order"
+			return None, "ambiguous"
+	return None, "none"
+
+
 def recompute_shipment_cost(shipment: str):
 	"""Sum all Shipping Cost Entries for a Shipment and write the rollup onto the
 	Shipment and its linked Delivery Notes (Shipping Details)."""
@@ -202,8 +250,10 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 
 	source_file = file_url.rsplit("/", 1)[-1]
 	created = updated = skipped = 0
+	matched_tracking = matched_order = ambiguous = 0
 	affected_shipments = set()
 	unmatched_parcels = set()
+	po_index = build_po_no_index()
 
 	for row in rows:
 		parcel = _norm_parcel(cell(row, COL_PARCEL))
@@ -218,11 +268,19 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 			if val not in (None, "", 0, "0"):
 				breakdown[comp] = flt(val)
 
-		shipment = find_shipment_by_parcel(parcel)
+		reference_1 = _s(cell(row, COL_REFERENCE))
+		shipment, status = match_shipment(parcel, reference_1, po_index)
+		match_method = {"tracking": "Tracking", "order": "Order Number"}.get(status)
 		if shipment:
 			affected_shipments.add(shipment)
+			if status == "tracking":
+				matched_tracking += 1
+			elif status == "order":
+				matched_order += 1
 		else:
 			unmatched_parcels.add(parcel)
+			if status == "ambiguous":
+				ambiguous += 1
 
 		delivery_note = None
 		if shipment:
@@ -240,7 +298,7 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 			"currency": _s(cell(row, COL_CURRENCY)) or "EUR",
 			"total_net_amount": flt(cell(row, COL_TOTAL)),
 			"vat_rate": flt(cell(row, COL_VAT)),
-			"reference_1": _s(cell(row, COL_REFERENCE)),
+			"reference_1": reference_1,
 			"receiver_name": _s(cell(row, COL_NAME)),
 			"receiver_street": _s(cell(row, COL_STREET)),
 			"receiver_zip": _s(cell(row, COL_ZIP)),
@@ -255,6 +313,7 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 			"source_file": source_file,
 			"shipment": shipment,
 			"delivery_note": delivery_note,
+			"match_method": match_method,
 		}
 
 		if frappe.db.exists("Shipping Cost Entry", name):
@@ -281,6 +340,9 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 		"updated": updated,
 		"skipped": skipped,
 		"matched_shipments": len(affected_shipments),
+		"matched_by_tracking": matched_tracking,
+		"matched_by_order": matched_order,
+		"ambiguous": ambiguous,
 		"unmatched_parcels": len(unmatched_parcels),
 	}
 
@@ -294,11 +356,13 @@ def rematch_unmatched():
 	)
 	matched = 0
 	affected = set()
+	po_index = build_po_no_index()
 	for name in entries:
 		doc = frappe.get_doc("Shipping Cost Entry", name)
-		shipment = find_shipment_by_parcel(doc.parcel_number)
+		shipment, status = match_shipment(doc.parcel_number, doc.reference_1, po_index)
 		if shipment:
 			doc.shipment = shipment
+			doc.match_method = {"tracking": "Tracking", "order": "Order Number"}.get(status)
 			doc.delivery_note = frappe.db.get_value(
 				"Shipment Delivery Note", {"parent": shipment}, "delivery_note"
 			)

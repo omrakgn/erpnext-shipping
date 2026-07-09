@@ -35,8 +35,16 @@ frappe.listview_settings["Shipping Cost Entry"] = {
 								title: __("Import Complete"),
 								indicator: "green",
 								message: __(
-									"Created: {0}, Updated: {1}, Matched shipments: {2}, Unmatched parcels: {3}",
-									[m.created, m.updated, m.matched_shipments, m.unmatched_parcels]
+									"Created: {0}, Updated: {1}<br>Matched shipments: {2} (by tracking: {3}, by order no: {4})<br>Ambiguous: {5}, Unmatched parcels: {6}",
+									[
+										m.created,
+										m.updated,
+										m.matched_shipments,
+										m.matched_by_tracking,
+										m.matched_by_order,
+										m.ambiguous,
+										m.unmatched_parcels,
+									]
 								),
 							});
 							listview.refresh();

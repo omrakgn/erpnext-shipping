@@ -50,6 +50,12 @@ frappe.query_reports["Shipping Costs"] = {
 			options: ["", "1", "0"],
 		},
 		{
+			fieldname: "match_method",
+			label: __("Match Method"),
+			fieldtype: "Select",
+			options: ["", "Tracking", "Order Number", "Manual"],
+		},
+		{
 			fieldname: "only_corrections",
 			label: __("Only Corrections"),
 			fieldtype: "Check",

@@ -12,6 +12,11 @@ class ShippingCostEntry(Document):
 			(self.invoice_number or "").startswith("4") or (self.total_net_amount or 0) < 0
 		) else 0
 		self.matched = 1 if self.shipment else 0
+		if self.shipment and not self.match_method:
+			# Elle bağlandıysa (import bir yöntem set etmediyse) Manual say.
+			self.match_method = "Manual"
+		if not self.shipment:
+			self.match_method = None
 
 	def on_update(self):
 		self._recompute_affected()
