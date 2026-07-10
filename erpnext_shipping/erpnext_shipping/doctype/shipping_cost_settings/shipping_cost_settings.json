@@ -9,7 +9,12 @@
   "dn_tracking_number_field",
   "column_break_mapping",
   "dn_carrier_field",
-  "dn_tracking_link_field"
+  "dn_tracking_link_field",
+  "return_mapping_section",
+  "dn_return_tracking_number_field",
+  "column_break_return",
+  "dn_return_carrier_field",
+  "dn_return_tracking_link_field"
  ],
  "fields": [
   {
@@ -49,6 +54,38 @@
    "fieldtype": "Data",
    "label": "Tracking Link Field",
    "description": "Optional: Delivery Note fieldname holding the tracking URL."
+  },
+  {
+   "fieldname": "return_mapping_section",
+   "fieldtype": "Section Break",
+   "label": "Return Field Mapping",
+   "description": "Return shipments (e.g. the return label / vacuum bag send-out) use separate Delivery Note fields. Their tracking number is matched too, so return-label invoices attach to the outbound return delivery."
+  },
+  {
+   "default": "custom_return_tracking_number",
+   "depends_on": "enable_dn_tracking_match",
+   "fieldname": "dn_return_tracking_number_field",
+   "fieldtype": "Data",
+   "label": "Return Tracking Number Field(s)",
+   "description": "Delivery Note fieldname(s) holding the return tracking number (e.g. custom_return_tracking_number). Comma-separate to try several. Matched like the normal tracking field."
+  },
+  {
+   "fieldname": "column_break_return",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "custom_return_carrier_company",
+   "fieldname": "dn_return_carrier_field",
+   "fieldtype": "Data",
+   "label": "Return Carrier Field",
+   "description": "Optional: Delivery Note fieldname holding the return carrier."
+  },
+  {
+   "default": "custom_return_tracking_link",
+   "fieldname": "dn_return_tracking_link_field",
+   "fieldtype": "Data",
+   "label": "Return Tracking Link Field",
+   "description": "Optional: Delivery Note fieldname holding the return tracking URL."
   }
  ],
  "issingle": 1,

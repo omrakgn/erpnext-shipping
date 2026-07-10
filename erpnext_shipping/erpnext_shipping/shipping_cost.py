@@ -176,16 +176,24 @@ def build_po_no_dn_index() -> dict:
 
 
 def _dn_tracking_fields():
-	"""Configured Delivery Note fieldname(s) that hold the tracking number.
-	Field names differ between systems, so they come from Shipping Cost Settings."""
+	"""Configured Delivery Note fieldname(s) holding a tracking number — both the
+	normal outbound field and the return field. Names differ between systems, so
+	they come from Shipping Cost Settings."""
+	defaults = {
+		"dn_tracking_number_field": "custom_tracking_number",
+		"dn_return_tracking_number_field": "custom_return_tracking_number",
+	}
 	try:
 		s = frappe.get_cached_doc("Shipping Cost Settings")
 	except Exception:
-		return ["custom_tracking_number"]
+		return list(defaults.values())
 	if not s.get("enable_dn_tracking_match"):
 		return []
-	raw = s.get("dn_tracking_number_field") or "custom_tracking_number"
-	return [f.strip() for f in raw.replace("\n", ",").split(",") if f.strip()]
+	fields = []
+	for key, default in defaults.items():
+		raw = s.get(key) or default
+		fields += [f.strip() for f in raw.replace("\n", ",").split(",") if f.strip()]
+	return list(dict.fromkeys(fields))  # de-dupe, keep order
 
 
 def _tracking_keys(value):
@@ -229,6 +237,20 @@ def build_match_context():
 	return {"po": build_po_no_dn_index(), "track": build_dn_tracking_index()}
 
 
+def _disambiguate_dns(dns):
+	"""Pick a single Delivery Note from candidates that share a tracking/order key.
+	Shipping cost belongs to the outbound delivery, so prefer the one that is NOT a
+	Sales Return (is_return=0) — e.g. the "Return Issued" send-out rather than the
+	stock-return receipt. Returns None if still ambiguous."""
+	dns = list(dns)
+	if len(dns) == 1:
+		return dns[0]
+	non_return = [d for d in dns if not frappe.db.get_value("Delivery Note", d, "is_return")]
+	if len(non_return) == 1:
+		return non_return[0]
+	return None
+
+
 def _shipment_for_dn(dn):
 	"""Return the single Shipment a Delivery Note is attached to, or None."""
 	shs = frappe.get_all(
@@ -268,13 +290,13 @@ def match_entry(parcel_number, reference_1, ctx=None):
 	if shipment:
 		return shipment, _dn_for_shipment(shipment), "tracking"
 
-	# 2) Delivery Note tracking field (configurable)
+	# 2) Delivery Note tracking field (configurable; normal + return)
 	track_index = ctx.get("track") or {}
 	for key in _tracking_keys(parcel_number):
 		dns = track_index.get(key)
 		if dns:
-			if len(dns) == 1:
-				dn = next(iter(dns))
+			dn = _disambiguate_dns(dns)
+			if dn:
 				return _shipment_for_dn(dn), dn, "dntrack"
 			return None, None, "ambiguous"
 
@@ -290,8 +312,8 @@ def match_entry(parcel_number, reference_1, ctx=None):
 		for key in candidates:
 			dns = po_index.get(key)
 			if dns:
-				if len(dns) == 1:
-					dn = next(iter(dns))
+				dn = _disambiguate_dns(dns)
+				if dn:
 					return _shipment_for_dn(dn), dn, "order"
 				return None, None, "ambiguous"
 	return None, None, "none"
