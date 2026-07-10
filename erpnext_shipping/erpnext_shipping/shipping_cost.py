@@ -205,12 +205,19 @@ def match_entry(parcel_number, reference_1, dn_index=None):
 	if ref:
 		if dn_index is None:
 			dn_index = build_po_no_dn_index()
-		dns = dn_index.get(ref.lower())
-		if dns:
-			if len(dns) == 1:
-				dn = next(iter(dns))
-				return _shipment_for_dn(dn), dn, "order"
-			return None, None, "ambiguous"
+		# po_no bazen "#1240" bazen "1240" olarak saklanır (Shopify sipariş adı);
+		# her iki varyantı da dene.
+		candidates = [ref.lower()]
+		stripped = ref.lstrip("#").strip().lower()
+		if stripped and stripped != ref.lower():
+			candidates.append(stripped)
+		for key in candidates:
+			dns = dn_index.get(key)
+			if dns:
+				if len(dns) == 1:
+					dn = next(iter(dns))
+					return _shipment_for_dn(dn), dn, "order"
+				return None, None, "ambiguous"
 	return None, None, "none"
 
 
@@ -483,6 +490,10 @@ def _parse_fedex_into(content, source_file, dn_index, stats):
 		if not awb:
 			continue
 
+		# Order number: FedEx satır-bazlı AccountingCost'ta taşır (ör. "#1240" =
+		# Shopify sipariş adı). Yoksa fatura seviyesindeki OrderReference'a düş.
+		line_ref = _fedex_text(line, "cbc:AccountingCost") or order_ref
+
 		desc = _fedex_text(line, "cac:Item/cbc:Description") or ""
 		m_coll = re.search(r"Collection:([0-9-]+)", desc)
 		m_pw = re.search(r"Payweight:([0-9.]+)", desc)
@@ -505,7 +516,7 @@ def _parse_fedex_into(content, source_file, dn_index, stats):
 			"currency": currency,
 			"total_net_amount": flt(_fedex_text(line, "cbc:LineExtensionAmount")),
 			"vat_rate": flt(_fedex_text(line, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent")),
-			"reference_1": order_ref or "",
+			"reference_1": line_ref or "",
 			"receiver_name": (m_rcv.group(1).strip() if m_rcv else ""),
 			"receiver_city": (m_rcv.group(2).strip() if m_rcv else ""),
 			"invoicing_weight": flt(m_pw.group(1)) if m_pw else 0,
