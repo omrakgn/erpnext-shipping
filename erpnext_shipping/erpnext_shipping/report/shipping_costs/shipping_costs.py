@@ -95,7 +95,7 @@ def get_data(filters, group_by):
 		select
 			{select_extra}
 			any_value(carrier) as carrier,
-			count(*) as lines,
+			count(*) as `lines`,
 			sum(total_net_amount) as net_cost,
 			any_value(currency) as currency,
 			min(matched) as matched,
