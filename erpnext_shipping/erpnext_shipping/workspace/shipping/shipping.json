@@ -1,0 +1,200 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"hdr_main\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Shipping</b></span>\", \"col\": 12}}, {\"id\": \"sc_ship\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipment\", \"col\": 3}}, {\"id\": \"sc_cost\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipping Cost Entry\", \"col\": 3}}, {\"id\": \"sc_manifest\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Pickup Manifest\", \"col\": 3}}, {\"id\": \"sc_report\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipping Costs\", \"col\": 3}}, {\"id\": \"hdr_cards\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"card_ship\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping\", \"col\": 4}}, {\"id\": \"card_costs\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping Costs\", \"col\": 4}}, {\"id\": \"card_settings\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}]",
+ "creation": "2026-07-11 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "stock",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Shipping",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipping",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment",
+   "link_count": 0,
+   "link_to": "Shipment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Delivery Note",
+   "link_count": 0,
+   "link_to": "Delivery Note",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Pickup Manifest",
+   "link_count": 0,
+   "link_to": "Pickup Manifest",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipping Costs",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipping Cost Entry",
+   "link_count": 0,
+   "link_to": "Shipping Cost Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Shipping Costs",
+   "link_count": 0,
+   "link_to": "Shipping Costs",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipping Cost Settings",
+   "link_count": 0,
+   "link_to": "Shipping Cost Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Settings",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SendCloud",
+   "link_count": 0,
+   "link_to": "SendCloud",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LetMeShip",
+   "link_count": 0,
+   "link_to": "LetMeShip",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Parcel Service",
+   "link_count": 0,
+   "link_to": "Parcel Service",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Parcel Service Type",
+   "link_count": 0,
+   "link_to": "Parcel Service Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Shipping",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 100.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "format": "",
+   "label": "Shipment",
+   "link_to": "Shipment",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "format": "",
+   "label": "Shipping Cost Entry",
+   "link_to": "Shipping Cost Entry",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "format": "",
+   "label": "Pickup Manifest",
+   "link_to": "Pickup Manifest",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "Report",
+   "format": "",
+   "label": "Shipping Costs",
+   "link_to": "Shipping Costs",
+   "stats_filter": "",
+   "type": "Report"
+  }
+ ],
+ "title": "Shipping"
+}

@@ -69,7 +69,10 @@ after_install = "erpnext_shipping.install.after_install"
 
 # Her migrate'te Pickup Manifest print format'ını güncel tut (patch'ler bir kez
 # çalıştığından, format değişiklikleri ancak böyle yayılır).
-after_migrate = ["erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format.execute"]
+after_migrate = [
+	"erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format.execute",
+	"erpnext_shipping.erpnext_shipping.patches.create_shipping_workspace.execute",
+]
 
 # Desk Notifications
 # ------------------
