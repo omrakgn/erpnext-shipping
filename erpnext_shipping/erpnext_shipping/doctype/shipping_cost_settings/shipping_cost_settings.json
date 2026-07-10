@@ -1,0 +1,86 @@
+{
+ "actions": [],
+ "creation": "2026-07-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "field_mapping_section",
+  "enable_dn_tracking_match",
+  "dn_tracking_number_field",
+  "column_break_mapping",
+  "dn_carrier_field",
+  "dn_tracking_link_field"
+ ],
+ "fields": [
+  {
+   "fieldname": "field_mapping_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery Note Field Mapping",
+   "description": "Map the Delivery Note custom fields used when matching carrier invoice lines. Field names differ between systems, so they are configurable here."
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_dn_tracking_match",
+   "fieldtype": "Check",
+   "label": "Match by Delivery Note Tracking Field"
+  },
+  {
+   "default": "custom_tracking_number",
+   "depends_on": "enable_dn_tracking_match",
+   "fieldname": "dn_tracking_number_field",
+   "fieldtype": "Data",
+   "label": "Tracking Number Field(s)",
+   "description": "Delivery Note fieldname(s) that hold the tracking number (e.g. custom_tracking_number). Comma-separate to try several. Used to match an invoice line to a Delivery Note by tracking number."
+  },
+  {
+   "fieldname": "column_break_mapping",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "custom_carrier",
+   "fieldname": "dn_carrier_field",
+   "fieldtype": "Data",
+   "label": "Carrier Field",
+   "description": "Optional: Delivery Note fieldname holding the carrier name."
+  },
+  {
+   "default": "custom_tracking_link",
+   "fieldname": "dn_tracking_link_field",
+   "fieldtype": "Data",
+   "label": "Tracking Link Field",
+   "description": "Optional: Delivery Note fieldname holding the tracking URL."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Shipping Cost Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

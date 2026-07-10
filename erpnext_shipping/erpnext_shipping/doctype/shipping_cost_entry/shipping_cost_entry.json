@@ -131,7 +131,7 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Match Method",
-   "options": "\nTracking\nOrder Number\nManual",
+   "options": "\nTracking\nDN Tracking\nOrder Number\nManual",
    "read_only": 1,
    "description": "How the Shipment was matched: by tracking (parcel) number, by order number (po_no via Reference), or set manually."
   },

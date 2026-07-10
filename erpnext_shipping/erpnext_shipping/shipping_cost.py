@@ -21,6 +21,13 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate, now_datetime
 
+# match_entry status -> Shipping Cost Entry.match_method label
+MATCH_METHOD_LABELS = {
+	"tracking": "Tracking",
+	"dntrack": "DN Tracking",
+	"order": "Order Number",
+}
+
 # FedEx invoices arrive as UBL/Peppol XML (one file per invoice).
 FEDEX_NS = {
 	"i": "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
@@ -168,6 +175,58 @@ def build_po_no_dn_index() -> dict:
 	return index
 
 
+def _dn_tracking_fields():
+	"""Configured Delivery Note fieldname(s) that hold the tracking number.
+	Field names differ between systems, so they come from Shipping Cost Settings."""
+	try:
+		s = frappe.get_cached_doc("Shipping Cost Settings")
+	except Exception:
+		return ["custom_tracking_number"]
+	if not s.get("enable_dn_tracking_match"):
+		return []
+	raw = s.get("dn_tracking_number_field") or "custom_tracking_number"
+	return [f.strip() for f in raw.replace("\n", ",").split(",") if f.strip()]
+
+
+def _tracking_keys(value):
+	"""Normalised comparison keys for a tracking number (case- and leading-zero
+	tolerant), so DPD/FedEx numbers match values typed manually on a Delivery Note."""
+	v = (str(value) or "").strip().lower()
+	if not v:
+		return set()
+	keys = set()
+	# Ham + boşluk/tire temizlenmiş varyant (manuel girişte "0544 8801" gibi olabilir).
+	for variant in (v, re.sub(r"[\s\-]", "", v)):
+		if not variant:
+			continue
+		keys.add(variant)
+		stripped = variant.lstrip("0")
+		if stripped:
+			keys.add(stripped)
+	return keys
+
+
+def build_dn_tracking_index():
+	"""Return {normalised tracking -> set(delivery_note)} built from the configured
+	Delivery Note tracking field(s). Lets us match invoice lines to deliveries whose
+	tracking number was entered manually on the DN (no Shipment document)."""
+	index = {}
+	for field in _dn_tracking_fields():
+		if not frappe.db.has_column("Delivery Note", field):
+			continue
+		for r in frappe.get_all(
+			"Delivery Note", filters={field: ["is", "set"]}, fields=["name", field]
+		):
+			for key in _tracking_keys(r.get(field)):
+				index.setdefault(key, set()).add(r.name)
+	return index
+
+
+def build_match_context():
+	"""Build the lookup indexes used by match_entry once per import run."""
+	return {"po": build_po_no_dn_index(), "track": build_dn_tracking_index()}
+
+
 def _shipment_for_dn(dn):
 	"""Return the single Shipment a Delivery Note is attached to, or None."""
 	shs = frappe.get_all(
@@ -187,32 +246,47 @@ def _dn_for_shipment(shipment):
 	)
 
 
-def match_entry(parcel_number, reference_1, dn_index=None):
+def match_entry(parcel_number, reference_1, ctx=None):
 	"""Match an invoice line to a Delivery Note (and Shipment if one exists).
 
 	1) By tracking: parcel number in a Shipment's awb_number -> that Shipment
 	   (and its Delivery Note). Status "tracking".
-	2) Fallback by order number: Reference 1 == Sales Order po_no, resolving to
-	   exactly one Delivery Note. If that DN is on exactly one Shipment, link it
-	   too. Status "order". Multiple DNs -> "ambiguous" (left unmatched).
+	2) By DN tracking field: parcel number == the configured Delivery Note tracking
+	   field (manually entered, no Shipment needed). Status "dntrack".
+	3) By order number: Reference 1 == Sales Order po_no, resolving to exactly one
+	   Delivery Note (and its Shipment if any). Status "order".
+	Multiple candidates in step 2/3 -> "ambiguous" (left unmatched).
 	Returns (shipment_or_None, delivery_note_or_None, status).
 	"""
+	if ctx is None:
+		ctx = build_match_context()
+
+	# 1) Shipment awb_number
 	shipment = find_shipment_by_parcel(parcel_number)
 	if shipment:
 		return shipment, _dn_for_shipment(shipment), "tracking"
 
+	# 2) Delivery Note tracking field (configurable)
+	track_index = ctx.get("track") or {}
+	for key in _tracking_keys(parcel_number):
+		dns = track_index.get(key)
+		if dns:
+			if len(dns) == 1:
+				dn = next(iter(dns))
+				return _shipment_for_dn(dn), dn, "dntrack"
+			return None, None, "ambiguous"
+
+	# 3) Order number -> Sales Order po_no
 	ref = (reference_1 or "").strip()
 	if ref:
-		if dn_index is None:
-			dn_index = build_po_no_dn_index()
-		# po_no bazen "#1240" bazen "1240" olarak saklanır (Shopify sipariş adı);
-		# her iki varyantı da dene.
+		po_index = ctx.get("po") or {}
+		# po_no bazen "#1240" bazen "1240" olarak saklanır (Shopify sipariş adı).
 		candidates = [ref.lower()]
 		stripped = ref.lstrip("#").strip().lower()
 		if stripped and stripped != ref.lower():
 			candidates.append(stripped)
 		for key in candidates:
-			dns = dn_index.get(key)
+			dns = po_index.get(key)
 			if dns:
 				if len(dns) == 1:
 					dn = next(iter(dns))
@@ -289,7 +363,7 @@ def _new_stats():
 	}
 
 
-def _upsert_cost_entry(values, dn_index, stats, pdf=None):
+def _upsert_cost_entry(values, ctx, stats, pdf=None):
 	"""Match one parsed invoice line to a Shipment/Delivery Note and upsert it as a
 	Shipping Cost Entry (idempotent by parcel+invoice). Updates the stats accumulator
 	and optionally attaches the source invoice PDF."""
@@ -297,18 +371,18 @@ def _upsert_cost_entry(values, dn_index, stats, pdf=None):
 	invoice = values.get("invoice_number") or ""
 	name = f"{parcel}-{invoice}" if invoice else parcel
 
-	shipment, delivery_note, status = match_entry(parcel, values.get("reference_1"), dn_index)
+	shipment, delivery_note, status = match_entry(parcel, values.get("reference_1"), ctx)
 	values = dict(values)
 	values["shipment"] = shipment
 	values["delivery_note"] = delivery_note
-	values["match_method"] = {"tracking": "Tracking", "order": "Order Number"}.get(status)
+	values["match_method"] = MATCH_METHOD_LABELS.get(status)
 
 	if shipment:
 		stats["affected_shipments"].add(shipment)
 	if delivery_note:
 		stats["affected_dns"].add(delivery_note)
 	if shipment or delivery_note:
-		if status == "tracking":
+		if status in ("tracking", "dntrack"):
 			stats["matched_tracking"] += 1
 		elif status == "order":
 			stats["matched_order"] += 1
@@ -388,7 +462,7 @@ def _stats_summary(stats):
 # ---------------------------------------------------------------------------
 # Parsers
 # ---------------------------------------------------------------------------
-def _parse_dpd_into(content, source_file, carrier, dn_index, stats):
+def _parse_dpd_into(content, source_file, carrier, ctx, stats):
 	"""Parse a DPD invoice detail .xlsx and upsert each row."""
 	import openpyxl
 
@@ -441,7 +515,7 @@ def _parse_dpd_into(content, source_file, carrier, dn_index, stats):
 			"charge_breakdown": json.dumps(breakdown, ensure_ascii=False),
 			"source_file": source_file,
 		}
-		_upsert_cost_entry(values, dn_index, stats)
+		_upsert_cost_entry(values, ctx, stats)
 
 
 def _fedex_text(el, path):
@@ -463,7 +537,7 @@ def _extract_embedded_pdf(root):
 		return None
 
 
-def _parse_fedex_into(content, source_file, dn_index, stats):
+def _parse_fedex_into(content, source_file, ctx, stats):
 	"""Parse a FedEx UBL/Peppol XML invoice; one Shipping Cost Entry per InvoiceLine.
 
 	The tracking (AWB) number is DocumentReference/ID[@schemeID='AAM']; the Item
@@ -523,21 +597,21 @@ def _parse_fedex_into(content, source_file, dn_index, stats):
 			"charge_breakdown": json.dumps(charges, ensure_ascii=False),
 			"source_file": source_file,
 		}
-		_upsert_cost_entry(values, dn_index, stats, pdf=pdf)
+		_upsert_cost_entry(values, ctx, stats, pdf=pdf)
 
 
-def _process_content(content, filename, dn_index, stats):
+def _process_content(content, filename, ctx, stats):
 	"""Dispatch one file's content to the right parser by extension."""
 	low = (filename or "").lower()
 	if low.endswith((".xlsx", ".xls")):
-		_parse_dpd_into(content, filename, "DPD", dn_index, stats)
+		_parse_dpd_into(content, filename, "DPD", ctx, stats)
 	elif low.endswith(".xml"):
-		_parse_fedex_into(content, filename, dn_index, stats)
+		_parse_fedex_into(content, filename, ctx, stats)
 	else:
 		# İçeriğe göre kaba tahmin: XML mi?
 		head = content[:200].lstrip()
 		if head.startswith(b"<?xml") or b"Invoice-2" in head:
-			_parse_fedex_into(content, filename, dn_index, stats)
+			_parse_fedex_into(content, filename, ctx, stats)
 		else:
 			raise ValueError(_("Unsupported file type: {0}").format(filename))
 
@@ -553,7 +627,7 @@ def import_invoice(file_url: str):
 	content = _read_file_content(file_url)
 	filename = file_url.rsplit("/", 1)[-1]
 	stats = _new_stats()
-	dn_index = build_po_no_dn_index()
+	ctx = build_match_context()
 
 	if filename.lower().endswith(".zip"):
 		import zipfile
@@ -566,12 +640,12 @@ def import_invoice(file_url: str):
 				if base.startswith(".") or not base.lower().endswith((".xml", ".xlsx", ".xls")):
 					continue
 				try:
-					_process_content(zf.read(member), base, dn_index, stats)
+					_process_content(zf.read(member), base, ctx, stats)
 					stats["files"] += 1
 				except Exception as e:
 					stats["errors"].append(f"{base}: {e}")
 	else:
-		_process_content(content, filename, dn_index, stats)
+		_process_content(content, filename, ctx, stats)
 		stats["files"] += 1
 
 	_finalize_import(stats)
@@ -583,8 +657,8 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 	"""Backward-compatible entrypoint for DPD .xlsx imports."""
 	content = _read_file_content(file_url)
 	stats = _new_stats()
-	dn_index = build_po_no_dn_index()
-	_parse_dpd_into(content, file_url.rsplit("/", 1)[-1], carrier, dn_index, stats)
+	ctx = build_match_context()
+	_parse_dpd_into(content, file_url.rsplit("/", 1)[-1], carrier, ctx, stats)
 	stats["files"] = 1
 	_finalize_import(stats)
 	return _stats_summary(stats)
@@ -600,14 +674,14 @@ def rematch_unmatched():
 	matched = 0
 	affected_shipments = set()
 	affected_dns = set()
-	dn_index = build_po_no_dn_index()
+	ctx = build_match_context()
 	for name in entries:
 		doc = frappe.get_doc("Shipping Cost Entry", name)
-		shipment, delivery_note, status = match_entry(doc.parcel_number, doc.reference_1, dn_index)
+		shipment, delivery_note, status = match_entry(doc.parcel_number, doc.reference_1, ctx)
 		if shipment or delivery_note:
 			doc.shipment = shipment
 			doc.delivery_note = delivery_note
-			doc.match_method = {"tracking": "Tracking", "order": "Order Number"}.get(status)
+			doc.match_method = MATCH_METHOD_LABELS.get(status)
 			doc.save(ignore_permissions=True)
 			if shipment:
 				affected_shipments.add(shipment)
