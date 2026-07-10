@@ -162,7 +162,7 @@ def build_po_no_dn_index() -> dict:
 		select so.po_no as po_no, dni.parent as dn
 		from `tabSales Order` so
 		join `tabDelivery Note Item` dni on dni.against_sales_order = so.name
-		where ifnull(so.po_no, '') != ''
+		where ifnull(so.po_no, '') != '' and dni.docstatus < 2
 		""",
 		as_dict=True,
 	)
@@ -215,7 +215,9 @@ def build_dn_tracking_index():
 		if not frappe.db.has_column("Delivery Note", field):
 			continue
 		for r in frappe.get_all(
-			"Delivery Note", filters={field: ["is", "set"]}, fields=["name", field]
+			"Delivery Note",
+			filters={field: ["is", "set"], "docstatus": ["<", 2]},
+			fields=["name", field],
 		):
 			for key in _tracking_keys(r.get(field)):
 				index.setdefault(key, set()).add(r.name)
