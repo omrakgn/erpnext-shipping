@@ -77,29 +77,31 @@ def _conditions(filters):
 def get_data(filters, group_by):
 	where, values = _conditions(filters)
 
+	# NOT: any_value() eski MariaDB (<10.5) sürümlerinde yok; grup başına temsili
+	# değer için max() kullanıyoruz (her yerde mevcut).
 	if group_by == "Shipment":
 		group_col = "shipment"
-		select_extra = "shipment, any_value(delivery_note) as delivery_note,"
+		select_extra = "shipment, max(delivery_note) as delivery_note,"
 	elif group_by == "Delivery Note":
 		group_col = "delivery_note"
-		select_extra = "delivery_note, any_value(shipment) as shipment,"
+		select_extra = "delivery_note, max(shipment) as shipment,"
 	elif group_by == "Invoice":
 		group_col = "invoice_number"
 		select_extra = "invoice_number,"
 	else:
 		group_col = "parcel_number"
-		select_extra = "parcel_number, any_value(shipment) as shipment,"
+		select_extra = "parcel_number, max(shipment) as shipment,"
 
 	rows = frappe.db.sql(
 		f"""
 		select
 			{select_extra}
-			any_value(carrier) as carrier,
+			max(carrier) as carrier,
 			count(*) as `lines`,
 			sum(total_net_amount) as net_cost,
-			any_value(currency) as currency,
+			max(currency) as currency,
 			min(matched) as matched,
-			any_value(match_method) as match_method
+			max(match_method) as match_method
 		from `tabShipping Cost Entry`
 		{where}
 		group by {group_col}
