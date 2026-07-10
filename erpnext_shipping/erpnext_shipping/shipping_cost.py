@@ -14,10 +14,19 @@ Delivery Notes (Shipping Details).
 
 import io
 import json
+import re
+import xml.etree.ElementTree as ET
 
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, now_datetime
+
+# FedEx invoices arrive as UBL/Peppol XML (one file per invoice).
+FEDEX_NS = {
+	"i": "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
+	"cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
+	"cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+}
 
 # --- DPD Excel column headers (exact strings in the file) -------------------
 COL_PARCEL = "Parcel Number"
@@ -255,24 +264,136 @@ def recompute_delivery_note_cost(delivery_note: str):
 	)
 
 
-@frappe.whitelist()
-def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
-	"""Import a DPD invoice detail .xlsx: upsert each row as a Shipping Cost Entry,
-	match to a Shipment and roll up costs. Idempotent by parcel+invoice."""
+# ---------------------------------------------------------------------------
+# Shared import core (carrier-agnostic): match -> upsert -> rollup
+# ---------------------------------------------------------------------------
+def _new_stats():
+	return {
+		"created": 0,
+		"updated": 0,
+		"matched_tracking": 0,
+		"matched_order": 0,
+		"ambiguous": 0,
+		"files": 0,
+		"errors": [],
+		"affected_shipments": set(),
+		"affected_dns": set(),
+		"unmatched": set(),
+	}
+
+
+def _upsert_cost_entry(values, dn_index, stats, pdf=None):
+	"""Match one parsed invoice line to a Shipment/Delivery Note and upsert it as a
+	Shipping Cost Entry (idempotent by parcel+invoice). Updates the stats accumulator
+	and optionally attaches the source invoice PDF."""
+	parcel = values["parcel_number"]
+	invoice = values.get("invoice_number") or ""
+	name = f"{parcel}-{invoice}" if invoice else parcel
+
+	shipment, delivery_note, status = match_entry(parcel, values.get("reference_1"), dn_index)
+	values = dict(values)
+	values["shipment"] = shipment
+	values["delivery_note"] = delivery_note
+	values["match_method"] = {"tracking": "Tracking", "order": "Order Number"}.get(status)
+
+	if shipment:
+		stats["affected_shipments"].add(shipment)
+	if delivery_note:
+		stats["affected_dns"].add(delivery_note)
+	if shipment or delivery_note:
+		if status == "tracking":
+			stats["matched_tracking"] += 1
+		elif status == "order":
+			stats["matched_order"] += 1
+	else:
+		stats["unmatched"].add(parcel)
+		if status == "ambiguous":
+			stats["ambiguous"] += 1
+
+	if frappe.db.exists("Shipping Cost Entry", name):
+		doc = frappe.get_doc("Shipping Cost Entry", name)
+		doc.update(values)
+		doc.save(ignore_permissions=True)
+		stats["updated"] += 1
+	else:
+		doc = frappe.new_doc("Shipping Cost Entry")
+		doc.update(values)
+		doc.name = name
+		doc.flags.name_set = True
+		doc.insert(ignore_permissions=True)
+		stats["created"] += 1
+
+	if pdf:
+		_attach_pdf(doc, pdf)
+	return doc
+
+
+def _attach_pdf(doc, pdf):
+	"""Attach (filename, bytes) as a private File to the entry, skipping duplicates."""
+	filename, data = pdf
+	if not data:
+		return
+	exists = frappe.db.exists(
+		"File",
+		{
+			"attached_to_doctype": "Shipping Cost Entry",
+			"attached_to_name": doc.name,
+			"file_name": filename,
+		},
+	)
+	if exists:
+		return
+	frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": filename,
+			"attached_to_doctype": "Shipping Cost Entry",
+			"attached_to_name": doc.name,
+			"is_private": 1,
+			"content": data,
+		}
+	).insert(ignore_permissions=True)
+
+
+def _finalize_import(stats):
+	"""Recompute rollups for every affected DN and Shipment, then commit."""
+	for dn in stats["affected_dns"]:
+		recompute_delivery_note_cost(dn)
+	for shipment in stats["affected_shipments"]:
+		recompute_shipment_cost(shipment)
+	frappe.db.commit()
+
+
+def _stats_summary(stats):
+	return {
+		"created": stats["created"],
+		"updated": stats["updated"],
+		"files": stats["files"],
+		"errors": stats["errors"],
+		"matched_shipments": len(stats["affected_shipments"]),
+		"matched_by_tracking": stats["matched_tracking"],
+		"matched_by_order": stats["matched_order"],
+		"ambiguous": stats["ambiguous"],
+		"unmatched_parcels": len(stats["unmatched"]),
+	}
+
+
+# ---------------------------------------------------------------------------
+# Parsers
+# ---------------------------------------------------------------------------
+def _parse_dpd_into(content, source_file, carrier, dn_index, stats):
+	"""Parse a DPD invoice detail .xlsx and upsert each row."""
 	import openpyxl
 
-	content = _read_file_content(file_url)
 	wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
 	ws = wb.active
-
 	rows = ws.iter_rows(values_only=True)
 	header = next(rows, None)
 	if not header:
-		frappe.throw(_("The uploaded file is empty."))
+		raise ValueError(_("The uploaded file is empty."))
 	idx = {str(h).strip(): i for i, h in enumerate(header) if h is not None}
-
 	if COL_PARCEL not in idx:
-		frappe.throw(
+		raise ValueError(
 			_("Column '{0}' not found. Is this a DPD invoice detail file?").format(COL_PARCEL)
 		)
 
@@ -280,47 +401,18 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 		i = idx.get(colname)
 		return row[i] if (i is not None and i < len(row)) else None
 
-	source_file = file_url.rsplit("/", 1)[-1]
-	created = updated = skipped = 0
-	matched_tracking = matched_order = ambiguous = 0
-	affected_shipments = set()
-	affected_dns = set()
-	unmatched_parcels = set()
-	dn_index = build_po_no_dn_index()
-
 	for row in rows:
 		parcel = _norm_parcel(cell(row, COL_PARCEL))
 		if not parcel:
 			continue
-		invoice = _s(cell(row, COL_INVOICE))
-		name = f"{parcel}-{invoice}" if invoice else parcel
-
 		breakdown = {}
 		for comp in COMPONENT_COLUMNS:
 			val = cell(row, comp)
 			if val not in (None, "", 0, "0"):
 				breakdown[comp] = flt(val)
-
-		reference_1 = _s(cell(row, COL_REFERENCE))
-		shipment, delivery_note, status = match_entry(parcel, reference_1, dn_index)
-		match_method = {"tracking": "Tracking", "order": "Order Number"}.get(status)
-		if shipment:
-			affected_shipments.add(shipment)
-		if delivery_note:
-			affected_dns.add(delivery_note)
-		if shipment or delivery_note:
-			if status == "tracking":
-				matched_tracking += 1
-			elif status == "order":
-				matched_order += 1
-		else:
-			unmatched_parcels.add(parcel)
-			if status == "ambiguous":
-				ambiguous += 1
-
 		values = {
 			"parcel_number": parcel,
-			"invoice_number": invoice,
+			"invoice_number": _s(cell(row, COL_INVOICE)),
 			"carrier": carrier,
 			"scan_date": _parse_date(cell(row, COL_SCAN_DATE)),
 			"product_name": _s(cell(row, COL_PRODUCT)),
@@ -328,7 +420,7 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 			"currency": _s(cell(row, COL_CURRENCY)) or "EUR",
 			"total_net_amount": flt(cell(row, COL_TOTAL)),
 			"vat_rate": flt(cell(row, COL_VAT)),
-			"reference_1": reference_1,
+			"reference_1": _s(cell(row, COL_REFERENCE)),
 			"receiver_name": _s(cell(row, COL_NAME)),
 			"receiver_street": _s(cell(row, COL_STREET)),
 			"receiver_zip": _s(cell(row, COL_ZIP)),
@@ -341,42 +433,150 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 			"girth": flt(cell(row, COL_GIRTH)),
 			"charge_breakdown": json.dumps(breakdown, ensure_ascii=False),
 			"source_file": source_file,
-			"shipment": shipment,
-			"delivery_note": delivery_note,
-			"match_method": match_method,
 		}
+		_upsert_cost_entry(values, dn_index, stats)
 
-		if frappe.db.exists("Shipping Cost Entry", name):
-			doc = frappe.get_doc("Shipping Cost Entry", name)
-			doc.update(values)
-			doc.save(ignore_permissions=True)
-			updated += 1
+
+def _fedex_text(el, path):
+	x = el.find(path, FEDEX_NS)
+	return x.text.strip() if (x is not None and x.text) else None
+
+
+def _extract_embedded_pdf(root):
+	"""Return (filename, bytes) of the embedded human-readable invoice PDF, or None."""
+	import base64
+
+	el = root.find(".//cbc:EmbeddedDocumentBinaryObject", FEDEX_NS)
+	if el is None or not el.text:
+		return None
+	filename = el.get("filename") or "invoice.pdf"
+	try:
+		return (filename, base64.b64decode(el.text))
+	except Exception:
+		return None
+
+
+def _parse_fedex_into(content, source_file, dn_index, stats):
+	"""Parse a FedEx UBL/Peppol XML invoice; one Shipping Cost Entry per InvoiceLine.
+
+	The tracking (AWB) number is DocumentReference/ID[@schemeID='AAM']; the Item
+	Description carries Collection date, Payweight and the receiver.
+	"""
+	root = ET.fromstring(content)
+	invoice = _fedex_text(root, "cbc:ID")
+	currency = _fedex_text(root, "cbc:DocumentCurrencyCode") or "EUR"
+	issue = _fedex_text(root, "cbc:IssueDate")
+	supplier = _fedex_text(root, "cac:AccountingSupplierParty/cac:Party/cac:PartyName/cbc:Name") or ""
+	carrier = "FedEx" if "fedex" in supplier.lower() else (supplier or "FedEx")
+	order_ref = _fedex_text(root, "cac:OrderReference/cbc:ID")
+	if order_ref and order_ref.strip().lower() in ("no reference given", "not applicable", ""):
+		order_ref = None
+	pdf = _extract_embedded_pdf(root)
+
+	for line in root.findall("cac:InvoiceLine", FEDEX_NS):
+		awb = None
+		for dr in line.findall("cac:DocumentReference/cbc:ID", FEDEX_NS):
+			if dr.get("schemeID") == "AAM" and dr.text:
+				awb = dr.text.strip()
+		if not awb:
+			awb = _fedex_text(line, "cac:Item/cbc:Name")
+		if not awb:
+			continue
+
+		desc = _fedex_text(line, "cac:Item/cbc:Description") or ""
+		m_coll = re.search(r"Collection:([0-9-]+)", desc)
+		m_pw = re.search(r"Payweight:([0-9.]+)", desc)
+		m_rcv = re.search(r"Receiver:([^;]*);[^;]*;([^;]*);([^;]*);", desc)
+
+		charges = {}
+		for ac in line.findall("cac:AllowanceCharge", FEDEX_NS):
+			ind = _fedex_text(ac, "cbc:ChargeIndicator")
+			reason = _fedex_text(ac, "cbc:AllowanceChargeReason") or "Charge"
+			amt = flt(_fedex_text(ac, "cbc:Amount"))
+			charges[reason] = amt if ind == "true" else -amt
+
+		values = {
+			"parcel_number": awb,
+			"invoice_number": invoice or "",
+			"carrier": carrier,
+			"scan_date": _parse_date(m_coll.group(1) if m_coll else issue),
+			"product_name": _fedex_text(line, "cac:Item/cac:SellersItemIdentification/cbc:ID") or "",
+			"country": (m_rcv.group(3).strip() if m_rcv else ""),
+			"currency": currency,
+			"total_net_amount": flt(_fedex_text(line, "cbc:LineExtensionAmount")),
+			"vat_rate": flt(_fedex_text(line, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent")),
+			"reference_1": order_ref or "",
+			"receiver_name": (m_rcv.group(1).strip() if m_rcv else ""),
+			"receiver_city": (m_rcv.group(2).strip() if m_rcv else ""),
+			"invoicing_weight": flt(m_pw.group(1)) if m_pw else 0,
+			"charge_breakdown": json.dumps(charges, ensure_ascii=False),
+			"source_file": source_file,
+		}
+		_upsert_cost_entry(values, dn_index, stats, pdf=pdf)
+
+
+def _process_content(content, filename, dn_index, stats):
+	"""Dispatch one file's content to the right parser by extension."""
+	low = (filename or "").lower()
+	if low.endswith((".xlsx", ".xls")):
+		_parse_dpd_into(content, filename, "DPD", dn_index, stats)
+	elif low.endswith(".xml"):
+		_parse_fedex_into(content, filename, dn_index, stats)
+	else:
+		# İçeriğe göre kaba tahmin: XML mi?
+		head = content[:200].lstrip()
+		if head.startswith(b"<?xml") or b"Invoice-2" in head:
+			_parse_fedex_into(content, filename, dn_index, stats)
 		else:
-			doc = frappe.new_doc("Shipping Cost Entry")
-			doc.update(values)
-			doc.name = name
-			doc.flags.name_set = True
-			doc.insert(ignore_permissions=True)
-			created += 1
+			raise ValueError(_("Unsupported file type: {0}").format(filename))
 
-	# Rollup: her etkilenen Delivery Note ve Shipment için toplamı yeniden hesapla.
-	for dn in affected_dns:
-		recompute_delivery_note_cost(dn)
-	for shipment in affected_shipments:
-		recompute_shipment_cost(shipment)
 
-	frappe.db.commit()
+# ---------------------------------------------------------------------------
+# Public import entrypoints
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def import_invoice(file_url: str):
+	"""Import a carrier invoice: DPD .xlsx, FedEx .xml, or a .zip of many such files.
+	Auto-detects the format. Idempotent by parcel+invoice; rolls up costs onto the
+	matched Shipment and Delivery Note."""
+	content = _read_file_content(file_url)
+	filename = file_url.rsplit("/", 1)[-1]
+	stats = _new_stats()
+	dn_index = build_po_no_dn_index()
 
-	return {
-		"created": created,
-		"updated": updated,
-		"skipped": skipped,
-		"matched_shipments": len(affected_shipments),
-		"matched_by_tracking": matched_tracking,
-		"matched_by_order": matched_order,
-		"ambiguous": ambiguous,
-		"unmatched_parcels": len(unmatched_parcels),
-	}
+	if filename.lower().endswith(".zip"):
+		import zipfile
+
+		with zipfile.ZipFile(io.BytesIO(content)) as zf:
+			for member in zf.namelist():
+				if member.endswith("/"):
+					continue
+				base = member.rsplit("/", 1)[-1]
+				if base.startswith(".") or not base.lower().endswith((".xml", ".xlsx", ".xls")):
+					continue
+				try:
+					_process_content(zf.read(member), base, dn_index, stats)
+					stats["files"] += 1
+				except Exception as e:
+					stats["errors"].append(f"{base}: {e}")
+	else:
+		_process_content(content, filename, dn_index, stats)
+		stats["files"] += 1
+
+	_finalize_import(stats)
+	return _stats_summary(stats)
+
+
+@frappe.whitelist()
+def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
+	"""Backward-compatible entrypoint for DPD .xlsx imports."""
+	content = _read_file_content(file_url)
+	stats = _new_stats()
+	dn_index = build_po_no_dn_index()
+	_parse_dpd_into(content, file_url.rsplit("/", 1)[-1], carrier, dn_index, stats)
+	stats["files"] = 1
+	_finalize_import(stats)
+	return _stats_summary(stats)
 
 
 @frappe.whitelist()
