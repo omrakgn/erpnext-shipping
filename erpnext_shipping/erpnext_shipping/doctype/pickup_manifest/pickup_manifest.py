@@ -33,9 +33,35 @@ def _canon_carrier(name):
 
 class PickupManifest(Document):
 	def validate(self):
+		self._assign_package_numbers()
 		packages = {row.package_no for row in self.items if row.package_no}
 		self.total_packages = len(packages)
 		self.total_qty = sum(flt(row.qty) for row in self.items)
+
+	def _assign_package_numbers(self):
+		"""Her satıra bir package_no ata; manuel girişte alan boş bırakıldığı için
+		gruplama/sayım bozuluyordu. Kural:
+		  - Zaten set edilmiş package_no korunur (generate ile makine üretimi),
+		  - Boşsa aynı tracking_number'a sahip satırlar aynı paket sayılır,
+		  - tracking de yoksa her satır kendi paketidir.
+		Numaralar ilk görülme sırasına göre 1..N olacak şekilde yeniden verilir,
+		böylece hem Toplam Paket hem baskıdaki Sıra doğru olur."""
+
+		def key_for(i, row):
+			if row.package_no:
+				return ("P", int(row.package_no))
+			tracking = (row.tracking_number or "").strip()
+			if tracking:
+				return ("T", tracking)
+			return ("R", i)
+
+		seq = {}
+		for i, row in enumerate(self.items):
+			k = key_for(i, row)
+			if k not in seq:
+				seq[k] = len(seq) + 1
+		for i, row in enumerate(self.items):
+			row.package_no = seq[key_for(i, row)]
 
 
 def get_company_logo_src(company=None):
