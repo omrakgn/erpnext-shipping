@@ -173,6 +173,14 @@ def execute():
 		doctype = chart.get("document_type")
 		if doctype and not frappe.db.exists("DocType", doctype):
 			continue
+		# chart_type set_only_once (sabit); tip değiştiyse save patlar. Bu durumda
+		# sil ve yeniden oluştur (force=True: workspace referansı ismi korur).
+		if frappe.db.exists("Dashboard Chart", chart["name"]):
+			existing_type = frappe.db.get_value("Dashboard Chart", chart["name"], "chart_type")
+			if existing_type != chart.get("chart_type"):
+				frappe.delete_doc(
+					"Dashboard Chart", chart["name"], force=True, ignore_permissions=True
+				)
 		if frappe.db.exists("Dashboard Chart", chart["name"]):
 			doc = frappe.get_doc("Dashboard Chart", chart["name"])
 			doc.update({k: v for k, v in chart.items() if k != "name"})
