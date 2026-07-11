@@ -40,19 +40,47 @@ NUMBER_CARDS = [
 # Cards from earlier versions to remove (renamed / replaced).
 LEGACY_CARDS = ["Shipping Cost This Month"]
 
-DASHBOARD_CHART = {
-	"name": "Monthly Shipping Cost",
-	"chart_name": "Monthly Shipping Cost",
-	"chart_type": "Sum",
-	"document_type": "Shipping Cost Entry",
-	"based_on": "scan_date",
-	"value_based_on": "total_net_amount",
-	"timeseries": 1,
-	"timespan": "Last Year",
-	"time_interval": "Monthly",
-	"type": "Line",
-	"filters_json": "[]",
-}
+DASHBOARD_CHARTS = [
+	{
+		"name": "Monthly Shipping Cost",
+		"chart_name": "Monthly Shipping Cost",
+		"chart_type": "Sum",
+		"document_type": "Shipping Cost Entry",
+		"based_on": "scan_date",
+		"value_based_on": "total_net_amount",
+		"timeseries": 1,
+		"timespan": "Last Year",
+		"time_interval": "Monthly",
+		"type": "Line",
+		"filters_json": "[]",
+	},
+	{
+		"name": "Shipping Cost by Carrier",
+		"chart_name": "Shipping Cost by Carrier",
+		"chart_type": "Group By",
+		"document_type": "Shipping Cost Entry",
+		"group_by_based_on": "carrier",
+		"group_by_type": "Sum",
+		"aggregate_function_based_on": "total_net_amount",
+		"number_of_groups": 0,
+		"timeseries": 0,
+		"type": "Bar",
+		"filters_json": "[]",
+	},
+	{
+		"name": "Shipping Cost by Country",
+		"chart_name": "Shipping Cost by Country",
+		"chart_type": "Group By",
+		"document_type": "Shipping Cost Entry",
+		"group_by_based_on": "country",
+		"group_by_type": "Sum",
+		"aggregate_function_based_on": "total_net_amount",
+		"number_of_groups": 10,
+		"timeseries": 0,
+		"type": "Bar",
+		"filters_json": "[]",
+	},
+]
 
 
 def execute():
@@ -84,13 +112,15 @@ def execute():
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_if_duplicate=True)
 
-	if frappe.db.exists("DocType", DASHBOARD_CHART["document_type"]):
-		if frappe.db.exists("Dashboard Chart", DASHBOARD_CHART["name"]):
-			doc = frappe.get_doc("Dashboard Chart", DASHBOARD_CHART["name"])
-			doc.update({k: v for k, v in DASHBOARD_CHART.items() if k != "name"})
+	for chart in DASHBOARD_CHARTS:
+		if not frappe.db.exists("DocType", chart["document_type"]):
+			continue
+		if frappe.db.exists("Dashboard Chart", chart["name"]):
+			doc = frappe.get_doc("Dashboard Chart", chart["name"])
+			doc.update({k: v for k, v in chart.items() if k != "name"})
 			doc.flags.ignore_permissions = True
 			doc.save()
 		else:
-			doc = frappe.get_doc({"doctype": "Dashboard Chart", "is_public": 1, **DASHBOARD_CHART})
+			doc = frappe.get_doc({"doctype": "Dashboard Chart", "is_public": 1, **chart})
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_if_duplicate=True)
