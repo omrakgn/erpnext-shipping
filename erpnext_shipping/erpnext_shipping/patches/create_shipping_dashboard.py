@@ -4,15 +4,16 @@ import json
 
 import frappe
 
+# Frappe list/report filters are [doctype, fieldname, operator, value] (4 elements).
 NUMBER_CARDS = [
 	{
-		"name": "Shipping Cost This Month",
-		"label": "Shipping Cost This Month",
+		"name": "Shipping Cost Last Month",
+		"label": "Shipping Cost Last Month",
 		"document_type": "Shipping Cost Entry",
 		"function": "Sum",
 		"aggregate_function_based_on": "total_net_amount",
 		"filters_json": json.dumps(
-			[["Shipping Cost Entry", "scan_date", "Timespan", "this month", False]]
+			[["Shipping Cost Entry", "scan_date", "Timespan", "last month"]]
 		),
 		"color": "#29CD42",
 	},
@@ -21,7 +22,8 @@ NUMBER_CARDS = [
 		"label": "Unmatched Cost Entries",
 		"document_type": "Shipping Cost Entry",
 		"function": "Count",
-		"filters_json": json.dumps([["Shipping Cost Entry", "matched", "=", 0, False]]),
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipping Cost Entry", "matched", "=", 0]]),
 		"color": "#CB2929",
 	},
 	{
@@ -29,10 +31,14 @@ NUMBER_CARDS = [
 		"label": "Labels Removed",
 		"document_type": "Shipment",
 		"function": "Count",
-		"filters_json": json.dumps([["Shipment", "custom_label_removed", "=", 1, False]]),
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipment", "custom_label_removed", "=", 1]]),
 		"color": "#FFC733",
 	},
 ]
+
+# Cards from earlier versions to remove (renamed / replaced).
+LEGACY_CARDS = ["Shipping Cost This Month"]
 
 DASHBOARD_CHART = {
 	"name": "Monthly Shipping Cost",
@@ -50,27 +56,37 @@ DASHBOARD_CHART = {
 
 
 def execute():
+	# force=True so a card still referenced by the workspace can be removed here
+	# (the workspace patch runs afterwards and re-points to the new cards).
+	for name in LEGACY_CARDS:
+		if frappe.db.exists("Number Card", name):
+			frappe.delete_doc("Number Card", name, force=True, ignore_permissions=True)
+
 	for card in NUMBER_CARDS:
-		if frappe.db.exists("Number Card", card["name"]):
-			continue
 		if not frappe.db.exists("DocType", card["document_type"]):
 			continue
-		doc = frappe.get_doc(
-			{
-				"doctype": "Number Card",
-				"type": "Document Type",
-				"is_public": 1,
-				"show_percentage_stats": 1,
-				"stats_time_interval": "Monthly",
-				**card,
-			}
-		)
+		if frappe.db.exists("Number Card", card["name"]):
+			doc = frappe.get_doc("Number Card", card["name"])
+			doc.update({k: v for k, v in card.items() if k != "name"})
+		else:
+			doc = frappe.get_doc(
+				{
+					"doctype": "Number Card",
+					"type": "Document Type",
+					"is_public": 1,
+					"show_percentage_stats": 1,
+					"stats_time_interval": "Monthly",
+					**card,
+				}
+			)
 		doc.flags.ignore_permissions = True
-		doc.insert(ignore_if_duplicate=True)
+		doc.save()
 
-	if not frappe.db.exists("Dashboard Chart", DASHBOARD_CHART["name"]) and frappe.db.exists(
-		"DocType", DASHBOARD_CHART["document_type"]
-	):
-		doc = frappe.get_doc({"doctype": "Dashboard Chart", "is_public": 1, **DASHBOARD_CHART})
+	if frappe.db.exists("DocType", DASHBOARD_CHART["document_type"]):
+		if frappe.db.exists("Dashboard Chart", DASHBOARD_CHART["name"]):
+			doc = frappe.get_doc("Dashboard Chart", DASHBOARD_CHART["name"])
+			doc.update({k: v for k, v in DASHBOARD_CHART.items() if k != "name"})
+		else:
+			doc = frappe.get_doc({"doctype": "Dashboard Chart", "is_public": 1, **DASHBOARD_CHART})
 		doc.flags.ignore_permissions = True
-		doc.insert(ignore_if_duplicate=True)
+		doc.save()
