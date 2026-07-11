@@ -68,6 +68,8 @@ def execute():
 		if frappe.db.exists("Number Card", card["name"]):
 			doc = frappe.get_doc("Number Card", card["name"])
 			doc.update({k: v for k, v in card.items() if k != "name"})
+			doc.flags.ignore_permissions = True
+			doc.save()
 		else:
 			doc = frappe.get_doc(
 				{
@@ -79,14 +81,16 @@ def execute():
 					**card,
 				}
 			)
-		doc.flags.ignore_permissions = True
-		doc.save()
+			doc.flags.ignore_permissions = True
+			doc.insert(ignore_if_duplicate=True)
 
 	if frappe.db.exists("DocType", DASHBOARD_CHART["document_type"]):
 		if frappe.db.exists("Dashboard Chart", DASHBOARD_CHART["name"]):
 			doc = frappe.get_doc("Dashboard Chart", DASHBOARD_CHART["name"])
 			doc.update({k: v for k, v in DASHBOARD_CHART.items() if k != "name"})
+			doc.flags.ignore_permissions = True
+			doc.save()
 		else:
 			doc = frappe.get_doc({"doctype": "Dashboard Chart", "is_public": 1, **DASHBOARD_CHART})
-		doc.flags.ignore_permissions = True
-		doc.save()
+			doc.flags.ignore_permissions = True
+			doc.insert(ignore_if_duplicate=True)
