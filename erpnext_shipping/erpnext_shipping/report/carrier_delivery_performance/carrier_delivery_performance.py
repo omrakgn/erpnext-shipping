@@ -6,6 +6,9 @@ import re
 import frappe
 from frappe import _
 
+# Transit süresi bu günden büyükse bozuk veri say (yanlış pickup_date/delivered_at).
+MAX_TRANSIT_DAYS = 90
+
 # Carrier adlarını tek biçime indir (dpd/DPD -> DPD, fedex -> FedEx) ki büyük/küçük
 # harf ve alt-servis farkları ayrı satır oluşturmasın.
 CARRIER_CANONICAL = {
@@ -62,7 +65,8 @@ def get_data(filters):
 
 	rows = frappe.db.sql(
 		f"""
-		select carrier, custom_transit_days as days, tracking_status
+		select carrier, custom_transit_days as days, custom_delivered_at as delivered_at,
+			tracking_status
 		from `tabShipment`
 		where {where}
 		""",
@@ -83,7 +87,10 @@ def get_data(filters):
 				carrier,
 				{"carrier": carrier, "days": [], "in_transit": 0, "returned": 0, "lost": 0},
 			)
-			if r.days is not None:
+			# Transit süresi yalnızca GERÇEK teslimlerde (delivered_at dolu) ve makul
+			# aralıkta (0..MAX) sayılır. custom_transit_days=0 + delivered_at yok =
+			# "hesaplanmadı" (NOT NULL DEFAULT 0), bunları alma.
+			if r.delivered_at and r.days is not None and 0 <= r.days <= MAX_TRANSIT_DAYS:
 				a["days"].append(r.days)
 			if r.tracking_status == "In Progress":
 				a["in_transit"] += 1

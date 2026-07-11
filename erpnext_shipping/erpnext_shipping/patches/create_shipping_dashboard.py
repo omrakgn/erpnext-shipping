@@ -44,7 +44,15 @@ NUMBER_CARDS = [
 		"document_type": "Shipment",
 		"function": "Average",
 		"aggregate_function_based_on": "custom_transit_days",
-		"filters_json": json.dumps([["Shipment", "tracking_status", "=", "Delivered"]]),
+		# Yalnızca gerçek teslimler (delivered_at dolu) ve makul aralık (0..90 gün);
+		# custom_transit_days=0 varsayılanlarını ve bozuk outlier'ları dışla.
+		"filters_json": json.dumps(
+			[
+				["Shipment", "custom_delivered_at", "is", "set"],
+				["Shipment", "custom_transit_days", ">=", 0],
+				["Shipment", "custom_transit_days", "<=", 90],
+			]
+		),
 		"color": "#7575FF",
 		# Gün — para birimi gösterme (Frappe aksi halde EUR ile biçimlendiriyor).
 		"currency": "",
@@ -105,7 +113,13 @@ DASHBOARD_CHARTS = [
 		"number_of_groups": 0,
 		"timeseries": 0,
 		"type": "Bar",
-		"filters_json": json.dumps([["Shipment", "tracking_status", "=", "Delivered"]]),
+		"filters_json": json.dumps(
+			[
+				["Shipment", "custom_delivered_at", "is", "set"],
+				["Shipment", "custom_transit_days", ">=", 0],
+				["Shipment", "custom_transit_days", "<=", 90],
+			]
+		),
 	},
 ]
 
