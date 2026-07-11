@@ -35,6 +35,15 @@ NUMBER_CARDS = [
 		"filters_json": json.dumps([["Shipment", "custom_label_removed", "=", 1]]),
 		"color": "#FFC733",
 	},
+	{
+		"name": "Avg Delivery Time (Days)",
+		"label": "Avg Delivery Time (Days)",
+		"document_type": "Shipment",
+		"function": "Average",
+		"aggregate_function_based_on": "custom_transit_days",
+		"filters_json": json.dumps([["Shipment", "tracking_status", "=", "Delivered"]]),
+		"color": "#7575FF",
+	},
 ]
 
 # Cards from earlier versions to remove (renamed / replaced).
@@ -79,6 +88,19 @@ DASHBOARD_CHARTS = [
 		"timeseries": 0,
 		"type": "Bar",
 		"filters_json": "[]",
+	},
+	{
+		"name": "Avg Transit Days by Carrier",
+		"chart_name": "Avg Transit Days by Carrier",
+		"chart_type": "Group By",
+		"document_type": "Shipment",
+		"group_by_based_on": "carrier",
+		"group_by_type": "Average",
+		"aggregate_function_based_on": "custom_transit_days",
+		"number_of_groups": 0,
+		"timeseries": 0,
+		"type": "Bar",
+		"filters_json": json.dumps([["Shipment", "tracking_status", "=", "Delivered"]]),
 	},
 ]
 

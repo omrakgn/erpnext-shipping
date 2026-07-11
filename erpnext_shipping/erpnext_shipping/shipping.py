@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_datetime
+from frappe.utils import date_diff, flt, get_datetime
 from erpnext.stock.doctype.shipment.shipment import get_company_contact
 
 from erpnext_shipping.erpnext_shipping.doctype.letmeship.letmeship import (
@@ -828,6 +828,11 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	delivered_at = tracking_data.get("delivered_at")
 	if delivered_at:
 		updates["custom_delivered_at"] = get_datetime(delivered_at)
+		# Kurye transit süresi: pickup_date -> teslim (gün). Kargo firması performansı.
+		if shipment.get("pickup_date"):
+			transit = date_diff(get_datetime(delivered_at).date(), shipment.pickup_date)
+			if transit is not None and transit >= 0:
+				updates["custom_transit_days"] = transit
 	shipment.db_set(updates)
 
 

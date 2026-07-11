@@ -108,13 +108,22 @@ def get_custom_fields():
 				"insert_after": "tracking_status",
 			},
 			{
+				"fieldname": "custom_transit_days",
+				"label": _("Transit Days"),
+				"fieldtype": "Float",
+				"precision": "1",
+				"read_only": 1,
+				"insert_after": "custom_delivered_at",
+				"description": _("Days from Pickup Date to delivery (carrier transit time)."),
+			},
+			{
 				"fieldname": "custom_tracking_details",
 				"label": _("Tracking Details (JSON)"),
 				"fieldtype": "Long Text",
 				"read_only": 1,
 				"hidden": 1,
 				"translatable": 0,
-				"insert_after": "custom_delivered_at",
+				"insert_after": "custom_transit_days",
 			},
 			{
 				"fieldname": "custom_label_removed",

@@ -10,6 +10,7 @@ erpnext_shipping.erpnext_shipping.patches.create_label_removed_field # 2026-06-2
 
 [post_model_sync]
 erpnext_shipping.erpnext_shipping.patches.create_shipping_cost_fields # 2026-07-09
+erpnext_shipping.erpnext_shipping.patches.create_transit_days_field # 2026-07-11
 erpnext_shipping.erpnext_shipping.patches.create_shipping_dashboard # 2026-07-11
 erpnext_shipping.erpnext_shipping.patches.create_shipping_workspace # 2026-07-11
 erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format # 2026-06-22
