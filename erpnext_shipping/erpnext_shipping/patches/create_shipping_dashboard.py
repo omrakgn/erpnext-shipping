@@ -25,6 +25,8 @@ NUMBER_CARDS = [
 		"aggregate_function_based_on": "",
 		"filters_json": json.dumps([["Shipping Cost Entry", "matched", "=", 0]]),
 		"color": "#CB2929",
+		# Adet — para birimi gösterme.
+		"currency": "",
 	},
 	{
 		"name": "Labels Removed",
@@ -34,6 +36,7 @@ NUMBER_CARDS = [
 		"aggregate_function_based_on": "",
 		"filters_json": json.dumps([["Shipment", "custom_label_removed", "=", 1]]),
 		"color": "#FFC733",
+		"currency": "",
 	},
 	{
 		"name": "Avg Delivery Time (Days)",
@@ -43,6 +46,8 @@ NUMBER_CARDS = [
 		"aggregate_function_based_on": "custom_transit_days",
 		"filters_json": json.dumps([["Shipment", "tracking_status", "=", "Delivered"]]),
 		"color": "#7575FF",
+		# Gün — para birimi gösterme (Frappe aksi halde EUR ile biçimlendiriyor).
+		"currency": "",
 	},
 ]
 
@@ -134,6 +139,14 @@ def execute():
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_if_duplicate=True)
 
+		# Frappe, sayısal kartlara varsayılan şirket para birimini (EUR) atayıp değeri
+		# € ile gösteriyor. Adet/gün kartlarında bunu doğrudan DB'de boşalt (validate'i
+		# atlar) ki günler/adetler düz sayı görünsün.
+		if "currency" in card:
+			frappe.db.set_value(
+				"Number Card", card["name"], "currency", card["currency"], update_modified=False
+			)
+
 	for chart in DASHBOARD_CHARTS:
 		if not frappe.db.exists("DocType", chart["document_type"]):
 			continue
@@ -146,3 +159,11 @@ def execute():
 			doc = frappe.get_doc({"doctype": "Dashboard Chart", "is_public": 1, **chart})
 			doc.flags.ignore_permissions = True
 			doc.insert(ignore_if_duplicate=True)
+
+	# Transit (gün) grafiğinde para birimi biçimlendirmesini kapat.
+	if frappe.db.has_column("Dashboard Chart", "currency") and frappe.db.exists(
+		"Dashboard Chart", "Avg Transit Days by Carrier"
+	):
+		frappe.db.set_value(
+			"Dashboard Chart", "Avg Transit Days by Carrier", "currency", "", update_modified=False
+		)
