@@ -826,12 +826,17 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	if "parcels" in tracking_data:
 		updates["custom_tracking_details"] = json.dumps(tracking_data.get("parcels") or [])
 	delivered_at = tracking_data.get("delivered_at")
-	if delivered_at:
-		updates["custom_delivered_at"] = get_datetime(delivered_at)
-		# Kurye transit süresi: pickup_date -> teslim (gün). Kargo firması performansı.
+	# SendCloud'un delivered_at'i parcel'ın date_updated'ı; teslimden SONRA kayıt
+	# güncellenirse ileri kayar. Bu yüzden yalnızca İLK kez yaz (üzerine yazma) —
+	# böylece gerçek teslim anına en yakın değer sabit kalır.
+	if delivered_at and not shipment.get("custom_delivered_at"):
+		dt = get_datetime(delivered_at)
+		updates["custom_delivered_at"] = dt
+		# Kurye transit süresi: pickup_date -> teslim (gün). 0-90 gün dışı = bozuk
+		# veri (yanlış tarih), kaydetme.
 		if shipment.get("pickup_date"):
-			transit = date_diff(get_datetime(delivered_at).date(), shipment.pickup_date)
-			if transit is not None and transit >= 0:
+			transit = date_diff(dt.date(), shipment.pickup_date)
+			if transit is not None and 0 <= transit <= 90:
 				updates["custom_transit_days"] = transit
 	shipment.db_set(updates)
 
