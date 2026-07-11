@@ -103,23 +103,20 @@ DASHBOARD_CHARTS = [
 		"filters_json": "[]",
 	},
 	{
+		# Native Group By ham carrier'ı gruplar (dpd/DPD/mixed ayrışır); bunun yerine
+		# raporla aynı normalize+capped mantığı veren Custom kaynağı kullan.
 		"name": "Avg Transit Days by Carrier",
 		"chart_name": "Avg Transit Days by Carrier",
-		"chart_type": "Group By",
-		"document_type": "Shipment",
-		"group_by_based_on": "carrier",
-		"group_by_type": "Average",
-		"aggregate_function_based_on": "custom_transit_days",
+		"chart_type": "Custom",
+		"source": "Carrier Transit Days",
+		"document_type": None,
+		"group_by_based_on": None,
+		"group_by_type": None,
+		"aggregate_function_based_on": None,
 		"number_of_groups": 0,
 		"timeseries": 0,
 		"type": "Bar",
-		"filters_json": json.dumps(
-			[
-				["Shipment", "custom_delivered_at", "is", "set"],
-				["Shipment", "custom_transit_days", ">=", 0],
-				["Shipment", "custom_transit_days", "<=", 90],
-			]
-		),
+		"filters_json": "[]",
 	},
 ]
 
@@ -161,8 +158,20 @@ def execute():
 				"Number Card", card["name"], "currency", card["currency"], update_modified=False
 			)
 
+	# Custom grafiğin Link tuttuğu Dashboard Chart Source kaydını garanti et.
+	if not frappe.db.exists("Dashboard Chart Source", "Carrier Transit Days"):
+		frappe.get_doc(
+			{
+				"doctype": "Dashboard Chart Source",
+				"source_name": "Carrier Transit Days",
+				"module": "ERPNext Shipping",
+				"timeseries": 0,
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
 	for chart in DASHBOARD_CHARTS:
-		if not frappe.db.exists("DocType", chart["document_type"]):
+		doctype = chart.get("document_type")
+		if doctype and not frappe.db.exists("DocType", doctype):
 			continue
 		if frappe.db.exists("Dashboard Chart", chart["name"]):
 			doc = frappe.get_doc("Dashboard Chart", chart["name"])
