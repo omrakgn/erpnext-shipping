@@ -1,8 +1,34 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe import _
+
+# Carrier adlarını tek biçime indir (dpd/DPD -> DPD, fedex -> FedEx) ki büyük/küçük
+# harf ve alt-servis farkları ayrı satır oluşturmasın.
+CARRIER_CANONICAL = {
+	"dpd": "DPD",
+	"fedex": "FedEx",
+	"ups": "UPS",
+	"dhl": "DHL",
+	"dhl_express": "DHL Express",
+	"gls": "GLS",
+	"postnl": "PostNL",
+	"bpost": "bpost",
+	"colissimo": "Colissimo",
+	"chronopost": "Chronopost",
+	"sendcloud": "SendCloud",
+}
+
+
+def _canon(name):
+	name = (name or "").strip()
+	if not name:
+		return ""
+	key = name.lower().split(":", 1)[0].strip()  # "dpd:classic" -> "dpd"
+	return CARRIER_CANONICAL.get(key, CARRIER_CANONICAL.get(name.lower(), name))
 
 
 def execute(filters=None):
@@ -14,9 +40,9 @@ def get_columns():
 	return [
 		{"label": _("Carrier"), "fieldname": "carrier", "fieldtype": "Data", "width": 160},
 		{"label": _("Delivered"), "fieldname": "delivered", "fieldtype": "Int", "width": 100},
-		{"label": _("Avg Transit (days)"), "fieldname": "avg_days", "fieldtype": "Float", "precision": "1", "width": 140},
-		{"label": _("Min"), "fieldname": "min_days", "fieldtype": "Float", "precision": "1", "width": 80},
-		{"label": _("Max"), "fieldname": "max_days", "fieldtype": "Float", "precision": "1", "width": 80},
+		{"label": _("Avg Transit (days)"), "fieldname": "avg_days", "fieldtype": "Float", "precision": "1", "width": 150},
+		{"label": _("Min (days)"), "fieldname": "min_days", "fieldtype": "Float", "precision": "1", "width": 100},
+		{"label": _("Max (days)"), "fieldname": "max_days", "fieldtype": "Float", "precision": "1", "width": 100},
 		{"label": _("In Transit"), "fieldname": "in_transit", "fieldtype": "Int", "width": 100},
 		{"label": _("Returned"), "fieldname": "returned", "fieldtype": "Int", "width": 100},
 		{"label": _("Lost"), "fieldname": "lost", "fieldtype": "Int", "width": 80},
@@ -32,27 +58,54 @@ def get_data(filters):
 	if filters.get("to_date"):
 		conds.append("pickup_date <= %(to_date)s")
 		values["to_date"] = filters.to_date
-	if filters.get("carrier"):
-		conds.append("carrier = %(carrier)s")
-		values["carrier"] = filters.carrier
 	where = " and ".join(conds)
 
-	return frappe.db.sql(
+	rows = frappe.db.sql(
 		f"""
-		select
-			carrier,
-			sum(case when custom_transit_days is not null then 1 else 0 end) as delivered,
-			round(avg(custom_transit_days), 1) as avg_days,
-			min(custom_transit_days) as min_days,
-			max(custom_transit_days) as max_days,
-			sum(case when tracking_status = 'In Progress' then 1 else 0 end) as in_transit,
-			sum(case when tracking_status = 'Returned' then 1 else 0 end) as returned,
-			sum(case when tracking_status = 'Lost' then 1 else 0 end) as lost
+		select carrier, custom_transit_days as days, tracking_status
 		from `tabShipment`
 		where {where}
-		group by carrier
-		order by delivered desc
 		""",
 		values,
 		as_dict=True,
 	)
+
+	carrier_filter = _canon(filters.get("carrier")) if filters.get("carrier") else None
+
+	agg = {}
+	for r in rows:
+		# Bir Shipment birden çok kargo taşıyabilir (ör. "dpd, fedex"); her kuryeye böl.
+		carriers = {_canon(c) for c in re.split(r"[,;]", r.carrier or "") if c.strip()}
+		for carrier in carriers:
+			if not carrier or (carrier_filter and carrier != carrier_filter):
+				continue
+			a = agg.setdefault(
+				carrier,
+				{"carrier": carrier, "days": [], "in_transit": 0, "returned": 0, "lost": 0},
+			)
+			if r.days is not None:
+				a["days"].append(r.days)
+			if r.tracking_status == "In Progress":
+				a["in_transit"] += 1
+			elif r.tracking_status == "Returned":
+				a["returned"] += 1
+			elif r.tracking_status == "Lost":
+				a["lost"] += 1
+
+	data = []
+	for a in agg.values():
+		days = a["days"]
+		data.append(
+			{
+				"carrier": a["carrier"],
+				"delivered": len(days),
+				"avg_days": round(sum(days) / len(days), 1) if days else None,
+				"min_days": min(days) if days else None,
+				"max_days": max(days) if days else None,
+				"in_transit": a["in_transit"],
+				"returned": a["returned"],
+				"lost": a["lost"],
+			}
+		)
+	data.sort(key=lambda x: x["delivered"], reverse=True)
+	return data
