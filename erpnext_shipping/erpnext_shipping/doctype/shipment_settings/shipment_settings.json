@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "creation": "2026-07-16 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "pickup_defaults_section",
+  "set_pickup_date_today",
+  "set_default_pickup_time",
+  "column_break_pickup",
+  "default_pickup_from",
+  "default_pickup_to",
+  "content_section",
+  "auto_fill_description"
+ ],
+ "fields": [
+  {
+   "fieldname": "pickup_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Pickup Defaults (new Shipments)"
+  },
+  {
+   "default": "1",
+   "fieldname": "set_pickup_date_today",
+   "fieldtype": "Check",
+   "label": "Set Pickup Date to today"
+  },
+  {
+   "default": "1",
+   "fieldname": "set_default_pickup_time",
+   "fieldtype": "Check",
+   "label": "Apply default pickup time"
+  },
+  {
+   "fieldname": "column_break_pickup",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "15:00:00",
+   "depends_on": "set_default_pickup_time",
+   "fieldname": "default_pickup_from",
+   "fieldtype": "Time",
+   "label": "Default Pickup From"
+  },
+  {
+   "default": "17:00:00",
+   "depends_on": "set_default_pickup_time",
+   "fieldname": "default_pickup_to",
+   "fieldtype": "Time",
+   "label": "Default Pickup To"
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Content"
+  },
+  {
+   "default": "1",
+   "fieldname": "auto_fill_description",
+   "fieldtype": "Check",
+   "label": "Auto-fill Description of Content from item names",
+   "description": "When the Description of Content is empty, fill it from the linked Delivery Note item names."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Shipment Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

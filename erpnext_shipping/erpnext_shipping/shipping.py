@@ -472,20 +472,128 @@ def get_delivery_note_shipment_tracking(delivery_note):
 				if data.get("delivered_at"):
 					sh.db_set("custom_delivered_at", get_datetime(data["delivered_at"]))
 
+		costs, currency = _shipment_parcel_costs(name)
 		for p in parcels:
+			tn = p.get("tracking_number") or ""
 			rows.append(
 				{
 					"shipment": name,
 					"sku": p.get("sku"),
 					"carrier": p.get("carrier") or sh.carrier,
-					"tracking_number": p.get("tracking_number"),
+					"tracking_number": tn,
 					"tracking_url": p.get("tracking_url"),
 					"status": p.get("status"),
 					"delivered_at": p.get("delivered_at"),
+					"cost": _cost_for_tracking(costs, tn),
+					"currency": currency,
 				}
 			)
 
 	return rows
+
+
+def _shipment_parcel_costs(shipment):
+	"""Return ({normalised_tracking: net_cost}, currency) from a shipment's cost entries."""
+	costs = {}
+	currency = None
+	for e in frappe.get_all(
+		"Shipping Cost Entry",
+		filters={"shipment": shipment},
+		fields=["parcel_number", "total_net_amount", "currency"],
+	):
+		currency = e.currency or currency
+		raw = (e.parcel_number or "").strip()
+		for key in {raw, raw.lstrip("0")}:
+			if key:
+				costs[key] = costs.get(key, 0) + flt(e.total_net_amount)
+	return costs, (currency or "EUR")
+
+
+def _cost_for_tracking(costs, tracking):
+	tracking = (tracking or "").strip()
+	if not tracking:
+		return None
+	if tracking in costs:
+		return costs[tracking]
+	return costs.get(tracking.lstrip("0"))
+
+
+@frappe.whitelist()
+def get_shipment_parcel_breakdown(shipment):
+	"""Per-parcel breakdown for a Shipment: tracking number, carrier, net cost,
+	status, delivery time and label-removed flag. Combines the stored tracking
+	details JSON with the matched Shipping Cost Entries."""
+	sh = frappe.get_doc("Shipment", shipment)
+	try:
+		parcels = json.loads(sh.get("custom_tracking_details") or "[]")
+	except Exception:
+		parcels = []
+	if not parcels:
+		awbs = [a.strip() for a in (sh.awb_number or "").replace(";", ",").split(",") if a.strip()]
+		parcels = [{"tracking_number": a} for a in awbs]
+
+	costs, currency = _shipment_parcel_costs(shipment)
+	label_removed = 1 if sh.get("custom_label_removed") else 0
+	rows = []
+	for p in parcels:
+		tn = p.get("tracking_number") or ""
+		rows.append(
+			{
+				"tracking_number": tn,
+				"tracking_url": p.get("tracking_url"),
+				"carrier": p.get("carrier") or sh.carrier,
+				"cost": _cost_for_tracking(costs, tn),
+				"currency": currency,
+				"status": p.get("status") or "",
+				"delivered_at": p.get("delivered_at"),
+				"label_removed": label_removed,
+			}
+		)
+	return rows
+
+
+def _get_shipment_setting(field, default=None):
+	try:
+		val = frappe.db.get_single_value("Shipment Settings", field)
+	except Exception:
+		return default
+	return default if val is None else val
+
+
+@frappe.whitelist()
+def get_shipment_form_defaults():
+	"""Pickup defaults for new Shipment forms (from Shipment Settings)."""
+	return {
+		"set_pickup_date_today": _get_shipment_setting("set_pickup_date_today", 1),
+		"set_default_pickup_time": _get_shipment_setting("set_default_pickup_time", 1),
+		"default_pickup_from": _get_shipment_setting("default_pickup_from", "15:00:00"),
+		"default_pickup_to": _get_shipment_setting("default_pickup_to", "17:00:00"),
+	}
+
+
+def set_shipment_description(doc, method=None):
+	"""Auto-fill Description of Content from linked Delivery Note item names when
+	empty (Shipment validate hook). Never overwrites text the user has entered."""
+	if doc.get("description_of_content"):
+		return
+	if not _get_shipment_setting("auto_fill_description", 1):
+		return
+	names, seen = [], set()
+	for row in doc.get("shipment_delivery_note") or []:
+		if not row.delivery_note:
+			continue
+		for it in frappe.get_all(
+			"Delivery Note Item",
+			filters={"parent": row.delivery_note},
+			fields=["item_name", "item_code"],
+			order_by="idx",
+		):
+			label = (it.item_name or it.item_code or "").strip()
+			if label and label not in seen:
+				seen.add(label)
+				names.append(label)
+	if names:
+		doc.description_of_content = ", ".join(names)[:250]
 
 
 def get_shipment_po_no(shipment_doc):

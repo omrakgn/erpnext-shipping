@@ -164,6 +164,22 @@ def get_custom_fields():
 				"read_only": 1,
 				"insert_after": "custom_shipping_cost_currency",
 			},
+			{
+				"fieldname": "custom_parcel_breakdown_section",
+				"label": _("Parcel Breakdown"),
+				"fieldtype": "Section Break",
+				"collapsible": 1,
+				"insert_after": "custom_shipping_cost_updated",
+			},
+			{
+				"fieldname": "custom_parcel_breakdown",
+				"label": _("Parcel Breakdown"),
+				"fieldtype": "HTML",
+				"insert_after": "custom_parcel_breakdown_section",
+				"description": _(
+					"Per-parcel tracking number, carrier, cost, status, delivery and label state."
+				),
+			},
 		],
 		"Delivery Note": [
 			{

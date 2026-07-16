@@ -28,9 +28,11 @@ function render_shipment_tracking(frm, rows) {
 	const esc = frappe.utils.escape_html;
 	let html = `<table class="table table-bordered" style="margin-top:8px;">
 		<thead><tr>
+			<th>${__("Shipment")}</th>
 			<th>${__("SKU")}</th>
 			<th>${__("Carrier")}</th>
 			<th>${__("Tracking")}</th>
+			<th style="text-align:right;">${__("Cost")}</th>
 			<th>${__("Status")}</th>
 			<th>${__("Delivered")}</th>
 		</tr></thead><tbody>`;
@@ -41,11 +43,18 @@ function render_shipment_tracking(frm, rows) {
 					p.tracking_number || __("Track")
 			  )}</a>`
 			: esc(p.tracking_number || "");
+		const shipment = p.shipment
+			? `<a href="/app/shipment/${encodeURIComponent(p.shipment)}">${esc(p.shipment)}</a>`
+			: "";
+		const cost =
+			p.cost || p.cost === 0 ? format_currency(p.cost, p.currency || "EUR") : "—";
 		const delivered = p.delivered_at ? esc(p.delivered_at) : "—";
 		html += `<tr>
+			<td>${shipment}</td>
 			<td>${esc(p.sku || "")}</td>
 			<td>${esc(p.carrier || "")}</td>
 			<td>${tracking}</td>
+			<td style="text-align:right;">${cost}</td>
 			<td>${esc(p.status || "")}</td>
 			<td>${delivered}</td>
 		</tr>`;

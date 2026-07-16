@@ -2,7 +2,38 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Shipment", {
+	onload: function (frm) {
+		// Yeni Shipment'ta pickup tarih/saat varsayılanlarını (Shipment Settings) uygula.
+		if (!frm.is_new()) return;
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.shipping.get_shipment_form_defaults",
+			callback: function (r) {
+				const s = r.message || {};
+				if (s.set_pickup_date_today && !frm.doc.pickup_date) {
+					frm.set_value("pickup_date", frappe.datetime.get_today());
+				}
+				if (s.set_default_pickup_time) {
+					if (s.default_pickup_from && !frm.doc.pickup_from) {
+						frm.set_value("pickup_from", s.default_pickup_from);
+					}
+					if (s.default_pickup_to && !frm.doc.pickup_to) {
+						frm.set_value("pickup_to", s.default_pickup_to);
+					}
+				}
+			},
+		});
+	},
+
 	refresh: function (frm) {
+		if (!frm.is_new()) {
+			frappe.call({
+				method: "erpnext_shipping.erpnext_shipping.shipping.get_shipment_parcel_breakdown",
+				args: { shipment: frm.doc.name },
+				callback: function (r) {
+					render_parcel_breakdown(frm, r.message || []);
+				},
+			});
+		}
 		if (frm.doc.docstatus === 0 && (frm.doc.shipment_delivery_note || []).length) {
 			frm.add_custom_button(__("Populate Parcels from Delivery Notes"), function () {
 				const has_rows =
@@ -259,6 +290,50 @@ frappe.ui.form.on("Shipment", {
 		});
 	},
 });
+
+function render_parcel_breakdown(frm, rows) {
+	const field = frm.get_field("custom_parcel_breakdown");
+	if (!field) return;
+	if (!rows.length) {
+		field.$wrapper.html(`<div class="text-muted">${__("No parcels yet.")}</div>`);
+		return;
+	}
+	const esc = frappe.utils.escape_html;
+	let html = `<table class="table table-bordered" style="margin-top:8px;">
+		<thead><tr>
+			<th>${__("Tracking No")}</th>
+			<th>${__("Carrier")}</th>
+			<th style="text-align:right;">${__("Cost")}</th>
+			<th>${__("Status")}</th>
+			<th>${__("Delivered")}</th>
+			<th style="text-align:center;">${__("Label Removed")}</th>
+		</tr></thead><tbody>`;
+	rows.forEach((p) => {
+		const tracking = p.tracking_url
+			? `<a href="${encodeURI(p.tracking_url)}" target="_blank">${esc(
+					p.tracking_number || __("Track")
+			  )}</a>`
+			: esc(p.tracking_number || "");
+		const cost =
+			p.cost || p.cost === 0
+				? format_currency(p.cost, p.currency || "EUR")
+				: "—";
+		const delivered = p.delivered_at ? esc(p.delivered_at) : "—";
+		const removed = p.label_removed
+			? `<span class="indicator-pill red">${__("Yes")}</span>`
+			: "";
+		html += `<tr>
+			<td>${tracking}</td>
+			<td>${esc(p.carrier || "")}</td>
+			<td style="text-align:right;">${cost}</td>
+			<td>${esc(p.status || "")}</td>
+			<td>${delivered}</td>
+			<td style="text-align:center;">${removed}</td>
+		</tr>`;
+	});
+	html += `</tbody></table>`;
+	field.$wrapper.html(html);
+}
 
 function select_from_available_services(frm, available_services) {
 	const arranged_services = available_services.reduce(
