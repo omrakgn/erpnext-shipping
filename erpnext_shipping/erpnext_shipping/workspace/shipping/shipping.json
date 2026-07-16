@@ -125,9 +125,20 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Settings",
-   "link_count": 4,
+   "link_count": 5,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment Settings",
+   "link_count": 0,
+   "link_to": "Shipment Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   },
   {
    "dependencies": "",
@@ -174,7 +185,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-07-11 00:00:00.000000",
+ "modified": "2026-07-16 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping",
