@@ -92,7 +92,10 @@ def validate_parcel_items(doc, method=None):
 		count = parcel_counts.get(int(row.parcel_no), 1) if row.parcel_no else 1
 		assigned[row.item_code] = assigned.get(row.item_code, 0) + (row.qty or 0) * count
 
-	# Delivery Note'lardaki toplam adet - item_code bazında
+	# Delivery Note'lardaki toplam adet - item_code bazında.
+	# Bundle (Product Bundle) ürünlerde DN'de parent görünür ama parça kalemleri
+	# BİLEŞENLERİ içerir; bu yüzden bundle parent'ı Packed Item bileşenlerine açarız
+	# ki karşılaştırma tutsun.
 	dn_totals = {}
 	seen_dns = set()
 	for dn_row in doc.get("shipment_delivery_note", []):
@@ -100,12 +103,27 @@ def validate_parcel_items(doc, method=None):
 		if not dn_row.delivery_note or dn_row.delivery_note in seen_dns:
 			continue
 		seen_dns.add(dn_row.delivery_note)
+
+		packed_by_parent = {}
+		for p in frappe.get_all(
+			"Packed Item",
+			filters={"parent": dn_row.delivery_note, "parenttype": "Delivery Note"},
+			fields=["parent_item", "item_code", "qty"],
+		):
+			if p.item_code:
+				packed_by_parent.setdefault(p.parent_item, []).append(p)
+
 		for item in frappe.get_all(
 			"Delivery Note Item",
 			filters={"parent": dn_row.delivery_note},
 			fields=["item_code", "qty"],
 		):
-			dn_totals[item.item_code] = dn_totals.get(item.item_code, 0) + (item.qty or 0)
+			if item.item_code in packed_by_parent:
+				# Bundle: parent yerine bileşenleri say
+				for comp in packed_by_parent[item.item_code]:
+					dn_totals[comp.item_code] = dn_totals.get(comp.item_code, 0) + (comp.qty or 0)
+			else:
+				dn_totals[item.item_code] = dn_totals.get(item.item_code, 0) + (item.qty or 0)
 
 	# Karşılaştır — yalnızca Delivery Note'ta olan ürünler kontrol edilir.
 	# Kolilere elle eklenen ekstra ürünler (örn. hediye) DN'de yoksa uyarı vermez.
