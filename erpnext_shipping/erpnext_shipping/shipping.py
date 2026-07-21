@@ -560,31 +560,40 @@ def _get_shipment_setting(field, default=None):
 	return default if val is None else val
 
 
+def _time_str(val):
+	"""Normalise a Time value to a clean 'HH:MM:SS' string. Frappe returns Time
+	fields as datetime.timedelta, which the client Time control does not apply."""
+	if val is None:
+		return None
+	if isinstance(val, str):
+		return val
+	try:
+		total = int(val.total_seconds())
+	except AttributeError:
+		return str(val)
+	return f"{total // 3600:02d}:{(total % 3600) // 60:02d}:{total % 60:02d}"
+
+
 @frappe.whitelist()
 def get_shipment_form_defaults():
 	"""Pickup defaults for new Shipment forms (from Shipment Settings)."""
 	return {
 		"set_pickup_date_today": _get_shipment_setting("set_pickup_date_today", 1),
 		"set_default_pickup_time": _get_shipment_setting("set_default_pickup_time", 1),
-		"default_pickup_from": _get_shipment_setting("default_pickup_from", "15:00:00"),
-		"default_pickup_to": _get_shipment_setting("default_pickup_to", "17:00:00"),
+		"default_pickup_from": _time_str(_get_shipment_setting("default_pickup_from", "15:00:00")),
+		"default_pickup_to": _time_str(_get_shipment_setting("default_pickup_to", "17:00:00")),
 	}
 
 
-def set_shipment_description(doc, method=None):
-	"""Auto-fill Description of Content from linked Delivery Note item names when
-	empty (Shipment validate hook). Never overwrites text the user has entered."""
-	if doc.get("description_of_content"):
-		return
-	if not _get_shipment_setting("auto_fill_description", 1):
-		return
+def _content_description_from_dns(dn_names):
+	"""Comma-joined distinct item names across the given Delivery Notes (max 250)."""
 	names, seen = [], set()
-	for row in doc.get("shipment_delivery_note") or []:
-		if not row.delivery_note:
+	for dn in dn_names or []:
+		if not dn:
 			continue
 		for it in frappe.get_all(
 			"Delivery Note Item",
-			filters={"parent": row.delivery_note},
+			filters={"parent": dn},
 			fields=["item_name", "item_code"],
 			order_by="idx",
 		):
@@ -592,8 +601,32 @@ def set_shipment_description(doc, method=None):
 			if label and label not in seen:
 				seen.add(label)
 				names.append(label)
-	if names:
-		doc.description_of_content = ", ".join(names)[:250]
+	return ", ".join(names)[:250]
+
+
+@frappe.whitelist()
+def get_content_description(delivery_notes):
+	"""Item-name summary for the given Delivery Notes, for client-side auto-fill of
+	the (mandatory) Description of Content field. Empty if auto-fill is disabled."""
+	if isinstance(delivery_notes, str):
+		delivery_notes = json.loads(delivery_notes)
+	if not _get_shipment_setting("auto_fill_description", 1):
+		return ""
+	return _content_description_from_dns(delivery_notes or [])
+
+
+def set_shipment_description(doc, method=None):
+	"""API fallback: auto-fill Description of Content from linked Delivery Note item
+	names when empty (Shipment validate hook). The UI fills it client-side because
+	the field is mandatory; this covers documents created via the API."""
+	if doc.get("description_of_content"):
+		return
+	if not _get_shipment_setting("auto_fill_description", 1):
+		return
+	dns = [r.delivery_note for r in (doc.get("shipment_delivery_note") or []) if r.delivery_note]
+	desc = _content_description_from_dns(dns)
+	if desc:
+		doc.description_of_content = desc
 
 
 def get_shipment_po_no(shipment_doc):

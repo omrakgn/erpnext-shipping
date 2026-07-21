@@ -34,6 +34,9 @@ frappe.ui.form.on("Shipment", {
 				},
 			});
 		}
+		// Description of Content zorunlu bir alan; client mandatory kontrolü sunucu
+		// validate hook'undan önce çalıştığı için doldurmayı burada yapıyoruz.
+		maybe_fill_description(frm);
 		if (frm.doc.docstatus === 0 && (frm.doc.shipment_delivery_note || []).length) {
 			frm.add_custom_button(__("Populate Parcels from Delivery Notes"), function () {
 				const has_rows =
@@ -291,6 +294,24 @@ frappe.ui.form.on("Shipment", {
 	},
 });
 
+function maybe_fill_description(frm) {
+	// Description boşsa ve bağlı Delivery Note varsa, ürün adlarından otomatik doldur.
+	if (frm.doc.description_of_content) return;
+	const dns = (frm.doc.shipment_delivery_note || [])
+		.map((d) => d.delivery_note)
+		.filter(Boolean);
+	if (!dns.length) return;
+	frappe.call({
+		method: "erpnext_shipping.erpnext_shipping.shipping.get_content_description",
+		args: { delivery_notes: JSON.stringify(dns) },
+		callback: function (r) {
+			if (r.message && !frm.doc.description_of_content) {
+				frm.set_value("description_of_content", r.message);
+			}
+		},
+	});
+}
+
 function render_parcel_breakdown(frm, rows) {
 	const field = frm.get_field("custom_parcel_breakdown");
 	if (!field) return;
@@ -448,6 +469,13 @@ function select_from_available_services(frm, available_services) {
 	};
 	dialog.show();
 }
+
+frappe.ui.form.on("Shipment Delivery Note", {
+	delivery_note: function (frm) {
+		// Bir Delivery Note seçilince description'ı (boşsa) ürün adlarından doldur.
+		maybe_fill_description(frm);
+	},
+});
 
 frappe.ui.form.on("Shipment Parcel", {
 	custom_select_carrier: function (frm, cdt, cdn) {
