@@ -9,9 +9,13 @@ def get_custom_fields():
 				"label": _("Shipment Parcel Template"),
 				"fieldtype": "Link",
 				"options": "Shipment Parcel Template",
-				"insert_after": "weight_per_unit",
+				# Details sekmesinde (stock_uom sonrası) — her ürün tipinde görünür.
+				# weight_per_unit Inventory sekmesinde olduğu için stok-takipsiz
+				# (Product Bundle) ürünlerde erişilemiyordu.
+				"insert_after": "stock_uom",
 				"description": _(
-					"Default parcel box template used when auto-populating Shipment parcels for this item."
+					"Default parcel box template used when auto-populating Shipment parcels for this item. "
+					"For a Product Bundle set the bundle's box size here; the box weight is summed from the components."
 				),
 			},
 		],
