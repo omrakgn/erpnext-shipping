@@ -20,11 +20,24 @@ frappe.ui.form.on("Shipment", {
 						frm.set_value("pickup_to", s.default_pickup_to);
 					}
 				}
-				if (s.default_pickup_address && !frm.doc.pickup_address_name) {
-					frm.set_value("pickup_address_name", s.default_pickup_address);
-				}
-				if (s.default_pickup_contact_person && !frm.doc.pickup_contact_person) {
-					frm.set_value("pickup_contact_person", s.default_pickup_contact_person);
+				// Adres/contact, ERPNext'in kendi pickup_from_type/company mantığıyla
+				// yarışıyor ve bizim set'imizden sonra temizlenebiliyor; form oturduktan
+				// sonra (kısa gecikmeyle) uygula ki değer kalıcı olsun.
+				if (s.default_pickup_address || s.default_pickup_contact_person) {
+					setTimeout(function () {
+						if (s.default_pickup_address && !frm.doc.pickup_address_name) {
+							frm.set_value("pickup_address_name", s.default_pickup_address);
+						}
+						if (
+							s.default_pickup_contact_person &&
+							!frm.doc.pickup_contact_person
+						) {
+							frm.set_value(
+								"pickup_contact_person",
+								s.default_pickup_contact_person
+							);
+						}
+					}, 700);
 				}
 			},
 		});
