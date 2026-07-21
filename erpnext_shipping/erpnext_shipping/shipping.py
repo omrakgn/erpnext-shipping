@@ -232,6 +232,7 @@ def _build_parcels(shipment_doc):
 				if frappe.db.get_value("Item", code, "custom_ship_separate_parcels"):
 					# Bundle ayrı gönderiliyor: her bileşen normal ürün gibi, kendi
 					# template'i ve kendi (toplam) adediyle ayrı koli(ler).
+					# line_item = DN satır kalemi (bundle parent) — değer buradan gelir.
 					for comp in packed_by_parent[code]:
 						units.append(
 							{
@@ -239,6 +240,7 @@ def _build_parcels(shipment_doc):
 								"qty": flt(comp.qty),
 								"contents": {comp.item_code: 1.0},
 								"dn": dn_row.delivery_note,
+								"line_item": code,
 							}
 						)
 				else:
@@ -248,11 +250,23 @@ def _build_parcels(shipment_doc):
 						per_box = (flt(comp.qty) / qty) if qty else flt(comp.qty)
 						contents[comp.item_code] = contents.get(comp.item_code, 0) + per_box
 					units.append(
-						{"template_item": code, "qty": qty, "contents": contents, "dn": dn_row.delivery_note}
+						{
+							"template_item": code,
+							"qty": qty,
+							"contents": contents,
+							"dn": dn_row.delivery_note,
+							"line_item": code,
+						}
 					)
 			else:
 				units.append(
-					{"template_item": code, "qty": qty, "contents": {code: 1.0}, "dn": dn_row.delivery_note}
+					{
+						"template_item": code,
+						"qty": qty,
+						"contents": {code: 1.0},
+						"dn": dn_row.delivery_note,
+						"line_item": code,
+					}
 				)
 
 	if not units:
@@ -310,6 +324,7 @@ def _build_parcels(shipment_doc):
 					"count": 1,
 					"parcel_template": template,
 					"custom_delivery_note": unit.get("dn"),
+					"custom_source_item": unit.get("line_item"),
 				},
 			)
 			if has_parcel_items:
@@ -679,23 +694,33 @@ def get_content_description(delivery_notes):
 
 
 def set_parcel_values(doc, method=None):
-	"""Her koli (label) için Value of Goods'u kaynak Delivery Note'tan türet:
-	bir sipariş (DN) birden çok koliye bölündüyse değeri koli AĞIRLIĞINA oranla
-	paylaştır (ağırlık yoksa eşit böl). Elle girilmiş koli değerlerini ezmez.
-	Shipment geneli value_of_goods boşsa koli değerlerinin toplamını ata."""
+	"""Her koli (label) için Value of Goods'u kaynak Delivery Note SATIRINDAN türet.
+	Değer, DN toplamı değil, o kolinin geldiği DN kaleminin TUTARINDAN gelir; aynı
+	kalem birden çok koliye bölündüyse koli AĞIRLIĞINA oranla paylaştırılır (ağırlık
+	yoksa eşit). Böylece 0 tutarlı kalemlerin (ör. bedava topper) kolileri 0 kalır.
+	Elle girilmiş koli değerlerini ezmez. Shipment value_of_goods boşsa koli toplamı."""
 	parcels = doc.get("shipment_parcel") or []
 	if not parcels:
 		return
 
-	# Kaynak DN'e göre grupla (yalnızca _build_parcels tarafından etiketlenmişler).
-	by_dn = {}
+	# Koli -> (DN, kaynak satır kalemi) grupla; DN kalem tutarlarını önbelleğe al.
+	groups = {}
+	dn_line_amounts = {}
 	for p in parcels:
 		dn = p.get("custom_delivery_note")
-		if dn:
-			by_dn.setdefault(dn, []).append(p)
+		if not dn:
+			continue
+		groups.setdefault((dn, p.get("custom_source_item")), []).append(p)
+		if dn not in dn_line_amounts:
+			amounts = {}
+			for it in frappe.get_all(
+				"Delivery Note Item", filters={"parent": dn}, fields=["item_code", "amount"]
+			):
+				amounts[it.item_code] = amounts.get(it.item_code, 0) + flt(it.amount)
+			dn_line_amounts[dn] = amounts
 
-	for dn, plist in by_dn.items():
-		grand_total = flt(frappe.db.get_value("Delivery Note", dn, "grand_total"))
+	for (dn, source_item), plist in groups.items():
+		line_amount = flt(dn_line_amounts.get(dn, {}).get(source_item))
 		weights = [flt(p.get("weight")) * (p.get("count") or 1) for p in plist]
 		total_weight = sum(weights)
 		n = len(plist)
@@ -703,11 +728,11 @@ def set_parcel_values(doc, method=None):
 			if flt(p.get("custom_value_of_goods")):
 				continue  # elle girilmiş — dokunma
 			if n == 1:
-				p.custom_value_of_goods = grand_total
+				p.custom_value_of_goods = line_amount
 			elif total_weight:
-				p.custom_value_of_goods = grand_total * (w / total_weight)
+				p.custom_value_of_goods = line_amount * (w / total_weight)
 			else:
-				p.custom_value_of_goods = grand_total / n
+				p.custom_value_of_goods = line_amount / n
 
 	total = sum(flt(p.get("custom_value_of_goods")) for p in parcels)
 	if total and not flt(doc.get("value_of_goods")):

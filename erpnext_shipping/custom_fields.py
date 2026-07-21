@@ -51,6 +51,18 @@ def get_custom_fields():
 				"description": _("Source Delivery Note this parcel was built from."),
 			},
 			{
+				"fieldname": "custom_source_item",
+				"label": _("Source Item"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"translatable": 0,
+				"insert_after": "custom_delivery_note",
+				"description": _(
+					"Source Delivery Note line item (bundle parent for bundles). Value of Goods "
+					"is derived from this line's amount, split across its parcels by weight."
+				),
+			},
+			{
 				"fieldname": "custom_carrier_section",
 				"label": _("Per-Parcel Carrier"),
 				"fieldtype": "Section Break",
