@@ -10,6 +10,10 @@
   "column_break_pickup",
   "default_pickup_from",
   "default_pickup_to",
+  "pickup_party_section",
+  "default_pickup_address",
+  "column_break_party",
+  "default_pickup_contact_person",
   "content_section",
   "auto_fill_description"
  ],
@@ -48,6 +52,28 @@
    "fieldname": "default_pickup_to",
    "fieldtype": "Time",
    "label": "Default Pickup To"
+  },
+  {
+   "fieldname": "pickup_party_section",
+   "fieldtype": "Section Break",
+   "label": "Default Pickup Address & Contact",
+   "description": "Applied to new Shipments when these fields are empty. Leave blank to skip."
+  },
+  {
+   "fieldname": "default_pickup_address",
+   "fieldtype": "Link",
+   "label": "Default Pickup Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "column_break_party",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_pickup_contact_person",
+   "fieldtype": "Link",
+   "label": "Default Pickup Contact Person",
+   "options": "Contact"
   },
   {
    "fieldname": "content_section",
