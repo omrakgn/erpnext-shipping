@@ -577,13 +577,21 @@ def _time_str(val):
 @frappe.whitelist()
 def get_shipment_form_defaults():
 	"""Pickup defaults for new Shipment forms (from Shipment Settings)."""
+	# Geçersiz bir Contact/Address set etmek ERPNext'in kendi handler'ını (ör.
+	# get_company_contact) None üzerinde çökertiyor; yalnızca gerçekten var olan
+	# kayıtları döndür.
+	def _valid(doctype, value):
+		return value if (value and frappe.db.exists(doctype, value)) else None
+
 	return {
 		"set_pickup_date_today": _get_shipment_setting("set_pickup_date_today", 1),
 		"set_default_pickup_time": _get_shipment_setting("set_default_pickup_time", 1),
 		"default_pickup_from": _time_str(_get_shipment_setting("default_pickup_from", "15:00:00")),
 		"default_pickup_to": _time_str(_get_shipment_setting("default_pickup_to", "17:00:00")),
-		"default_pickup_address": _get_shipment_setting("default_pickup_address"),
-		"default_pickup_contact_person": _get_shipment_setting("default_pickup_contact_person"),
+		"default_pickup_address": _valid("Address", _get_shipment_setting("default_pickup_address")),
+		"default_pickup_contact_person": _valid(
+			"Contact", _get_shipment_setting("default_pickup_contact_person")
+		),
 	}
 
 
