@@ -1108,6 +1108,8 @@ class SendCloudUtils:
 					parcel_data["parcel_items"] = parcel_items
 					if label_notes:
 						parcel_data["label_notes"] = label_notes
+			# Elle girilen koli değeri (Value of Goods) varsa SendCloud'a onu beyan et
+			self._apply_parcel_value(parcel_data, parcel)
 			# Eşleştirme modunda haritada olmayan koli ürünsüz kalır
 			return parcel_data
 
@@ -1120,6 +1122,29 @@ class SendCloudUtils:
 				parcel_data["label_notes"] = shipment_items_data["label_notes"]
 
 		return parcel_data
+
+	def _apply_parcel_value(self, parcel_data, parcel):
+		"""Kolinin SendCloud'a beyan edilen toplam değerini, Shipment Parcel'da elle
+		girilen custom_value_of_goods'a eşitle. DN kalem tutarları 0 olsa bile (ör.
+		bedava topper, bundle bileşeni) kolinin gerçek beyan değeri gider. İtem
+		fiyatları hedefe göre ölçeklenir; hepsi 0 ise adete göre dağıtılır."""
+		target = flt(parcel.get("custom_value_of_goods"), CURRENCY_DECIMALS)
+		items = parcel_data.get("parcel_items") or []
+		if target <= 0 or not items:
+			return
+		current = sum(flt(it.get("price", {}).get("value", 0)) for it in items)
+		if abs(current - target) < 0.005:
+			return
+		if current > 0:
+			factor = target / current
+			for it in items:
+				it["price"]["value"] = flt(it["price"]["value"] * factor, CURRENCY_DECIMALS)
+		else:
+			# Tüm fiyatlar 0 → hedefi adete göre dağıt.
+			total_qty = sum(int(it.get("quantity") or 0) for it in items) or len(items)
+			for it in items:
+				q = int(it.get("quantity") or 0) or 1
+				it["price"]["value"] = flt(target * q / total_qty, CURRENCY_DECIMALS)
 
 	def get_parcel_item_map(self, shipment_doc):
 		"""custom_parcel_items child tablosundan koli -> {item_code: qty} haritası çıkar.
