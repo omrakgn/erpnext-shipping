@@ -150,6 +150,7 @@ doc_events = {
 			"erpnext_shipping.erpnext_shipping.utils.validate_phone",
 			"erpnext_shipping.erpnext_shipping.utils.validate_parcel_items",
 			"erpnext_shipping.erpnext_shipping.shipping.set_shipment_description",
+			"erpnext_shipping.erpnext_shipping.shipping.set_shipment_delivery_values",
 		]
 	},
 }

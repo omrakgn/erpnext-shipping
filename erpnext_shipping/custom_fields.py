@@ -243,7 +243,19 @@ def get_custom_fields():
 					"Net carrier cost of the linked Shipment (from imported invoice lines)."
 				),
 			},
-		]
+		],
+		"Shipment Delivery Note": [
+			{
+				"fieldname": "custom_value_of_goods",
+				"label": _("Value of Goods"),
+				"fieldtype": "Currency",
+				"in_list_view": 1,
+				"insert_after": "delivery_note",
+				"description": _(
+					"Goods value for this delivery note (auto-filled from the DN grand total; editable)."
+				),
+			},
+		],
 	}
 
 

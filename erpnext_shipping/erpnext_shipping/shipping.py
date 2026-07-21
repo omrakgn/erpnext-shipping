@@ -672,6 +672,23 @@ def get_content_description(delivery_notes):
 	return _content_description_from_dns(delivery_notes or [])
 
 
+def set_shipment_delivery_values(doc, method=None):
+	"""Her Shipment Delivery Note satırının Value of Goods'unu boşsa DN grand
+	total'inden doldur; Shipment value_of_goods boşsa satır toplamını ata. Elle
+	girilmiş değerleri ezmez."""
+	total = 0
+	for row in doc.get("shipment_delivery_note") or []:
+		if not row.delivery_note:
+			continue
+		if not flt(row.get("custom_value_of_goods")):
+			row.custom_value_of_goods = flt(
+				frappe.db.get_value("Delivery Note", row.delivery_note, "grand_total")
+			)
+		total += flt(row.get("custom_value_of_goods"))
+	if total and not flt(doc.get("value_of_goods")):
+		doc.value_of_goods = total
+
+
 def set_shipment_description(doc, method=None):
 	"""API fallback: auto-fill Description of Content from linked Delivery Note item
 	names when empty (Shipment validate hook). The UI fills it client-side because
