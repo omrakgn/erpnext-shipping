@@ -590,7 +590,7 @@ def get_shipment_form_defaults():
 		"default_pickup_to": _time_str(_get_shipment_setting("default_pickup_to", "17:00:00")),
 		"default_pickup_address": _valid("Address", _get_shipment_setting("default_pickup_address")),
 		"default_pickup_contact_person": _valid(
-			"Contact", _get_shipment_setting("default_pickup_contact_person")
+			"User", _get_shipment_setting("default_pickup_contact_person")
 		),
 	}
 

@@ -73,7 +73,8 @@
    "fieldname": "default_pickup_contact_person",
    "fieldtype": "Link",
    "label": "Default Pickup Contact Person",
-   "options": "Contact"
+   "options": "User",
+   "description": "Company pickup contact is a User (ERPNext resolves the contact from the user)."
   },
   {
    "fieldname": "content_section",
