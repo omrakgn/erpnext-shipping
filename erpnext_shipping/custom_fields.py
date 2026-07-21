@@ -18,6 +18,16 @@ def get_custom_fields():
 					"For a Product Bundle set the bundle's box size here; the box weight is summed from the components."
 				),
 			},
+			{
+				"fieldname": "custom_ship_separate_parcels",
+				"label": _("Ship Components Separately"),
+				"fieldtype": "Check",
+				"insert_after": "custom_shipment_parcel_template",
+				"description": _(
+					"Product Bundle only: ship each component in its own parcel (using the "
+					"component's own template) instead of one box for the whole bundle."
+				),
+			},
 		],
 		"Shipment Parcel": [
 			{

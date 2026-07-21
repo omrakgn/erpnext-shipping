@@ -229,12 +229,24 @@ def _build_parcels(shipment_doc):
 			if not code:
 				continue
 			if code in packed_by_parent:
-				# Bundle: kutu başına bileşen adedi = toplam bileşen / bundle adedi
-				contents = {}
-				for comp in packed_by_parent[code]:
-					per_box = (flt(comp.qty) / qty) if qty else flt(comp.qty)
-					contents[comp.item_code] = contents.get(comp.item_code, 0) + per_box
-				units.append({"template_item": code, "qty": qty, "contents": contents})
+				if frappe.db.get_value("Item", code, "custom_ship_separate_parcels"):
+					# Bundle ayrı gönderiliyor: her bileşen normal ürün gibi, kendi
+					# template'i ve kendi (toplam) adediyle ayrı koli(ler).
+					for comp in packed_by_parent[code]:
+						units.append(
+							{
+								"template_item": comp.item_code,
+								"qty": flt(comp.qty),
+								"contents": {comp.item_code: 1.0},
+							}
+						)
+				else:
+					# Tek kutu: kutu başına bileşen adedi = toplam bileşen / bundle adedi
+					contents = {}
+					for comp in packed_by_parent[code]:
+						per_box = (flt(comp.qty) / qty) if qty else flt(comp.qty)
+						contents[comp.item_code] = contents.get(comp.item_code, 0) + per_box
+					units.append({"template_item": code, "qty": qty, "contents": contents})
 			else:
 				units.append({"template_item": code, "qty": qty, "contents": {code: 1.0}})
 
