@@ -7,8 +7,9 @@ from erpnext_shipping.custom_fields import get_fields_for_patch
 
 
 def execute():
-	# Value of Goods artık koli (Shipment Parcel) bazlı tutuluyor; kısa süre için
-	# eklenen Delivery Note satırı alanını kaldır ve koli alanlarını oluştur.
+	# Value of Goods koli (Shipment Parcel) bazlı. Kısa süre eklenen Delivery Note
+	# satırı alanını (varsa) kaldır ve koli alanlarını oluştur. Idempotent — eski
+	# patch adı bir sistemde çalışmış olsa bile bu ayrı ad kesin çalışır.
 	if frappe.db.exists("Custom Field", "Shipment Delivery Note-custom_value_of_goods"):
 		frappe.delete_doc(
 			"Custom Field", "Shipment Delivery Note-custom_value_of_goods", ignore_permissions=True

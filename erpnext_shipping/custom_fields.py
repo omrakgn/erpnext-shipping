@@ -31,6 +31,26 @@ def get_custom_fields():
 		],
 		"Shipment Parcel": [
 			{
+				"fieldname": "custom_value_of_goods",
+				"label": _("Value of Goods"),
+				"fieldtype": "Currency",
+				"in_list_view": 1,
+				"insert_after": "count",
+				"description": _(
+					"Goods value for this parcel/label. Auto-derived from the source Delivery "
+					"Note (split by weight when the order spans several parcels); editable."
+				),
+			},
+			{
+				"fieldname": "custom_delivery_note",
+				"label": _("Delivery Note"),
+				"fieldtype": "Link",
+				"options": "Delivery Note",
+				"read_only": 1,
+				"insert_after": "custom_value_of_goods",
+				"description": _("Source Delivery Note this parcel was built from."),
+			},
+			{
 				"fieldname": "custom_carrier_section",
 				"label": _("Per-Parcel Carrier"),
 				"fieldtype": "Section Break",
@@ -241,18 +261,6 @@ def get_custom_fields():
 				"insert_after": "custom_shipment_tracking",
 				"description": _(
 					"Net carrier cost of the linked Shipment (from imported invoice lines)."
-				),
-			},
-		],
-		"Shipment Delivery Note": [
-			{
-				"fieldname": "custom_value_of_goods",
-				"label": _("Value of Goods"),
-				"fieldtype": "Currency",
-				"in_list_view": 1,
-				"insert_after": "delivery_note",
-				"description": _(
-					"Goods value for this delivery note (auto-filled from the DN grand total; editable)."
 				),
 			},
 		],

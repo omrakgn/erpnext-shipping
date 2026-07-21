@@ -496,29 +496,23 @@ function select_from_available_services(frm, available_services) {
 }
 
 frappe.ui.form.on("Shipment Delivery Note", {
-	delivery_note: function (frm, cdt, cdn) {
+	delivery_note: function (frm) {
 		// Bir Delivery Note seçilince description'ı (boşsa) ürün adlarından doldur.
 		maybe_fill_description(frm);
-		const row = locals[cdt][cdn];
-		if (!row || !row.delivery_note) return;
-		// Satır Value of Goods'unu (boşsa) DN grand total'inden doldur.
-		frappe.db.get_value("Delivery Note", row.delivery_note, "grand_total").then((r) => {
-			const gt = (r.message && r.message.grand_total) || 0;
-			if (!row.custom_value_of_goods && gt) {
-				frappe.model.set_value(cdt, cdn, "custom_value_of_goods", gt);
-			}
-			recompute_value_of_goods(frm);
-		});
 	},
+});
+
+frappe.ui.form.on("Shipment Parcel", {
 	custom_value_of_goods: function (frm) {
+		// Bir koli değeri değişince Shipment toplam value_of_goods'u (boşsa) güncelle.
 		recompute_value_of_goods(frm);
 	},
 });
 
 function recompute_value_of_goods(frm) {
-	// Shipment toplam Value of Goods boşsa satırların toplamını yaz (elle gireni ezme).
+	// Shipment toplam Value of Goods boşsa koli değerlerinin toplamını yaz (elle gireni ezme).
 	if (frm.doc.value_of_goods) return;
-	const total = (frm.doc.shipment_delivery_note || []).reduce(
+	const total = (frm.doc.shipment_parcel || []).reduce(
 		(s, r) => s + (r.custom_value_of_goods || 0),
 		0
 	);

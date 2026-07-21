@@ -238,6 +238,7 @@ def _build_parcels(shipment_doc):
 								"template_item": comp.item_code,
 								"qty": flt(comp.qty),
 								"contents": {comp.item_code: 1.0},
+								"dn": dn_row.delivery_note,
 							}
 						)
 				else:
@@ -246,9 +247,13 @@ def _build_parcels(shipment_doc):
 					for comp in packed_by_parent[code]:
 						per_box = (flt(comp.qty) / qty) if qty else flt(comp.qty)
 						contents[comp.item_code] = contents.get(comp.item_code, 0) + per_box
-					units.append({"template_item": code, "qty": qty, "contents": contents})
+					units.append(
+						{"template_item": code, "qty": qty, "contents": contents, "dn": dn_row.delivery_note}
+					)
 			else:
-				units.append({"template_item": code, "qty": qty, "contents": {code: 1.0}})
+				units.append(
+					{"template_item": code, "qty": qty, "contents": {code: 1.0}, "dn": dn_row.delivery_note}
+				)
 
 	if not units:
 		return 0, []
@@ -304,6 +309,7 @@ def _build_parcels(shipment_doc):
 					"weight": box_weight,
 					"count": 1,
 					"parcel_template": template,
+					"custom_delivery_note": unit.get("dn"),
 				},
 			)
 			if has_parcel_items:
@@ -672,19 +678,38 @@ def get_content_description(delivery_notes):
 	return _content_description_from_dns(delivery_notes or [])
 
 
-def set_shipment_delivery_values(doc, method=None):
-	"""Her Shipment Delivery Note satırının Value of Goods'unu boşsa DN grand
-	total'inden doldur; Shipment value_of_goods boşsa satır toplamını ata. Elle
-	girilmiş değerleri ezmez."""
-	total = 0
-	for row in doc.get("shipment_delivery_note") or []:
-		if not row.delivery_note:
-			continue
-		if not flt(row.get("custom_value_of_goods")):
-			row.custom_value_of_goods = flt(
-				frappe.db.get_value("Delivery Note", row.delivery_note, "grand_total")
-			)
-		total += flt(row.get("custom_value_of_goods"))
+def set_parcel_values(doc, method=None):
+	"""Her koli (label) için Value of Goods'u kaynak Delivery Note'tan türet:
+	bir sipariş (DN) birden çok koliye bölündüyse değeri koli AĞIRLIĞINA oranla
+	paylaştır (ağırlık yoksa eşit böl). Elle girilmiş koli değerlerini ezmez.
+	Shipment geneli value_of_goods boşsa koli değerlerinin toplamını ata."""
+	parcels = doc.get("shipment_parcel") or []
+	if not parcels:
+		return
+
+	# Kaynak DN'e göre grupla (yalnızca _build_parcels tarafından etiketlenmişler).
+	by_dn = {}
+	for p in parcels:
+		dn = p.get("custom_delivery_note")
+		if dn:
+			by_dn.setdefault(dn, []).append(p)
+
+	for dn, plist in by_dn.items():
+		grand_total = flt(frappe.db.get_value("Delivery Note", dn, "grand_total"))
+		weights = [flt(p.get("weight")) * (p.get("count") or 1) for p in plist]
+		total_weight = sum(weights)
+		n = len(plist)
+		for p, w in zip(plist, weights):
+			if flt(p.get("custom_value_of_goods")):
+				continue  # elle girilmiş — dokunma
+			if n == 1:
+				p.custom_value_of_goods = grand_total
+			elif total_weight:
+				p.custom_value_of_goods = grand_total * (w / total_weight)
+			else:
+				p.custom_value_of_goods = grand_total / n
+
+	total = sum(flt(p.get("custom_value_of_goods")) for p in parcels)
 	if total and not flt(doc.get("value_of_goods")):
 		doc.value_of_goods = total
 
