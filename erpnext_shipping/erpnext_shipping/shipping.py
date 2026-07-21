@@ -326,15 +326,33 @@ def populate_parcels_from_delivery_notes(shipment: str):
 	return {"created": created, "skipped": skipped}
 
 
+def _has_real_parcels(doc):
+	"""Anlamlı (boş olmayan) bir parça var mı? Formun eklediği boş/varsayılan satır
+	'dolu' sayılmasın diye ölçü/ağırlık/şablon veya kalem içeriğine bakılır."""
+	for p in doc.get("shipment_parcel") or []:
+		if (
+			p.get("parcel_template")
+			or flt(p.get("weight"))
+			or flt(p.get("length"))
+			or flt(p.get("width"))
+			or flt(p.get("height"))
+		):
+			return True
+	for it in doc.get("custom_parcel_items") or []:
+		if it.get("item_code"):
+			return True
+	return False
+
+
 def auto_populate_parcels(doc, method=None):
-	"""Kaydederken parçalar boşsa ve bağlı Delivery Note varsa parça tablolarını
-	otomatik doldur (Shipment Settings ile aç/kapa). Kullanıcının elle girdiği ya da
-	kasıtlı boşalttığı tabloyu ezmemek için yalnızca ikisi de boşken çalışır."""
+	"""Kaydederken anlamlı parça yoksa ve bağlı Delivery Note varsa parça tablolarını
+	otomatik doldur (Shipment Settings ile aç/kapa). Kullanıcının elle girdiği ölçülü
+	parçaları ezmez; boş/varsayılan satır engel olmaz."""
 	if not _get_shipment_setting("auto_populate_parcels", 1):
 		return
-	if doc.get("shipment_parcel") or doc.get("custom_parcel_items"):
-		return
 	if not doc.get("shipment_delivery_note"):
+		return
+	if _has_real_parcels(doc):
 		return
 	_build_parcels(doc)
 
