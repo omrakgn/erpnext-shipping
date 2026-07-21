@@ -144,6 +144,8 @@ scheduler_events = {"hourly": ["erpnext_shipping.erpnext_shipping.utils.update_t
 doc_events = {
 	"Shipment": {
 		"validate": [
+			# Parçalar boşsa önce doldur ki alttaki parça doğrulamaları çalışabilsin.
+			"erpnext_shipping.erpnext_shipping.shipping.auto_populate_parcels",
 			"erpnext_shipping.erpnext_shipping.utils.validate_parcels",
 			"erpnext_shipping.erpnext_shipping.utils.validate_phone",
 			"erpnext_shipping.erpnext_shipping.utils.validate_parcel_items",

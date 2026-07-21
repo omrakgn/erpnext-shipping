@@ -190,17 +190,10 @@ def create_shipment(
 	return shipment_info
 
 
-@frappe.whitelist()
-def populate_parcels_from_delivery_notes(shipment: str):
-	"""Bağlı Delivery Note'lardaki ürünlere göre Shipment Parcel ve Parcel Items
-	tablolarını doldur.
-
-	- Her ürün için, Item'daki `custom_shipment_parcel_template` ile bir koli (Shipment
-	  Parcel) satırı oluşturulur (şablon ölçüleri, count = adet, kutu başına 1 adet).
-	- Şablonu olmayan ürünler atlanır ve kullanıcıya bildirilir.
-	- Mevcut satırlar temizlenip yeniden oluşturulur (frontend ezme onayı alır).
-	"""
-	shipment_doc = frappe.get_doc("Shipment", shipment)
+def _build_parcels(shipment_doc):
+	"""Bağlı Delivery Note'lardan Shipment Parcel + Parcel Items tablolarını YERİNDE
+	(kaydetmeden) oluştur. Returns (created_count, skipped_templates). Ürün yoksa
+	tabloya dokunmaz (0, [] döner)."""
 
 	# Bağlı Delivery Note'lardan "paketlenebilir birim"ler çıkar (ilk görülme sırası).
 	# - Normal ürün: kutu = ürünün template'i, içinde ürünün kendisi.
@@ -246,7 +239,7 @@ def populate_parcels_from_delivery_notes(shipment: str):
 				units.append({"template_item": code, "qty": qty, "contents": {code: 1.0}})
 
 	if not units:
-		frappe.throw(_("No items found in the linked Delivery Notes."))
+		return 0, []
 
 	has_parcel_items = shipment_doc.meta.has_field("custom_parcel_items")
 
@@ -308,18 +301,42 @@ def populate_parcels_from_delivery_notes(shipment: str):
 						{"parcel_no": parcel_no, "item_code": code, "qty": flt(q) * frac},
 					)
 
+	return parcel_no, skipped
+
+
+@frappe.whitelist()
+def populate_parcels_from_delivery_notes(shipment: str):
+	"""Buton: bağlı Delivery Note'lardan parça tablolarını (mevcut satırları ezerek)
+	yeniden oluştur ve kaydet."""
+	shipment_doc = frappe.get_doc("Shipment", shipment)
+	created, skipped = _build_parcels(shipment_doc)
+	if not created and not skipped:
+		frappe.throw(_("No items found in the linked Delivery Notes."))
 	shipment_doc.save()
 
-	message = _("Populated {0} parcel(s) from Delivery Notes.").format(parcel_no)
+	message = _("Populated {0} parcel(s) from Delivery Notes.").format(created)
 	if skipped:
 		message += "<br>" + _("No parcel template set, skipped: {0}").format(", ".join(skipped))
 	frappe.msgprint(
 		message,
 		title=_("Parcels Populated"),
-		indicator="green" if parcel_no else "orange",
+		indicator="green" if created else "orange",
 	)
 
-	return {"created": parcel_no, "skipped": skipped}
+	return {"created": created, "skipped": skipped}
+
+
+def auto_populate_parcels(doc, method=None):
+	"""Kaydederken parçalar boşsa ve bağlı Delivery Note varsa parça tablolarını
+	otomatik doldur (Shipment Settings ile aç/kapa). Kullanıcının elle girdiği ya da
+	kasıtlı boşalttığı tabloyu ezmemek için yalnızca ikisi de boşken çalışır."""
+	if not _get_shipment_setting("auto_populate_parcels", 1):
+		return
+	if doc.get("shipment_parcel") or doc.get("custom_parcel_items"):
+		return
+	if not doc.get("shipment_delivery_note"):
+		return
+	_build_parcels(doc)
 
 
 @frappe.whitelist()

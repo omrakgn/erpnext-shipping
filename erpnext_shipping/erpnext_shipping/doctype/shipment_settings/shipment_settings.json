@@ -15,7 +15,9 @@
   "column_break_party",
   "default_pickup_contact_person",
   "content_section",
-  "auto_fill_description"
+  "auto_fill_description",
+  "parcels_section",
+  "auto_populate_parcels"
  ],
  "fields": [
   {
@@ -87,6 +89,18 @@
    "fieldtype": "Check",
    "label": "Auto-fill Description of Content from item names",
    "description": "When the Description of Content is empty, fill it from the linked Delivery Note item names."
+  },
+  {
+   "fieldname": "parcels_section",
+   "fieldtype": "Section Break",
+   "label": "Parcels"
+  },
+  {
+   "default": "1",
+   "fieldname": "auto_populate_parcels",
+   "fieldtype": "Check",
+   "label": "Auto-populate parcels from Delivery Notes",
+   "description": "On save, when the Shipment has no parcels yet, build them from the linked Delivery Notes (item parcel templates). Never overwrites parcels you entered."
   }
  ],
  "issingle": 1,
