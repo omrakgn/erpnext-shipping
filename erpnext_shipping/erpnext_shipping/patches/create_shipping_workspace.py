@@ -26,10 +26,38 @@ def _apply_rows(doc, data):
 				doc.append(table, row)
 
 
+def _filter_content(data):
+	"""content bloklarından, hedefi (card/chart) mevcut olmayanları çıkar. Aksi halde
+	content bir karta referans verip child tabloda bulunmayınca workspace render'ı
+	komple kırılıyor (hiçbir kart/grafik görünmüyor)."""
+	kept_cards = {
+		r.get("number_card_name")
+		for r in data.get("number_cards") or []
+		if _row_ok("number_cards", r)
+	}
+	kept_charts = {
+		r.get("chart_name") for r in data.get("charts") or [] if _row_ok("charts", r)
+	}
+	try:
+		blocks = json.loads(data.get("content") or "[]")
+	except Exception:
+		return
+	filtered = []
+	for b in blocks:
+		bdata = b.get("data") or {}
+		if b.get("type") == "number_card" and bdata.get("number_card_name") not in kept_cards:
+			continue
+		if b.get("type") == "chart" and bdata.get("chart_name") not in kept_charts:
+			continue
+		filtered.append(b)
+	data["content"] = json.dumps(filtered)
+
+
 def execute():
 	"""Create or update the standard "Shipping" Workspace from shipping.json so the
 	links, shortcuts, number cards and chart stay in sync on migrate. References to
-	missing cards/charts are skipped so the save never fails on a link."""
+	missing cards/charts are skipped (both in child tables and in content) so the
+	save never fails and the workspace still renders."""
 	path = frappe.get_app_path(
 		"erpnext_shipping", "erpnext_shipping", "workspace", "shipping", "shipping.json"
 	)
@@ -38,6 +66,8 @@ def execute():
 			data = json.load(f)
 	except FileNotFoundError:
 		return
+
+	_filter_content(data)
 
 	if frappe.db.exists("Workspace", "Shipping"):
 		doc = frappe.get_doc("Workspace", "Shipping")
