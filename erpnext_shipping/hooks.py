@@ -71,6 +71,7 @@ after_install = "erpnext_shipping.install.after_install"
 # çalıştığından, format değişiklikleri ancak böyle yayılır).
 after_migrate = [
 	"erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format.execute",
+	"erpnext_shipping.erpnext_shipping.patches.create_delay_email_template.execute",
 	"erpnext_shipping.erpnext_shipping.patches.create_shipping_dashboard.execute",
 	"erpnext_shipping.erpnext_shipping.patches.create_shipping_workspace.execute",
 ]
@@ -116,7 +117,11 @@ after_migrate = [
 # Scheduled Tasks
 # ---------------
 
-scheduler_events = {"hourly": ["erpnext_shipping.erpnext_shipping.utils.update_tracking_info"]}
+scheduler_events = {
+	"hourly": ["erpnext_shipping.erpnext_shipping.utils.update_tracking_info"],
+	# Geciken gönderileri işaretle ve (açıksa) günlük digest e-postasını yolla.
+	"daily": ["erpnext_shipping.erpnext_shipping.delay.flag_and_notify_delayed"],
+}
 
 # Testing
 # -------

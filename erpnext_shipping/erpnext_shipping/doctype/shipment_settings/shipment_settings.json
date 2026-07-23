@@ -17,7 +17,14 @@
   "content_section",
   "auto_fill_description",
   "parcels_section",
-  "auto_populate_parcels"
+  "auto_populate_parcels",
+  "delay_section",
+  "delay_min_days",
+  "enable_delay_digest",
+  "delay_digest_recipient",
+  "column_break_delay",
+  "dpd_delay_email",
+  "fedex_delay_email"
  ],
  "fields": [
   {
@@ -101,6 +108,50 @@
    "fieldtype": "Check",
    "label": "Auto-populate parcels from Delivery Notes",
    "description": "On save, when the Shipment has no parcels yet, build them from the linked Delivery Notes (item parcel templates). Never overwrites parcels you entered."
+  },
+  {
+   "fieldname": "delay_section",
+   "fieldtype": "Section Break",
+   "label": "Delayed Shipment Alerts"
+  },
+  {
+   "default": "5",
+   "fieldname": "delay_min_days",
+   "fieldtype": "Int",
+   "label": "Delay Threshold (days)",
+   "description": "A shipment counts as delayed after this many days from Pickup Date without delivery. Used by the daily check, the flag and the report/card."
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_delay_digest",
+   "fieldtype": "Check",
+   "label": "Send daily delayed-shipments email",
+   "description": "Once a day, email the list of delayed shipments to the recipient(s) below."
+  },
+  {
+   "depends_on": "enable_delay_digest",
+   "fieldname": "delay_digest_recipient",
+   "fieldtype": "Small Text",
+   "label": "Digest Recipient(s)",
+   "description": "Comma-separated email address(es) that receive the daily delayed-shipments email. Leave blank to disable."
+  },
+  {
+   "fieldname": "column_break_delay",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "dpd_delay_email",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "DPD Delay Inquiry Email",
+   "description": "Carrier email pre-filled as recipient when you click 'Ask Carrier about Delay' on a DPD shipment."
+  },
+  {
+   "fieldname": "fedex_delay_email",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "FedEx Delay Inquiry Email",
+   "description": "Carrier email pre-filled as recipient when you click 'Ask Carrier about Delay' on a FedEx shipment."
   }
  ],
  "issingle": 1,

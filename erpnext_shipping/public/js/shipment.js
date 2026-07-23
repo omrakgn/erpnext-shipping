@@ -80,6 +80,36 @@ frappe.ui.form.on("Shipment", {
 				}
 			});
 		}
+		// Gönderi kaydedilmiş, takip no var ve henüz teslim edilmemişse: carrier'a
+		// gecikme sormak için hazır dolu bir e-posta taslağı aç.
+		if (
+			frm.doc.docstatus === 1 &&
+			frm.doc.awb_number &&
+			!frm.doc.custom_delivered_at &&
+			frm.doc.tracking_status !== "Delivered"
+		) {
+			frm.add_custom_button(
+				__("Ask Carrier about Delay"),
+				function () {
+					frappe.call({
+						method: "erpnext_shipping.erpnext_shipping.delay.get_carrier_delay_email",
+						args: { shipment: frm.doc.name },
+						freeze: true,
+						callback: function (r) {
+							const d = r.message || {};
+							new frappe.views.CommunicationComposer({
+								doc: frm.doc,
+								frm: frm,
+								subject: d.subject || "",
+								recipients: d.recipients || "",
+								content: d.content || "",
+							});
+						},
+					});
+				},
+				__("Delay")
+			);
+		}
 		if (frm.doc.docstatus === 1 && !frm.doc.shipment_id) {
 			frm.add_custom_button(__("Fetch Shipping Rates"), function () {
 				if (frm.doc.shipment_parcel.length > 1) {

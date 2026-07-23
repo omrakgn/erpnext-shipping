@@ -183,12 +183,24 @@ def get_custom_fields():
 				),
 			},
 			{
+				"fieldname": "custom_is_delayed",
+				"label": _("Delayed"),
+				"fieldtype": "Check",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"insert_after": "custom_label_removed",
+				"description": _(
+					"Auto-set by the daily check when the shipment is still not delivered "
+					"after the configured number of days from pickup. Cleared on delivery."
+				),
+			},
+			{
 				"fieldname": "custom_shipping_cost",
 				"label": _("Shipping Cost (Net)"),
 				"fieldtype": "Currency",
 				"read_only": 1,
 				"options": "custom_shipping_cost_currency",
-				"insert_after": "custom_label_removed",
+				"insert_after": "custom_is_delayed",
 				"description": _(
 					"Net carrier cost rolled up from imported invoice lines (Shipping Cost Entry)."
 				),

@@ -3,7 +3,8 @@
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, nowdate
+
+from erpnext_shipping.erpnext_shipping.delay import get_delayed_shipments
 
 
 def execute(filters=None):
@@ -26,39 +27,6 @@ def get_columns():
 
 
 def get_data(filters):
-	min_days = cint(filters.get("min_days")) or 5
-	cutoff = add_days(nowdate(), -abs(min_days))
-
-	conds = [
-		"docstatus < 2",
-		"ifnull(tracking_status, '') != 'Delivered'",
-		"custom_delivered_at is null",
-		"pickup_date is not null",
-		"pickup_date <= %(cutoff)s",
-		"ifnull(status, '') not in ('Cancelled', 'Completed')",
-		"ifnull(awb_number, '') != ''",
-	]
-	values = {"cutoff": cutoff}
-	if filters.get("carrier"):
-		conds.append("carrier = %(carrier)s")
-		values["carrier"] = filters.carrier
-	where = " and ".join(conds)
-
-	return frappe.db.sql(
-		f"""
-		select
-			name as shipment,
-			carrier,
-			pickup_date,
-			datediff(curdate(), pickup_date) as days_elapsed,
-			tracking_status,
-			awb_number,
-			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_to,
-			1 as cnt
-		from `tabShipment`
-		where {where}
-		order by pickup_date asc
-		""",
-		values,
-		as_dict=True,
-	)
+	# Shared with the "Delayed" number card and the daily flag/digest scheduler so
+	# all three agree on what "delayed" means. min_days blank -> Shipment Settings.
+	return get_delayed_shipments(min_days=filters.get("min_days"), carrier=filters.get("carrier"))
