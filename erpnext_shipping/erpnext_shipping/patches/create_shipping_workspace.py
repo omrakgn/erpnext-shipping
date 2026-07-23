@@ -8,9 +8,28 @@ FIELDS = ("content", "icon", "label", "title", "public", "sequence_id")
 CHILD_TABLES = ("links", "shortcuts", "charts", "number_cards")
 
 
+def _row_ok(table, row):
+	"""Referansı Link ile doğrulanan child satırları (number card / chart) yalnızca
+	hedef varsa kabul et; yoksa workspace kaydı LinkValidationError vermesin."""
+	if table == "number_cards":
+		return frappe.db.exists("Number Card", row.get("number_card_name"))
+	if table == "charts":
+		return frappe.db.exists("Dashboard Chart", row.get("chart_name"))
+	return True
+
+
+def _apply_rows(doc, data):
+	for table in CHILD_TABLES:
+		doc.set(table, [])
+		for row in data.get(table) or []:
+			if _row_ok(table, row):
+				doc.append(table, row)
+
+
 def execute():
 	"""Create or update the standard "Shipping" Workspace from shipping.json so the
-	links, shortcuts, number cards and chart stay in sync on migrate."""
+	links, shortcuts, number cards and chart stay in sync on migrate. References to
+	missing cards/charts are skipped so the save never fails on a link."""
 	path = frappe.get_app_path(
 		"erpnext_shipping", "erpnext_shipping", "workspace", "shipping", "shipping.json"
 	)
@@ -24,13 +43,11 @@ def execute():
 		doc = frappe.get_doc("Workspace", "Shipping")
 		for field in FIELDS:
 			doc.set(field, data.get(field))
-		for table in CHILD_TABLES:
-			doc.set(table, [])
-			for row in data.get(table) or []:
-				doc.append(table, row)
+		_apply_rows(doc, data)
 		doc.flags.ignore_permissions = True
 		doc.save()
 	else:
 		doc = frappe.get_doc(data)
+		_apply_rows(doc, data)
 		doc.flags.ignore_permissions = True
 		doc.insert(ignore_if_duplicate=True)
