@@ -192,6 +192,14 @@ def execute():
 		doctype = chart.get("document_type")
 		if doctype and not frappe.db.exists("DocType", doctype):
 			continue
+		# Workspace chart widget'ı rengi tek başına `color` alanından güvenilir okumuyor
+		# (boş colors -> "'' is not a valid color" -> render bozulur). Rengi doğrudan
+		# frappe-charts'a giden custom_options.colors üzerinden de ver.
+		if chart.get("color"):
+			chart = {
+				**chart,
+				"custom_options": json.dumps({"colors": [chart["color"]]}),
+			}
 		# chart_type set_only_once (sabit); tip değiştiyse save patlar. Bu durumda
 		# sil ve yeniden oluştur (force=True: workspace referansı ismi korur).
 		if frappe.db.exists("Dashboard Chart", chart["name"]):
