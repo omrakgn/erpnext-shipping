@@ -57,6 +57,16 @@ NUMBER_CARDS = [
 		# Gün — para birimi gösterme (Frappe aksi halde EUR ile biçimlendiriyor).
 		"currency": "",
 	},
+	{
+		# 5+ gündür teslim edilmemiş gönderi sayısı — tıklayınca rapora gider.
+		"name": "Delayed Shipments",
+		"label": "Delayed (5+ days)",
+		"type": "Report",
+		"report_name": "Delayed Shipments",
+		"report_function": "Count",
+		"color": "#CB2929",
+		"currency": "",
+	},
 ]
 
 # Cards from earlier versions to remove (renamed / replaced).
@@ -129,7 +139,11 @@ def execute():
 			frappe.delete_doc("Number Card", name, force=True, ignore_permissions=True)
 
 	for card in NUMBER_CARDS:
-		if not frappe.db.exists("DocType", card["document_type"]):
+		# Document Type kartı: doctype yoksa atla. Report kartı: rapor yoksa atla.
+		doctype = card.get("document_type")
+		if doctype and not frappe.db.exists("DocType", doctype):
+			continue
+		if card.get("type") == "Report" and not frappe.db.exists("Report", card.get("report_name")):
 			continue
 		if frappe.db.exists("Number Card", card["name"]):
 			doc = frappe.get_doc("Number Card", card["name"])
@@ -140,7 +154,7 @@ def execute():
 			doc = frappe.get_doc(
 				{
 					"doctype": "Number Card",
-					"type": "Document Type",
+					"type": card.get("type", "Document Type"),
 					"is_public": 1,
 					"show_percentage_stats": 1,
 					"stats_time_interval": "Monthly",
