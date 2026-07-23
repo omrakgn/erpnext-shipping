@@ -3,6 +3,7 @@
 
 import json
 import re
+from datetime import datetime
 
 import frappe
 import requests
@@ -27,6 +28,28 @@ PARCELS_URL = f"{BASE_URL}/v2/parcels"
 CONTRACTS_URL = f"{BASE_URL}/v3/contracts"
 ORDERS_URL = f"{BASE_URL}/v3/orders"
 CREATE_LABEL_SYNC_URL = f"{BASE_URL}/v3/orders/create-label-sync"
+
+# SendCloud, tarihleri GÜN-AY-YIL ("21-07-2026 14:46:45") verir. frappe.get_datetime
+# bunu belirsiz olduğunda AY-GÜN sanıp (gün<=12) yanlış tarihe çeviriyor -> teslim
+# tarihi ve Transit Days bozuluyor. Bu yüzden burada kesin (gün-önce) parse edip
+# tek tip ISO ("YYYY-MM-DD HH:MM:SS") string döndürüyoruz.
+_SENDCLOUD_DT_FORMATS = ("%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S")
+
+
+def parse_sendcloud_datetime(value):
+	"""Parse a SendCloud date string (day-first) into an ISO 'YYYY-MM-DD HH:MM:SS'
+	string. Returns None for empty; leaves already-ISO / unknown values as-is."""
+	if not value:
+		return None
+	if isinstance(value, datetime):
+		return value.strftime("%Y-%m-%d %H:%M:%S")
+	text = str(value).strip()
+	for fmt in _SENDCLOUD_DT_FORMATS:
+		try:
+			return datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M:%S")
+		except ValueError:
+			continue
+	return text
 
 # shipping_option_code önekinden okunur carrier adı (örn. "dpd:classic/b2b" -> "DPD").
 CARRIER_DISPLAY = {
@@ -610,10 +633,12 @@ class SendCloudUtils:
 			# Parçadaki ürün SKU'ları
 			skus = [it.get("sku") for it in (parcel_data.get("parcel_items") or []) if it.get("sku")]
 
-			# Teslim zamanı: parça Delivered ise son güncelleme zamanı (date_updated)
+			# Teslim zamanı: parça Delivered ise son güncelleme zamanı (date_updated).
+			# SendCloud gün-önce formatı verdiği için ISO'ya normalize et (aksi halde
+			# gün<=12 teslimlerde tarih AY-GÜN olarak yanlış okunuyor).
 			delivered_at = None
 			if status_message == "Delivered":
-				delivered_at = parcel_data.get("date_updated")
+				delivered_at = parse_sendcloud_datetime(parcel_data.get("date_updated"))
 				if delivered_at:
 					delivered_times.append(delivered_at)
 
