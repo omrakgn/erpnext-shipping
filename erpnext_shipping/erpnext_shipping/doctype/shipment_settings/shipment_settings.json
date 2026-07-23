@@ -20,8 +20,9 @@
   "auto_populate_parcels",
   "delay_section",
   "delay_min_days",
-  "enable_delay_digest",
+  "auto_email_internal",
   "delay_digest_recipient",
+  "auto_email_carrier",
   "column_break_delay",
   "dpd_delay_email",
   "fedex_delay_email"
@@ -123,17 +124,24 @@
   },
   {
    "default": "0",
-   "fieldname": "enable_delay_digest",
+   "fieldname": "auto_email_internal",
    "fieldtype": "Check",
-   "label": "Send daily delayed-shipments email",
-   "description": "Once a day, email the list of delayed shipments to the recipient(s) below."
+   "label": "Auto-email me per delayed shipment",
+   "description": "When the daily check first finds a shipment delayed, email its details to the recipient(s) below. The email is linked to the shipment and shows in its Activity. Sent once per shipment."
   },
   {
-   "depends_on": "enable_delay_digest",
+   "depends_on": "auto_email_internal",
    "fieldname": "delay_digest_recipient",
    "fieldtype": "Small Text",
-   "label": "Digest Recipient(s)",
-   "description": "Comma-separated email address(es) that receive the daily delayed-shipments email. Leave blank to disable."
+   "label": "Internal Recipient(s)",
+   "description": "Comma-separated email address(es) that receive the per-shipment delay notification. Leave blank to disable."
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_email_carrier",
+   "fieldtype": "Check",
+   "label": "Auto-email the carrier per delayed shipment",
+   "description": "⚠ Sends a real email to the carrier (DPD/FedEx address below) automatically when a shipment first becomes delayed. Linked to the shipment and shown in its Activity. Sent once per shipment. Keep OFF until tested."
   },
   {
    "fieldname": "column_break_delay",
@@ -144,14 +152,14 @@
    "fieldtype": "Data",
    "options": "Email",
    "label": "DPD Delay Inquiry Email",
-   "description": "Carrier email pre-filled as recipient when you click 'Ask Carrier about Delay' on a DPD shipment."
+   "description": "Carrier email used as recipient for DPD shipments — both the 'Ask Carrier about Delay' button and (if enabled) the automatic carrier email."
   },
   {
    "fieldname": "fedex_delay_email",
    "fieldtype": "Data",
    "options": "Email",
    "label": "FedEx Delay Inquiry Email",
-   "description": "Carrier email pre-filled as recipient when you click 'Ask Carrier about Delay' on a FedEx shipment."
+   "description": "Carrier email used as recipient for FedEx shipments — both the 'Ask Carrier about Delay' button and (if enabled) the automatic carrier email."
   }
  ],
  "issingle": 1,

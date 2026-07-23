@@ -18,6 +18,7 @@ erpnext_shipping.erpnext_shipping.patches.create_dn_value_of_goods_field # 2026-
 erpnext_shipping.erpnext_shipping.patches.create_parcel_value_of_goods_field # 2026-07-18
 erpnext_shipping.erpnext_shipping.patches.create_parcel_source_item_field # 2026-07-18
 erpnext_shipping.erpnext_shipping.patches.create_is_delayed_field # 2026-07-23
+erpnext_shipping.erpnext_shipping.patches.create_delay_notified_field # 2026-07-23
 erpnext_shipping.erpnext_shipping.patches.create_delay_email_template # 2026-07-23
 erpnext_shipping.erpnext_shipping.patches.create_shipping_dashboard # 2026-07-11
 erpnext_shipping.erpnext_shipping.patches.create_shipping_workspace # 2026-07-11

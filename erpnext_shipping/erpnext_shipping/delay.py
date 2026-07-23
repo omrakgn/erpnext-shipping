@@ -16,7 +16,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, nowdate
+from frappe.utils import add_days, cint, now_datetime, nowdate
 
 DELAY_EMAIL_TEMPLATE = "Shipment Delay Inquiry"
 DEFAULT_MIN_DAYS = 5
@@ -130,50 +130,103 @@ def _tracking_url(carrier, tracking_number):
 		return ""
 
 
-def _distinct_shipments(rows):
-	return len({r["shipment"] for r in rows})
-
-
 def flag_and_notify_delayed():
-	"""Daily job: (re)compute the delayed set, keep the `custom_is_delayed` flag in
-	sync (set on delayed, clear on the rest) and, if enabled, email the digest."""
+	"""Daily job: keep the custom_is_delayed flag in sync, then (once per shipment)
+	send the enabled delay emails. Both the internal notification and the carrier
+	email are created with communication.email.make so they are linked to the
+	Shipment and appear in its Activity/timeline."""
 	min_days = _delay_min_days()
 	rows = get_delayed_shipments(min_days)
-	delayed = {r["shipment"] for r in rows}
 
-	# Set flag on currently-delayed shipments.
+	by_ship = {}
+	for r in rows:
+		by_ship.setdefault(r["shipment"], []).append(r)
+	delayed = set(by_ship)
+
+	# Flag currently-delayed shipments.
 	for name in delayed:
 		if not frappe.db.get_value("Shipment", name, "custom_is_delayed"):
 			frappe.db.set_value("Shipment", name, "custom_is_delayed", 1, update_modified=False)
 
-	# Clear flag on shipments that were flagged before but are no longer delayed
-	# (delivered / cancelled / within threshold).
+	# Clear flag (and the notified marker) on shipments no longer delayed, so a later
+	# re-delay notifies again.
 	for name in frappe.get_all("Shipment", filters={"custom_is_delayed": 1}, pluck="name"):
 		if name not in delayed:
-			frappe.db.set_value("Shipment", name, "custom_is_delayed", 0, update_modified=False)
+			frappe.db.set_value(
+				"Shipment",
+				name,
+				{"custom_is_delayed": 0, "custom_delay_notified": 0},
+				update_modified=False,
+			)
 
 	frappe.db.commit()
 
 	if not rows:
 		return
 
-	if not frappe.db.get_single_value("Shipment Settings", "enable_delay_digest"):
+	auto_internal = frappe.db.get_single_value("Shipment Settings", "auto_email_internal")
+	auto_carrier = frappe.db.get_single_value("Shipment Settings", "auto_email_carrier")
+	if not (auto_internal or auto_carrier):
 		return
 
 	raw = frappe.db.get_single_value("Shipment Settings", "delay_digest_recipient") or ""
-	recipients = [e.strip() for e in raw.replace(";", ",").split(",") if e.strip()]
-	if not recipients:
-		return
+	internal_recipients = ", ".join(e.strip() for e in raw.replace(";", ",").split(",") if e.strip())
 
-	n_ship = _distinct_shipments(rows)
-	frappe.sendmail(
+	for name, ship_rows in by_ship.items():
+		# Once per shipment — do not resend every day.
+		if frappe.db.get_value("Shipment", name, "custom_delay_notified"):
+			continue
+		sent = False
+		try:
+			if auto_internal and internal_recipients:
+				sent = _send_internal_delay_email(name, ship_rows, internal_recipients, min_days) or sent
+			if auto_carrier:
+				sent = _send_carrier_delay_email(name) or sent
+		except Exception:
+			frappe.log_error(
+				title="Delay auto-email failed",
+				message=f"Shipment: {name}\n{frappe.get_traceback()}",
+			)
+			continue
+		if sent:
+			frappe.db.set_value(
+				"Shipment",
+				name,
+				{"custom_delay_notified": 1, "custom_delay_notified_at": now_datetime()},
+				update_modified=False,
+			)
+
+	frappe.db.commit()
+
+
+def _make_linked_email(shipment, recipients, subject, content):
+	"""Send an email linked to the Shipment (reference_doctype/name) so it shows in
+	the shipment's Activity/timeline. Returns False when there is no recipient."""
+	if not recipients:
+		return False
+	from frappe.core.doctype.communication.email import make as _make
+
+	_make(
+		doctype="Shipment",
+		name=shipment,
 		recipients=recipients,
-		subject=_("Delayed shipments: {0} ({1} parcels) not delivered ({2}+ days)").format(
-			n_ship, len(rows), min_days
-		),
-		message=_digest_html(rows, min_days),
-		reference_doctype="Shipment",
+		subject=subject,
+		content=content,
+		communication_medium="Email",
+		sent_or_received="Sent",
+		send_email=True,
 	)
+	return True
+
+
+def _send_internal_delay_email(shipment, ship_rows, recipients, min_days):
+	subject = _("Delayed: {0} — {1} parcel(s), {2}+ days").format(shipment, len(ship_rows), min_days)
+	return _make_linked_email(shipment, recipients, subject, _digest_html(ship_rows, min_days))
+
+
+def _send_carrier_delay_email(shipment):
+	d = get_carrier_delay_email(shipment)
+	return _make_linked_email(shipment, d.get("recipients"), d.get("subject"), d.get("content"))
 
 
 def _digest_html(rows, min_days):

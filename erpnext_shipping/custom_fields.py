@@ -195,12 +195,30 @@ def get_custom_fields():
 				),
 			},
 			{
+				"fieldname": "custom_delay_notified",
+				"label": _("Delay Notified"),
+				"fieldtype": "Check",
+				"read_only": 1,
+				"insert_after": "custom_is_delayed",
+				"description": _(
+					"Set once the automatic delay email(s) have been sent for this shipment, so "
+					"the daily job does not resend. Cleared when the shipment is no longer delayed."
+				),
+			},
+			{
+				"fieldname": "custom_delay_notified_at",
+				"label": _("Delay Notified At"),
+				"fieldtype": "Datetime",
+				"read_only": 1,
+				"insert_after": "custom_delay_notified",
+			},
+			{
 				"fieldname": "custom_shipping_cost",
 				"label": _("Shipping Cost (Net)"),
 				"fieldtype": "Currency",
 				"read_only": 1,
 				"options": "custom_shipping_cost_currency",
-				"insert_after": "custom_is_delayed",
+				"insert_after": "custom_delay_notified_at",
 				"description": _(
 					"Net carrier cost rolled up from imported invoice lines (Shipping Cost Entry)."
 				),
