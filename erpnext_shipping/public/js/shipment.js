@@ -103,6 +103,7 @@ frappe.ui.form.on("Shipment", {
 								subject: d.subject || "",
 								recipients: d.recipients || "",
 								content: d.content || "",
+								sender: d.sender || undefined,
 							});
 						},
 					});

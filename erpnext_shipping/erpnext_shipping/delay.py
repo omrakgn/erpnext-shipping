@@ -206,6 +206,15 @@ def flag_and_notify_delayed():
 	frappe.db.commit()
 
 
+def _delay_sender():
+	"""Configured sender (From) address for delay emails, or None for the default
+	outgoing account. Resolves the Email Account link to its email_id."""
+	account = frappe.db.get_single_value("Shipment Settings", "delay_email_account")
+	if not account:
+		return None
+	return frappe.db.get_value("Email Account", account, "email_id") or None
+
+
 def _make_linked_email(shipment, recipients, subject, content):
 	"""Send an email linked to the Shipment (reference_doctype/name) so it shows in
 	the shipment's Activity/timeline. Returns False when there is no recipient."""
@@ -219,6 +228,7 @@ def _make_linked_email(shipment, recipients, subject, content):
 		recipients=recipients,
 		subject=subject,
 		content=content,
+		sender=_delay_sender(),
 		communication_medium="Email",
 		sent_or_received="Sent",
 		send_email=True,
@@ -324,4 +334,5 @@ def get_carrier_delay_email(shipment):
 		"recipients": _carrier_delay_recipient(doc.carrier),
 		"subject": subject,
 		"content": content,
+		"sender": _delay_sender(),
 	}

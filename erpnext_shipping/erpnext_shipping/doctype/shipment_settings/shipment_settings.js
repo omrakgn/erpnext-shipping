@@ -15,5 +15,10 @@ frappe.ui.form.on("Shipment Settings", {
 		frm.set_query("default_pickup_contact_person", () => ({
 			filters: { enabled: 1 },
 		}));
+
+		// Gönderen = yalnızca giden (outgoing) e-posta hesapları.
+		frm.set_query("delay_email_account", () => ({
+			filters: { enable_outgoing: 1 },
+		}));
 	},
 });

@@ -21,6 +21,7 @@
   "delay_section",
   "delay_min_days",
   "delay_notify_max_days",
+  "delay_email_account",
   "auto_email_internal",
   "delay_digest_recipient",
   "auto_email_carrier",
@@ -129,6 +130,13 @@
    "fieldtype": "Int",
    "label": "Auto-email Max Age (days)",
    "description": "Only auto-email shipments delayed at most this many days, so old / abandoned untracked shipments are skipped (they still appear in the report and flag). 0 = no upper limit. Does not affect the manual 'Ask Carrier about Delay' button."
+  },
+  {
+   "fieldname": "delay_email_account",
+   "fieldtype": "Link",
+   "options": "Email Account",
+   "label": "Delay Email Sender (Account)",
+   "description": "Outgoing Email Account used as the sender (From) for delay emails — both the automatic ones and the 'Ask Carrier about Delay' button. Leave blank to use the default outgoing account."
   },
   {
    "default": "0",
