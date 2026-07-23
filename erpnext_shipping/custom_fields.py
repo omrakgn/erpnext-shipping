@@ -159,6 +159,9 @@ def get_custom_fields():
 				"fieldtype": "Float",
 				"precision": "1",
 				"read_only": 1,
+				# Teslim edilmeyen gönderilerde Float varsayılanı 0.0 -> "0 günde teslim"
+				# gibi yanıltıcı görünüyor. Yalnızca teslim tarihi varken göster.
+				"depends_on": "custom_delivered_at",
 				"insert_after": "custom_delivered_at",
 				"description": _("Days from Pickup Date to delivery (carrier transit time)."),
 			},
