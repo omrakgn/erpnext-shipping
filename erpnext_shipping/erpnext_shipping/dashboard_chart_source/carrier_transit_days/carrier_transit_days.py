@@ -3,6 +3,7 @@
 import re
 
 import frappe
+from frappe import _
 
 from erpnext_shipping.erpnext_shipping.report.carrier_delivery_performance.carrier_delivery_performance import (
 	MAX_TRANSIT_DAYS,
@@ -36,6 +37,12 @@ def get_data(chart_name=None, chart=None, filters=None, **kwargs):
 	items = sorted(agg.items(), key=lambda kv: len(kv[1]), reverse=True)
 	labels = [c for c, _days in items]
 	values = [round(sum(d) / len(d), 1) for _c, d in items]
+
+	# Boş veri seti frappe-charts'ta NaN koordinat -> removeChild çökmesi -> tüm
+	# workspace render'ı kırılır. En az bir nokta döndürerek bunu engelle.
+	if not labels:
+		labels = [_("No data")]
+		values = [0]
 
 	return {
 		"labels": labels,

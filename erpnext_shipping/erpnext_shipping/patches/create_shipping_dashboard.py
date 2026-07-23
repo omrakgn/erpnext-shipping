@@ -85,6 +85,7 @@ DASHBOARD_CHARTS = [
 		"timespan": "Last Year",
 		"time_interval": "Monthly",
 		"type": "Line",
+		"color": "#5e64ff",
 		"filters_json": "[]",
 	},
 	{
@@ -98,6 +99,7 @@ DASHBOARD_CHARTS = [
 		"number_of_groups": 0,
 		"timeseries": 0,
 		"type": "Bar",
+		"color": "#28a745",
 		"filters_json": "[]",
 	},
 	{
@@ -111,6 +113,7 @@ DASHBOARD_CHARTS = [
 		"number_of_groups": 10,
 		"timeseries": 0,
 		"type": "Bar",
+		"color": "#ffa00a",
 		"filters_json": "[]",
 	},
 	{
@@ -127,6 +130,7 @@ DASHBOARD_CHARTS = [
 		"number_of_groups": 0,
 		"timeseries": 0,
 		"type": "Bar",
+		"color": "#743ee2",
 		"filters_json": "[]",
 	},
 ]
