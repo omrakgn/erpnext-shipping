@@ -20,6 +20,8 @@ def get_columns():
 		{"label": _("Status"), "fieldname": "tracking_status", "fieldtype": "Data", "width": 110},
 		{"label": _("Tracking No"), "fieldname": "awb_number", "fieldtype": "Data", "width": 150},
 		{"label": _("Delivery To"), "fieldname": "delivery_to", "fieldtype": "Data", "width": 200},
+		# Number Card (Report tipi) Count desteklemediği için Sum(cnt) ile sayım.
+		{"label": _("#"), "fieldname": "cnt", "fieldtype": "Int", "width": 50},
 	]
 
 
@@ -51,7 +53,8 @@ def get_data(filters):
 			datediff(curdate(), pickup_date) as days_elapsed,
 			tracking_status,
 			awb_number,
-			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_to
+			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_to,
+			1 as cnt
 		from `tabShipment`
 		where {where}
 		order by pickup_date asc
