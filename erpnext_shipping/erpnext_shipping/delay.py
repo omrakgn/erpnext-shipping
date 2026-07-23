@@ -2,9 +2,18 @@
 # For license information, please see license.txt
 """Delayed-shipment detection, flagging, digest email and carrier inquiry email.
 
+Detection is at the Shipment level (a shipment counts as delayed until *every* one
+of its parcels is delivered — custom_delivered_at is only set when all are). The
+report, digest and carrier email then drill down to the individual undelivered
+tracking numbers using the per-parcel custom_tracking_details JSON, so a shipment
+with several labels shows exactly which parcel(s) are stuck rather than one blurred
+row of all tracking numbers.
+
 Shared by the Delayed Shipments report, the "Delayed" number card, the daily
 scheduler (flag + digest) and the "Ask Carrier about Delay" button on Shipment.
 """
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, nowdate
@@ -19,32 +28,46 @@ def _delay_min_days(fallback=None):
 	return cint(val) or cint(fallback) or DEFAULT_MIN_DAYS
 
 
-def get_delayed_shipments(min_days=None, carrier=None):
-	"""Shipments not delivered `min_days`+ days after Pickup Date.
+def _parse_parcels(details_json, awb_fallback):
+	"""Per-parcel list from custom_tracking_details JSON; fall back to splitting the
+	combined awb_number when no detail is stored yet (older / not-yet-tracked)."""
+	try:
+		parcels = json.loads(details_json or "[]")
+	except Exception:
+		parcels = []
+	if not parcels:
+		awbs = [a.strip() for a in (awb_fallback or "").replace(";", ",").split(",") if a.strip()]
+		parcels = [{"tracking_number": a, "status": "", "carrier": ""} for a in awbs]
+	return parcels
 
-	One shared query for the report, the number card and the scheduler so the three
-	always agree on what "delayed" means.
+
+def _undelivered_parcels(parcels, carrier=None):
+	"""Keep only parcels not yet delivered, optionally for one carrier (substring
+	match, e.g. 'dpd' matches 'DPD NL')."""
+	out = []
+	cf = (carrier or "").lower()
+	for p in parcels:
+		if (p.get("status") or "").strip().lower() == "delivered":
+			continue
+		if cf and cf not in (p.get("carrier") or "").lower():
+			continue
+		out.append(p)
+	return out
+
+
+def get_delayed_shipments(min_days=None, carrier=None):
+	"""One row per *undelivered parcel* of every shipment that is delayed (not
+	delivered `min_days`+ days after Pickup Date). `cnt` is 1 only on the first row
+	of each shipment so Sum(cnt) counts distinct shipments (used by the number card).
+
+	Shared source for the report, the number card and the scheduler so all three
+	agree on what "delayed" means.
 	"""
 	min_days = cint(min_days) or _delay_min_days()
 	cutoff = add_days(nowdate(), -abs(min_days))
 
-	conds = [
-		"docstatus < 2",
-		"ifnull(tracking_status, '') != 'Delivered'",
-		"custom_delivered_at is null",
-		"pickup_date is not null",
-		"pickup_date <= %(cutoff)s",
-		"ifnull(status, '') not in ('Cancelled', 'Completed')",
-		"ifnull(awb_number, '') != ''",
-	]
-	values = {"cutoff": cutoff}
-	if carrier:
-		conds.append("carrier = %(carrier)s")
-		values["carrier"] = carrier
-	where = " and ".join(conds)
-
-	return frappe.db.sql(
-		f"""
+	shipments = frappe.db.sql(
+		"""
 		select
 			name as shipment,
 			carrier,
@@ -52,15 +75,47 @@ def get_delayed_shipments(min_days=None, carrier=None):
 			datediff(curdate(), pickup_date) as days_elapsed,
 			tracking_status,
 			awb_number,
-			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_to,
-			1 as cnt
+			custom_tracking_details,
+			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_to
 		from `tabShipment`
-		where {where}
+		where docstatus < 2
+			and ifnull(tracking_status, '') != 'Delivered'
+			and custom_delivered_at is null
+			and pickup_date is not null
+			and pickup_date <= %(cutoff)s
+			and ifnull(status, '') not in ('Cancelled', 'Completed')
+			and ifnull(awb_number, '') != ''
 		order by pickup_date asc
 		""",
-		values,
+		{"cutoff": cutoff},
 		as_dict=True,
 	)
+
+	rows = []
+	for s in shipments:
+		undelivered = _undelivered_parcels(
+			_parse_parcels(s.custom_tracking_details, s.awb_number), carrier
+		)
+		first = True
+		for p in undelivered:
+			rows.append(
+				{
+					"shipment": s.shipment,
+					"carrier": p.get("carrier") or s.carrier,
+					"pickup_date": s.pickup_date,
+					"days_elapsed": s.days_elapsed,
+					"tracking_status": p.get("status") or s.tracking_status,
+					"awb_number": p.get("tracking_number") or "",
+					"delivery_to": s.delivery_to,
+					"cnt": 1 if first else 0,
+				}
+			)
+			first = False
+	return rows
+
+
+def _distinct_shipments(rows):
+	return len({r["shipment"] for r in rows})
 
 
 def flag_and_notify_delayed():
@@ -94,9 +149,12 @@ def flag_and_notify_delayed():
 	if not recipients:
 		return
 
+	n_ship = _distinct_shipments(rows)
 	frappe.sendmail(
 		recipients=recipients,
-		subject=_("Delayed shipments: {0} not delivered ({1}+ days)").format(len(rows), min_days),
+		subject=_("Delayed shipments: {0} ({1} parcels) not delivered ({2}+ days)").format(
+			n_ship, len(rows), min_days
+		),
 		message=_digest_html(rows, min_days),
 		reference_doctype="Shipment",
 	)
@@ -105,17 +163,25 @@ def flag_and_notify_delayed():
 def _digest_html(rows, min_days):
 	head = "".join(
 		f"<th style='text-align:left;padding:6px 10px;border-bottom:2px solid #d1d8dd'>{h}</th>"
-		for h in (_("Shipment"), _("Carrier"), _("Pickup"), _("Days"), _("Status"), _("Tracking"), _("To"))
+		for h in (
+			_("Shipment"),
+			_("Carrier"),
+			_("Tracking"),
+			_("Status"),
+			_("Pickup"),
+			_("Days"),
+			_("To"),
+		)
 	)
 	body = []
 	for r in rows:
 		cells = [
 			r.get("shipment") or "",
 			r.get("carrier") or "",
+			r.get("awb_number") or "",
+			r.get("tracking_status") or "",
 			frappe.utils.formatdate(r.get("pickup_date")) if r.get("pickup_date") else "",
 			str(r.get("days_elapsed") or ""),
-			r.get("tracking_status") or "",
-			r.get("awb_number") or "",
 			r.get("delivery_to") or "",
 		]
 		tds = "".join(
@@ -125,7 +191,7 @@ def _digest_html(rows, min_days):
 		body.append(f"<tr>{tds}</tr>")
 
 	return f"""
-	<p>{_("The following shipments have not been delivered {0}+ days after pickup.").format(min_days)}</p>
+	<p>{_("The following parcels have not been delivered {0}+ days after pickup.").format(min_days)}</p>
 	<table style='border-collapse:collapse;font-size:13px'>
 		<thead><tr>{head}</tr></thead>
 		<tbody>{"".join(body)}</tbody>
@@ -133,12 +199,21 @@ def _digest_html(rows, min_days):
 	"""
 
 
-def _carrier_delay_recipient(carrier):
-	"""Pick the configured DPD/FedEx inquiry email for this shipment's carrier."""
+def _carrier_key(carrier):
 	name = (carrier or "").lower()
 	if "fedex" in name:
-		return frappe.db.get_single_value("Shipment Settings", "fedex_delay_email") or ""
+		return "fedex"
 	if "dpd" in name:
+		return "dpd"
+	return ""
+
+
+def _carrier_delay_recipient(carrier):
+	"""Pick the configured DPD/FedEx inquiry email for this shipment's carrier."""
+	key = _carrier_key(carrier)
+	if key == "fedex":
+		return frappe.db.get_single_value("Shipment Settings", "fedex_delay_email") or ""
+	if key == "dpd":
 		return frappe.db.get_single_value("Shipment Settings", "dpd_delay_email") or ""
 	return ""
 
@@ -146,10 +221,22 @@ def _carrier_delay_recipient(carrier):
 @frappe.whitelist()
 def get_carrier_delay_email(shipment):
 	"""Return a ready-to-send email draft (recipient + subject + body) for asking the
-	carrier about a delayed shipment. The body is rendered from the Email Template so
-	tracking number, pickup date, recipient etc. are filled automatically."""
+	carrier about a delayed shipment. Only the *undelivered* tracking numbers for the
+	resolved carrier are listed, so a multi-label shipment does not leak already-
+	delivered parcels or the other carrier's numbers to the wrong carrier."""
 	doc = frappe.get_doc("Shipment", shipment)
-	context = {"doc": doc, "shipment": doc}
+
+	key = _carrier_key(doc.carrier)
+	parcels = _parse_parcels(doc.get("custom_tracking_details"), doc.awb_number)
+	undelivered = _undelivered_parcels(parcels, key) or _undelivered_parcels(parcels)
+	tracking_numbers = [p.get("tracking_number") for p in undelivered if p.get("tracking_number")]
+
+	context = {
+		"doc": doc,
+		"shipment": doc,
+		"tracking_numbers": tracking_numbers,
+		"carrier": doc.carrier,
+	}
 
 	subject = content = ""
 	if frappe.db.exists("Email Template", DELAY_EMAIL_TEMPLATE):

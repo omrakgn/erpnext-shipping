@@ -16,12 +16,14 @@ def get_columns():
 	return [
 		{"label": _("Shipment"), "fieldname": "shipment", "fieldtype": "Link", "options": "Shipment", "width": 150},
 		{"label": _("Carrier"), "fieldname": "carrier", "fieldtype": "Data", "width": 90},
+		# Tek satır = tek (teslim olmamış) parça; her satır o parçanın kendi tracking'i.
+		{"label": _("Tracking No"), "fieldname": "awb_number", "fieldtype": "Data", "width": 160},
+		{"label": _("Status"), "fieldname": "tracking_status", "fieldtype": "Data", "width": 120},
 		{"label": _("Pickup Date"), "fieldname": "pickup_date", "fieldtype": "Date", "width": 110},
 		{"label": _("Days Elapsed"), "fieldname": "days_elapsed", "fieldtype": "Int", "width": 110},
-		{"label": _("Status"), "fieldname": "tracking_status", "fieldtype": "Data", "width": 110},
-		{"label": _("Tracking No"), "fieldname": "awb_number", "fieldtype": "Data", "width": 150},
 		{"label": _("Delivery To"), "fieldname": "delivery_to", "fieldtype": "Data", "width": 200},
-		# Number Card (Report tipi) Count desteklemediği için Sum(cnt) ile sayım.
+		# Number Card (Report tipi) Count desteklemediği için Sum(cnt) ile sayım;
+		# cnt yalnızca her gönderinin İLK parça satırında 1 -> Sum = ayrı gönderi adedi.
 		{"label": _("#"), "fieldname": "cnt", "fieldtype": "Int", "width": 50},
 	]
 
