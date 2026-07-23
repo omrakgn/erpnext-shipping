@@ -64,6 +64,7 @@ NUMBER_CARDS = [
 		"type": "Report",
 		"report_name": "Delayed Shipments",
 		"report_function": "Count",
+		"report_field": "shipment",
 		"color": "#CB2929",
 		"currency": "",
 	},
