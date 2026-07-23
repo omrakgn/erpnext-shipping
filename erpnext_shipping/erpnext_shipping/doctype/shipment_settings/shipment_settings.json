@@ -20,6 +20,7 @@
   "auto_populate_parcels",
   "delay_section",
   "delay_min_days",
+  "delay_notify_max_days",
   "auto_email_internal",
   "delay_digest_recipient",
   "auto_email_carrier",
@@ -121,6 +122,13 @@
    "fieldtype": "Int",
    "label": "Delay Threshold (days)",
    "description": "A shipment counts as delayed after this many days from Pickup Date without delivery. Used by the daily check, the flag and the report/card."
+  },
+  {
+   "default": "15",
+   "fieldname": "delay_notify_max_days",
+   "fieldtype": "Int",
+   "label": "Auto-email Max Age (days)",
+   "description": "Only auto-email shipments delayed at most this many days, so old / abandoned untracked shipments are skipped (they still appear in the report and flag). 0 = no upper limit. Does not affect the manual 'Ask Carrier about Delay' button."
   },
   {
    "default": "0",

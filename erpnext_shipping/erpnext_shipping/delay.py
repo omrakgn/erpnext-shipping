@@ -172,9 +172,16 @@ def flag_and_notify_delayed():
 	raw = frappe.db.get_single_value("Shipment Settings", "delay_digest_recipient") or ""
 	internal_recipients = ", ".join(e.strip() for e in raw.replace(";", ",").split(",") if e.strip())
 
+	# Skip old / abandoned untracked shipments: only auto-email those delayed at most
+	# this many days (0 = no upper limit). They still stay flagged and in the report.
+	max_days = cint(frappe.db.get_single_value("Shipment Settings", "delay_notify_max_days"))
+
 	for name, ship_rows in by_ship.items():
 		# Once per shipment — do not resend every day.
 		if frappe.db.get_value("Shipment", name, "custom_delay_notified"):
+			continue
+		# Too old to bother the carrier / ourselves about.
+		if max_days and cint(ship_rows[0].get("days_elapsed")) > max_days:
 			continue
 		sent = False
 		try:
