@@ -10,10 +10,12 @@ TEMPLATE_NAME = "Shipment Delay Inquiry"
 # tracking_numbers (undelivered parcels for this carrier) is passed by
 # get_carrier_delay_email; falls back to the shipment's combined awb_number when the
 # template is opened without that context (e.g. picked manually in the composer).
+# NOTE: the Email Template `subject` is a Data field capped at 140 chars, so keep the
+# stored template source short (a Jinja ternary, not a {% if %} block).
 SUBJECT = (
-	"Delivery delay inquiry – Tracking "
-	"{% if tracking_numbers %}{{ tracking_numbers | join(', ') }}"
-	"{% else %}{{ doc.awb_number }}{% endif %} ({{ doc.carrier }})"
+	"Delivery delay – "
+	"{{ (tracking_numbers|join(', ')) if tracking_numbers else doc.awb_number }}"
+	" ({{ doc.carrier }})"
 )
 
 BODY = """<p>Dear {{ doc.carrier or "Carrier" }} team,</p>
