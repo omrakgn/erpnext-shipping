@@ -98,20 +98,36 @@ def get_delayed_shipments(min_days=None, carrier=None):
 		)
 		first = True
 		for p in undelivered:
+			tn = p.get("tracking_number") or ""
+			pcarrier = p.get("carrier") or s.carrier
+			turl = p.get("tracking_url") or ""
+			if not turl and tn and pcarrier:
+				turl = _tracking_url(pcarrier, tn)
 			rows.append(
 				{
 					"shipment": s.shipment,
-					"carrier": p.get("carrier") or s.carrier,
+					"carrier": pcarrier,
 					"pickup_date": s.pickup_date,
 					"days_elapsed": s.days_elapsed,
 					"tracking_status": p.get("status") or s.tracking_status,
-					"awb_number": p.get("tracking_number") or "",
+					"awb_number": tn,
+					"tracking_url": turl,
 					"delivery_to": s.delivery_to,
 					"cnt": 1 if first else 0,
 				}
 			)
 			first = False
 	return rows
+
+
+def _tracking_url(carrier, tracking_number):
+	"""Best-effort carrier tracking URL when SendCloud did not store one."""
+	try:
+		from erpnext_shipping.erpnext_shipping.utils import get_tracking_url
+
+		return get_tracking_url(carrier, tracking_number) or ""
+	except Exception:
+		return ""
 
 
 def _distinct_shipments(rows):
