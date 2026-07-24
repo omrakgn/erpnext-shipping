@@ -215,23 +215,46 @@ def _delay_sender():
 	return frappe.db.get_value("Email Account", account, "email_id") or None
 
 
+def _delay_signature():
+	"""Configured signature appended to the automatic delay emails (blank = none)."""
+	sig = frappe.db.get_single_value("Shipment Settings", "delay_email_signature")
+	if not sig:
+		return ""
+	return "<br><br>" + str(sig).replace("\n", "<br>")
+
+
 def _make_linked_email(shipment, recipients, subject, content):
 	"""Send an email linked to the Shipment (reference_doctype/name) so it shows in
-	the shipment's Activity/timeline. Returns False when there is no recipient."""
-	if not recipients:
+	the shipment's Activity/timeline. Created with send_email=False and sent via
+	frappe.sendmail with add_unsubscribe_link=False, so there is no 'Leave this
+	conversation…' footer. Returns False when there is no recipient."""
+	recipient_list = [r.strip() for r in str(recipients or "").replace(";", ",").split(",") if r.strip()]
+	if not recipient_list:
 		return False
+
 	from frappe.core.doctype.communication.email import make as _make
 
-	_make(
+	sender = _delay_sender()
+	body = content + _delay_signature()
+
+	comm = _make(
 		doctype="Shipment",
 		name=shipment,
-		recipients=recipients,
+		recipients=", ".join(recipient_list),
 		subject=subject,
-		content=content,
-		sender=_delay_sender(),
+		content=body,
+		sender=sender,
 		communication_medium="Email",
 		sent_or_received="Sent",
-		send_email=True,
+		send_email=False,
+	)
+	frappe.sendmail(
+		recipients=recipient_list,
+		sender=sender or None,
+		subject=subject,
+		message=body,
+		communication=comm.get("name"),
+		add_unsubscribe_link=False,
 	)
 	return True
 
@@ -261,18 +284,22 @@ def _digest_html(rows, min_days):
 	)
 	body = []
 	for r in rows:
+		esc = frappe.utils.escape_html
+		# Tracking no'yu carrier takip linkine tıklanır yap.
+		tn = r.get("awb_number") or ""
+		turl = r.get("tracking_url") or ""
+		track_html = f"<a href='{esc(turl)}'>{esc(tn)}</a>" if (turl and tn) else esc(tn)
 		cells = [
-			r.get("shipment") or "",
-			r.get("carrier") or "",
-			r.get("awb_number") or "",
-			r.get("tracking_status") or "",
-			frappe.utils.formatdate(r.get("pickup_date")) if r.get("pickup_date") else "",
-			str(r.get("days_elapsed") or ""),
-			r.get("delivery_to") or "",
+			esc(r.get("shipment") or ""),
+			esc(r.get("carrier") or ""),
+			track_html,
+			esc(r.get("tracking_status") or ""),
+			esc(frappe.utils.formatdate(r.get("pickup_date")) if r.get("pickup_date") else ""),
+			esc(str(r.get("days_elapsed") or "")),
+			esc(r.get("delivery_to") or ""),
 		]
 		tds = "".join(
-			f"<td style='padding:6px 10px;border-bottom:1px solid #ebeff2'>{frappe.utils.escape_html(str(c))}</td>"
-			for c in cells
+			f"<td style='padding:6px 10px;border-bottom:1px solid #ebeff2'>{c}</td>" for c in cells
 		)
 		body.append(f"<tr>{tds}</tr>")
 

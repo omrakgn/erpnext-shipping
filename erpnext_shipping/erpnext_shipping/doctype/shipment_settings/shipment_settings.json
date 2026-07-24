@@ -22,6 +22,7 @@
   "delay_min_days",
   "delay_notify_max_days",
   "delay_email_account",
+  "delay_email_signature",
   "auto_email_internal",
   "delay_digest_recipient",
   "auto_email_carrier",
@@ -137,6 +138,12 @@
    "options": "Email Account",
    "label": "Delay Email Sender (Account)",
    "description": "Outgoing Email Account used as the sender (From) for delay emails — both the automatic ones and the 'Ask Carrier about Delay' button. Leave blank to use the default outgoing account."
+  },
+  {
+   "fieldname": "delay_email_signature",
+   "fieldtype": "Small Text",
+   "label": "Delay Email Signature",
+   "description": "Appended to the automatic delay emails (internal + carrier). Plain text or simple HTML; line breaks are kept. Leave blank for no signature."
   },
   {
    "default": "0",
