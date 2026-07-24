@@ -597,6 +597,7 @@ class SendCloudUtils:
 		parcels = []
 		delivered_times = []
 		missing_parcel_ids = []
+		forbidden_parcel_ids = []
 
 		for ship_id in shipment_id_list:
 			try:
@@ -609,6 +610,12 @@ class SendCloudUtils:
 				# beklenen bir durum: loglama, ama "silinmiş" olarak raporla.
 				if response.status_code == 404:
 					missing_parcel_ids.append(ship_id)
+					continue
+				# 403 = kimlik doğrulandı ama erişim reddedildi (token değişmiş ya da
+				# parcel başka bir alt hesapta). "Silinmiş" DEĞİL — bu döngüde sessizce
+				# atla; bir sonraki denemede erişim gelirse normal güncellenir.
+				if response.status_code == 403:
+					forbidden_parcel_ids.append(ship_id)
 					continue
 				response.raise_for_status()
 				tracking_data = response.json()
@@ -670,6 +677,10 @@ class SendCloudUtils:
 			# tamamen silinmiş demektir; çağıran taraf Shipment'ı işaretleyebilir.
 			"missing_parcel_ids": missing_parcel_ids,
 			"all_parcels_missing": bool(missing_parcel_ids) and not parcels,
+			# 403 vb. yüzünden hiçbir parça okunamadıysa: çağıran taraf mevcut
+			# awb/durumu boş değerlerle EZMESİN, bu döngüyü atlasın.
+			"forbidden_parcel_ids": forbidden_parcel_ids,
+			"no_data": not parcels and not missing_parcel_ids,
 		}
 
 	def total_parcel_price(self, parcel_price, parcels: list[dict]):

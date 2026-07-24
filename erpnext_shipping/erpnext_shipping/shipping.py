@@ -1049,6 +1049,11 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	if not tracking_data:
 		return
 
+	# 403 / geçici erişim hatası vb. yüzünden hiçbir parça okunamadıysa: mevcut
+	# awb_number ve tracking_status'u boş değerlerle EZME, bu döngüyü atla.
+	if tracking_data.get("no_data"):
+		return
+
 	shipment = frappe.get_doc("Shipment", shipment)
 
 	# SendCloud parçası bulunamıyorsa (ör. carrier etiketi silmiş) — hepsi silinmişse
