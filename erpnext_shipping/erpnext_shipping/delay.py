@@ -224,10 +224,15 @@ def _delay_signature():
 
 
 def _make_linked_email(shipment, recipients, subject, content):
-	"""Send an email linked to the Shipment (reference_doctype/name) so it shows in
-	the shipment's Activity/timeline. Created with send_email=False and sent via
-	frappe.sendmail with add_unsubscribe_link=False, so there is no 'Leave this
-	conversation…' footer. Returns False when there is no recipient."""
+	"""Email the shipment's delay notice and record it on the shipment's Activity.
+
+	Two parts, decoupled on purpose:
+	  * a linked Communication (make with send_email=False) so it shows in the
+	    shipment's Activity/timeline;
+	  * the actual send via frappe.sendmail with message=body (renders reliably) and
+	    add_unsubscribe_link=False — no 'Leave this conversation…' footer (that footer
+	    only appears when a communication is attached to the send).
+	Returns False when there is no recipient."""
 	recipient_list = [r.strip() for r in str(recipients or "").replace(";", ",").split(",") if r.strip()]
 	if not recipient_list:
 		return False
@@ -237,23 +242,31 @@ def _make_linked_email(shipment, recipients, subject, content):
 	sender = _delay_sender()
 	body = content + _delay_signature()
 
-	comm = _make(
-		doctype="Shipment",
-		name=shipment,
-		recipients=", ".join(recipient_list),
-		subject=subject,
-		content=body,
-		sender=sender,
-		communication_medium="Email",
-		sent_or_received="Sent",
-		send_email=False,
-	)
+	# Activity/timeline kaydı (göndermeden linkli Communication oluştur).
+	try:
+		_make(
+			doctype="Shipment",
+			name=shipment,
+			recipients=", ".join(recipient_list),
+			subject=subject,
+			content=body,
+			sender=sender,
+			communication_medium="Email",
+			sent_or_received="Sent",
+			send_email=False,
+		)
+	except Exception:
+		frappe.log_error(
+			title="Delay email Communication failed",
+			message=f"Shipment: {shipment}\n{frappe.get_traceback()}",
+		)
+
+	# Asıl gönderim — gövde message ile garanti render olur, footer yok.
 	frappe.sendmail(
 		recipients=recipient_list,
 		sender=sender or None,
 		subject=subject,
 		message=body,
-		communication=comm.get("name"),
 		add_unsubscribe_link=False,
 	)
 	return True
