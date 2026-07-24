@@ -362,6 +362,16 @@ def get_carrier_delay_email(shipment):
 	undelivered = _undelivered_parcels(parcels, key) or _undelivered_parcels(parcels)
 	tracking_numbers = [p.get("tracking_number") for p in undelivered if p.get("tracking_number")]
 
+	# Kargo şirketi DN ID'sini bilmez; müşterinin sipariş/PO numarasını (Delivery Note
+	# po_no) kullan, yoksa DN adına düş.
+	order_refs = []
+	for row in doc.get("shipment_delivery_note") or []:
+		if not row.delivery_note:
+			continue
+		po = frappe.db.get_value("Delivery Note", row.delivery_note, "po_no")
+		order_refs.append(po or row.delivery_note)
+	order_refs = list(dict.fromkeys(o for o in order_refs if o))
+
 	context = {
 		"doc": doc,
 		"shipment": doc,
@@ -369,6 +379,8 @@ def get_carrier_delay_email(shipment):
 		"carrier": doc.carrier,
 		# "Ship to" = teslim Contact adı (Customer değil).
 		"contact_name": _clean_contact(doc.get("delivery_contact_name")),
+		# "Order No" = müşteri PO / sipariş no (kargonun tanıdığı referans).
+		"order_refs": order_refs,
 	}
 
 	subject = content = ""

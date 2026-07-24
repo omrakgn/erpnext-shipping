@@ -27,8 +27,7 @@ delivery date?</p>
     <tr><td><b>Carrier</b></td><td>{{ doc.carrier }}</td></tr>
     <tr><td><b>Pickup date</b></td><td>{{ frappe.utils.formatdate(doc.pickup_date) }}</td></tr>
     <tr><td><b>Ship to</b></td><td>{{ contact_name or doc.delivery_customer or doc.delivery_company or "" }}</td></tr>
-    {% set dns = doc.shipment_delivery_note | map(attribute="delivery_note") | select | list -%}
-    {% if dns %}<tr><td><b>Order / Delivery Note</b></td><td>{{ dns | join(", ") }}</td></tr>{% endif %}
+    {% if order_refs %}<tr><td><b>Order No</b></td><td>{{ order_refs | join(", ") }}</td></tr>{% endif %}
     <tr><td><b>Our reference</b></td><td>{{ doc.name }}</td></tr>
 </table>
 <p>Thank you,<br>{{ doc.pickup_company or "" }}</p>
