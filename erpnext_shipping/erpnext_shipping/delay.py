@@ -18,6 +18,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, now_datetime, nowdate
 
+from erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest import _clean_contact
+
 DELAY_EMAIL_TEMPLATE = "Shipment Delay Inquiry"
 DEFAULT_MIN_DAYS = 5
 
@@ -76,7 +78,8 @@ def get_delayed_shipments(min_days=None, carrier=None):
 			tracking_status,
 			awb_number,
 			custom_tracking_details,
-			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_to
+			delivery_contact_name,
+			coalesce(delivery_customer, delivery_supplier, delivery_company) as delivery_party
 		from `tabShipment`
 		where docstatus < 2
 			and ifnull(tracking_status, '') != 'Delivered'
@@ -93,6 +96,8 @@ def get_delayed_shipments(min_days=None, carrier=None):
 
 	rows = []
 	for s in shipments:
+		# "Ship to" = teslim Contact adı (Customer değil); yoksa müşteri/şirkete düş.
+		delivery_to = _clean_contact(s.delivery_contact_name) or s.delivery_party
 		undelivered = _undelivered_parcels(
 			_parse_parcels(s.custom_tracking_details, s.awb_number), carrier
 		)
@@ -112,7 +117,7 @@ def get_delayed_shipments(min_days=None, carrier=None):
 					"tracking_status": p.get("status") or s.tracking_status,
 					"awb_number": tn,
 					"tracking_url": turl,
-					"delivery_to": s.delivery_to,
+					"delivery_to": delivery_to,
 					"cnt": 1 if first else 0,
 				}
 			)
@@ -362,6 +367,8 @@ def get_carrier_delay_email(shipment):
 		"shipment": doc,
 		"tracking_numbers": tracking_numbers,
 		"carrier": doc.carrier,
+		# "Ship to" = teslim Contact adı (Customer değil).
+		"contact_name": _clean_contact(doc.get("delivery_contact_name")),
 	}
 
 	subject = content = ""

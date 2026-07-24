@@ -26,7 +26,7 @@ delivery date?</p>
     <tr><td><b>Tracking / AWB</b></td><td>{% if tracking_numbers %}{{ tracking_numbers | join(", ") }}{% else %}{{ doc.awb_number }}{% endif %}</td></tr>
     <tr><td><b>Carrier</b></td><td>{{ doc.carrier }}</td></tr>
     <tr><td><b>Pickup date</b></td><td>{{ frappe.utils.formatdate(doc.pickup_date) }}</td></tr>
-    <tr><td><b>Ship to</b></td><td>{{ doc.delivery_customer or doc.delivery_company or "" }}</td></tr>
+    <tr><td><b>Ship to</b></td><td>{{ contact_name or doc.delivery_customer or doc.delivery_company or "" }}</td></tr>
     {% set dns = doc.shipment_delivery_note | map(attribute="delivery_note") | select | list -%}
     {% if dns %}<tr><td><b>Order / Delivery Note</b></td><td>{{ dns | join(", ") }}</td></tr>{% endif %}
     <tr><td><b>Our reference</b></td><td>{{ doc.name }}</td></tr>
