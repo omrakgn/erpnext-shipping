@@ -22,6 +22,7 @@ erpnext_shipping.erpnext_shipping.patches.create_delay_notified_field # 2026-07-
 erpnext_shipping.erpnext_shipping.patches.update_transit_days_visibility # 2026-07-23
 erpnext_shipping.erpnext_shipping.patches.backfill_sendcloud_delivered_dates # 2026-07-23
 erpnext_shipping.erpnext_shipping.patches.create_shipment_surcharge_fields # 2026-07-29
+erpnext_shipping.erpnext_shipping.patches.create_margin_fields # 2026-07-29
 erpnext_shipping.erpnext_shipping.patches.backfill_surcharge_fields # 2026-07-29
 erpnext_shipping.erpnext_shipping.patches.create_delay_email_template # 2026-07-23
 erpnext_shipping.erpnext_shipping.patches.create_shipping_dashboard # 2026-07-11

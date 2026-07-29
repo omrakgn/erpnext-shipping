@@ -359,17 +359,51 @@ def recompute_shipment_cost(shipment: str):
 		)
 		or "EUR"
 	)
-	frappe.db.set_value(
-		"Shipment",
-		shipment,
-		{
-			"custom_shipping_cost": total,
-			"custom_surcharge_amount": surcharge,
-			"custom_has_weight_surcharge": 1 if agg[2] else 0,
-			"custom_shipping_cost_currency": currency,
-			"custom_shipping_cost_updated": now_datetime(),
-		},
-		update_modified=False,
+	updates = {
+		"custom_shipping_cost": total,
+		"custom_surcharge_amount": surcharge,
+		"custom_has_weight_surcharge": 1 if agg[2] else 0,
+		"custom_shipping_cost_currency": currency,
+		"custom_shipping_cost_updated": now_datetime(),
+	}
+
+	# Quote sapması + müşteri kargo bedeli + marj (alanlar migrate ile geldiyse).
+	if frappe.db.has_column("Shipment", "custom_cost_variance"):
+		quote = flt(frappe.db.get_value("Shipment", shipment, "shipment_amount"))
+		variance = (total - quote) if quote > 0 else 0
+		charge = 0
+		if frappe.db.has_column("Delivery Note", "custom_customer_shipping_charge"):
+			charge = flt(
+				frappe.db.sql(
+					"""select coalesce(sum(dn.custom_customer_shipping_charge), 0)
+					from `tabShipment Delivery Note` sdn
+					join `tabDelivery Note` dn on dn.name = sdn.delivery_note
+					where sdn.parent = %s""",
+					shipment,
+				)[0][0]
+			)
+		updates.update(
+			{
+				"custom_cost_variance": variance,
+				"custom_cost_variance_pct": (variance / quote * 100) if quote > 0 else 0,
+				"custom_customer_shipping_charge": charge,
+				"custom_shipping_margin": charge - total,
+			}
+		)
+
+	frappe.db.set_value("Shipment", shipment, updates, update_modified=False)
+
+
+def set_dn_customer_shipping_charge(doc, method=None):
+	"""Delivery Note validate hook: when a shipping-charge account is configured in
+	Shipment Settings, fill custom_customer_shipping_charge from the DN's Sales Taxes
+	& Charges rows on that account. No-op (keeps the manual value) when unset — so this
+	stays dormant until the user actually starts charging customers for shipping."""
+	account = frappe.db.get_single_value("Shipment Settings", "customer_shipping_account_head")
+	if not account:
+		return
+	doc.custom_customer_shipping_charge = sum(
+		flt(t.tax_amount) for t in (doc.get("taxes") or []) if t.account_head == account
 	)
 
 

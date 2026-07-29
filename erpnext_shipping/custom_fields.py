@@ -251,6 +251,49 @@ def get_custom_fields():
 				),
 			},
 			{
+				"fieldname": "custom_cost_variance",
+				"label": _("Cost Variance"),
+				"fieldtype": "Currency",
+				"read_only": 1,
+				"options": "custom_shipping_cost_currency",
+				"insert_after": "custom_has_weight_surcharge",
+				"description": _(
+					"Invoiced cost minus the quote (shipment_amount). Positive = paid more than "
+					"quoted. Only meaningful for shipments booked through ERPNext (quote > 0)."
+				),
+			},
+			{
+				"fieldname": "custom_cost_variance_pct",
+				"label": _("Cost Variance %"),
+				"fieldtype": "Percent",
+				"read_only": 1,
+				"insert_after": "custom_cost_variance",
+			},
+			{
+				"fieldname": "custom_customer_shipping_charge",
+				"label": _("Customer Shipping Charge"),
+				"fieldtype": "Currency",
+				"read_only": 1,
+				"options": "custom_shipping_cost_currency",
+				"insert_after": "custom_cost_variance_pct",
+				"description": _(
+					"Shipping revenue charged to the customer (summed from the linked Delivery "
+					"Notes). 0 when shipping is free. Used for the shipping margin."
+				),
+			},
+			{
+				"fieldname": "custom_shipping_margin",
+				"label": _("Shipping Margin"),
+				"fieldtype": "Currency",
+				"read_only": 1,
+				"options": "custom_shipping_cost_currency",
+				"insert_after": "custom_customer_shipping_charge",
+				"description": _(
+					"Customer Shipping Charge minus the invoiced cost. Negative = shipping is a "
+					"net cost (free shipping)."
+				),
+			},
+			{
 				"fieldname": "custom_shipping_cost_currency",
 				"label": _("Shipping Cost Currency"),
 				"fieldtype": "Data",
@@ -258,7 +301,7 @@ def get_custom_fields():
 				"hidden": 1,
 				"translatable": 0,
 				"default": "EUR",
-				"insert_after": "custom_has_weight_surcharge",
+				"insert_after": "custom_shipping_margin",
 			},
 			{
 				"fieldname": "custom_shipping_cost_updated",
@@ -330,6 +373,17 @@ def get_custom_fields():
 				"insert_after": "custom_shipment_tracking",
 				"description": _(
 					"Net carrier cost of the linked Shipment (from imported invoice lines)."
+				),
+			},
+			{
+				"fieldname": "custom_customer_shipping_charge",
+				"label": _("Customer Shipping Charge"),
+				"fieldtype": "Currency",
+				"insert_after": "custom_shipping_cost",
+				"description": _(
+					"Shipping revenue charged to the customer for this order. Auto-filled from a "
+					"configured taxes account head when set in Shipment Settings; otherwise "
+					"editable / 0 (free shipping)."
 				),
 			},
 		],

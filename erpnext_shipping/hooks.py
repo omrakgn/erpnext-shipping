@@ -158,4 +158,9 @@ doc_events = {
 			"erpnext_shipping.erpnext_shipping.shipping.set_parcel_values",
 		]
 	},
+	"Delivery Note": {
+		# Yalnızca Shipment Settings'te kargo geliri hesabı tanımlıysa çalışır (aksi
+		# halde no-op) — müşteri kargo bedelini vergi satırından doldurur.
+		"validate": "erpnext_shipping.erpnext_shipping.shipping_cost.set_dn_customer_shipping_charge",
+	},
 }

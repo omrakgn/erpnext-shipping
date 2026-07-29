@@ -28,7 +28,9 @@
   "auto_email_carrier",
   "column_break_delay",
   "dpd_delay_email",
-  "fedex_delay_email"
+  "fedex_delay_email",
+  "margin_section",
+  "customer_shipping_account_head"
  ],
  "fields": [
   {
@@ -183,6 +185,18 @@
    "options": "Email",
    "label": "FedEx Delay Inquiry Email",
    "description": "Carrier email used as recipient for FedEx shipments — both the 'Ask Carrier about Delay' button and (if enabled) the automatic carrier email."
+  },
+  {
+   "fieldname": "margin_section",
+   "fieldtype": "Section Break",
+   "label": "Shipping Revenue (Margin)"
+  },
+  {
+   "fieldname": "customer_shipping_account_head",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Customer Shipping Charge Account",
+   "description": "Optional. If you charge customers for shipping via a Sales Taxes & Charges row on this account, the Delivery Note's Customer Shipping Charge is auto-filled from it (for the shipping margin). Leave blank if shipping is free."
   }
  ],
  "issingle": 1,
