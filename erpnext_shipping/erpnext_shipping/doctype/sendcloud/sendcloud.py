@@ -1168,7 +1168,10 @@ class SendCloudUtils:
 		items = parcel_data.get("parcel_items") or []
 		if target <= 0 or not items:
 			return
-		current = sum(flt(it.get("price", {}).get("value", 0)) for it in items)
+		# Fiyatlar BİRİM başına; SendCloud'un gördüğü toplam = Σ(birim_fiyat × adet).
+		current = sum(
+			flt(it.get("price", {}).get("value", 0)) * (int(it.get("quantity") or 1)) for it in items
+		)
 		if abs(current - target) < 0.005:
 			return
 		if current > 0:
@@ -1176,11 +1179,11 @@ class SendCloudUtils:
 			for it in items:
 				it["price"]["value"] = flt(it["price"]["value"] * factor, CURRENCY_DECIMALS)
 		else:
-			# Tüm fiyatlar 0 → hedefi adete göre dağıt.
+			# Tüm fiyatlar 0 → hedefi adete göre birim başına dağıt.
 			total_qty = sum(int(it.get("quantity") or 0) for it in items) or len(items)
+			per_unit = flt(target / total_qty, CURRENCY_DECIMALS)
 			for it in items:
-				q = int(it.get("quantity") or 0) or 1
-				it["price"]["value"] = flt(target * q / total_qty, CURRENCY_DECIMALS)
+				it["price"]["value"] = per_unit
 
 	def get_parcel_item_map(self, shipment_doc):
 		"""custom_parcel_items child tablosundan koli -> {item_code: qty} haritası çıkar.
@@ -1220,7 +1223,9 @@ class SendCloudUtils:
 				"description": (info.get("description") or item_code)[:200],
 				"quantity": qty_int,
 				"price": {
-					"value": flt(info.get("unit_price", 0) * qty, CURRENCY_DECIMALS),
+					# Ağırlıkla aynı: SendCloud value'yu da quantity ile çarpar, bu yüzden
+					# BİRİM fiyat gönder (satır toplamı değil).
+					"value": flt(info.get("unit_price", 0), CURRENCY_DECIMALS),
 					"currency": info.get("currency") or currency,
 				},
 				"weight": {
@@ -1328,10 +1333,9 @@ class SendCloudUtils:
 
 					# Aynı SKU'ları birleştir
 					if sku in items_dict:
-						# Aynı SKU: adet ve tutarı topla. Ağırlık BİRİM başına tutulduğu
-						# için toplanmaz (SendCloud zaten weight × quantity yapıyor).
+						# Aynı SKU: yalnızca adeti topla. Birim fiyat/ağırlık sabit kalır
+						# (SendCloud value ve weight'i quantity ile çarpıyor).
 						items_dict[sku]["quantity"] += int(item.qty)
-						items_dict[sku]["price"]["value"] += flt(item.amount, CURRENCY_DECIMALS)
 						sku_qty_dict[sku] += int(item.qty)
 					else:
 						# BİRİM ağırlık (SendCloud weight × quantity yaptığından satır toplamı
@@ -1342,11 +1346,16 @@ class SendCloudUtils:
 						if not per_unit_weight:
 							per_unit_weight = flt(item_doc.weight_per_unit or 0)
 
+						# BİRİM fiyat (satır toplamı değil — SendCloud value × quantity yapar).
+						per_unit_price = flt(item.rate or 0)
+						if not per_unit_price and item.qty:
+							per_unit_price = flt(item.amount or 0) / flt(item.qty)
+
 						items_dict[sku] = {
 							"description": (item.item_name or item.item_code or "Product")[:200],
 							"quantity": int(item.qty),
 							"price": {
-								"value": flt(item.amount, CURRENCY_DECIMALS),
+								"value": flt(per_unit_price, CURRENCY_DECIMALS),
 								"currency": default_currency
 							},
 							"weight": {
@@ -1386,8 +1395,8 @@ class SendCloudUtils:
 				dn_qty = data["quantity"] or 1
 				item_info[code] = {
 					"description": data["description"],
-					"unit_price": flt(data["price"]["value"]) / dn_qty if dn_qty else 0,
-					# data.weight artık BİRİM ağırlık (satır toplamı değil) -> bölme yok.
+					# data.price ve data.weight artık BİRİM başına (satır toplamı değil) -> bölme yok.
+					"unit_price": flt(data["price"]["value"]),
 					"unit_weight": flt(data["weight"]["value"]),
 					"currency": default_currency,
 					"hs_code": data.get("hs_code"),
