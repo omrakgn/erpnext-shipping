@@ -241,7 +241,7 @@
    "number_card_name": "Surcharge Total Last Month"
   },
   {
-   "label": "High Cost Variance (>20%)",
+   "label": "High Cost Variance",
    "number_card_name": "High Cost Variance"
   }
  ],

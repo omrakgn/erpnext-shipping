@@ -93,9 +93,10 @@ NUMBER_CARDS = [
 	},
 	{
 		# Faturası quote'tan %20+ pahalı çıkan gönderi sayısı (anormal maliyet).
-		# Tıklayınca filtreli Shipment listesine gider.
+		# Tıklayınca filtreli Shipment listesine gider. NOT: Number Card docname
+		# label'dan üretildiği için label'da > veya % gibi özel karakter KULLANMA.
 		"name": "High Cost Variance",
-		"label": "High Cost Variance (>20%)",
+		"label": "High Cost Variance",
 		"document_type": "Shipment",
 		"function": "Count",
 		"aggregate_function_based_on": "",
