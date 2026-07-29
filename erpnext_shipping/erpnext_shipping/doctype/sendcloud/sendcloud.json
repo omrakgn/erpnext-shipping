@@ -9,6 +9,8 @@
   "api_key",
   "api_secret",
   "brand_id",
+  "webhook_section",
+  "webhook_secret",
   "preferred_options_section",
   "only_show_preferred",
   "preferred_shipping_options"
@@ -37,6 +39,17 @@
    "fieldtype": "Data",
    "label": "Brand ID",
    "description": "(Optional) SendCloud Brand ID used on the shipping label."
+  },
+  {
+   "fieldname": "webhook_section",
+   "fieldtype": "Section Break",
+   "label": "Webhook"
+  },
+  {
+   "fieldname": "webhook_secret",
+   "fieldtype": "Data",
+   "label": "Webhook Secret",
+   "description": "SendCloud integration secret used to verify the signature of incoming webhooks. Webhook URL: /api/method/erpnext_shipping.erpnext_shipping.webhook.sendcloud_webhook — leave blank to skip signature verification (not recommended)."
   },
   {
    "fieldname": "preferred_options_section",
