@@ -40,7 +40,14 @@ def sendcloud_webhook():
 
 	parcel = payload.get("parcel") or {}
 	parcel_id = str(parcel.get("id") or "")
+	status = (parcel.get("status") or {}).get("message")
 	shipment = _find_shipment(parcel_id, parcel.get("tracking_number"))
+
+	# Gelen her webhook'u logla (logs/sendcloud_webhook.log) — test ve denetim için.
+	frappe.logger("sendcloud_webhook", allow_site=True).info(
+		f"parcel={parcel_id} status={status!r} tracking={parcel.get('tracking_number')} matched={shipment}"
+	)
+
 	if not shipment:
 		return {"ok": True, "ignored": "shipment not found", "parcel_id": parcel_id}
 
