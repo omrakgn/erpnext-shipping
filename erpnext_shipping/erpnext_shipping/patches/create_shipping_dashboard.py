@@ -59,7 +59,9 @@ NUMBER_CARDS = [
 	},
 	{
 		# 5+ gündür teslim edilmemiş gönderi sayısı — tıklayınca rapora gider.
-		"name": "Delayed Shipments",
+		# NOT: Number Card docname label'dan üretiliyor -> name == label olmalı,
+		# yoksa her migrate'te "<label>-N" kopyası birikiyor.
+		"name": "Delayed (5+ days)",
 		"label": "Delayed (5+ days)",
 		"type": "Report",
 		"report_name": "Delayed Shipments",
@@ -81,7 +83,7 @@ NUMBER_CARDS = [
 		"currency": "",
 	},
 	{
-		"name": "Surcharge Total Last Month",
+		"name": "Surcharge Total (Last Month)",
 		"label": "Surcharge Total (Last Month)",
 		"document_type": "Shipping Cost Entry",
 		"function": "Sum",
@@ -178,6 +180,17 @@ def execute():
 	for name in LEGACY_CARDS:
 		if frappe.db.exists("Number Card", name):
 			frappe.delete_doc("Number Card", name, force=True, ignore_permissions=True)
+
+	# Number Card docname'i label'dan üretilir; eski migrate'lerde name != label olan
+	# kartlar her seferinde "<label>-N" kopyası oluşturmuş. Yalnızca bizim kartların
+	# label'larındaki fazladan kopyaları temizle (base = docname == label kalır).
+	for card in NUMBER_CARDS:
+		for dup in frappe.get_all(
+			"Number Card",
+			filters={"label": card["label"], "name": ["!=", card["label"]]},
+			pluck="name",
+		):
+			frappe.delete_doc("Number Card", dup, force=True, ignore_permissions=True)
 
 	for card in NUMBER_CARDS:
 		# Document Type kartı: doctype yoksa atla. Report kartı: rapor yoksa atla.
