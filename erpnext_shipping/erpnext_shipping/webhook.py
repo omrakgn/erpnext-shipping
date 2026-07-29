@@ -33,20 +33,20 @@ def sendcloud_webhook():
 		payload = {}
 
 	action = payload.get("action")
-	# SendCloud bağlantı testi / diğer aksiyonlar (integration_connected, test vb.):
-	# 200 dön, işlem yapma. Böylece panelde "Unable to connect" hatası çıkmaz.
-	if action != "parcel_status_changed":
-		return {"ok": True, "ignored": action or "no action"}
-
 	parcel = payload.get("parcel") or {}
 	parcel_id = str(parcel.get("id") or "")
 	status = (parcel.get("status") or {}).get("message")
-	shipment = _find_shipment(parcel_id, parcel.get("tracking_number"))
+	tracking = parcel.get("tracking_number")
+	logger = frappe.logger("sendcloud_webhook", allow_site=True)
 
-	# Gelen her webhook'u logla (logs/sendcloud_webhook.log) — test ve denetim için.
-	frappe.logger("sendcloud_webhook", allow_site=True).info(
-		f"parcel={parcel_id} status={status!r} tracking={parcel.get('tracking_number')} matched={shipment}"
-	)
+	# SendCloud bağlantı testi / diğer aksiyonlar (integration_connected, test vb.):
+	# 200 dön, işlem yapma. Böylece panelde "Unable to connect" hatası çıkmaz.
+	if action != "parcel_status_changed":
+		logger.info(f"received action={action!r} (ignored)")
+		return {"ok": True, "ignored": action or "no action"}
+
+	shipment = _find_shipment(parcel_id, tracking)
+	logger.info(f"parcel={parcel_id} status={status!r} tracking={tracking} matched={shipment}")
 
 	if not shipment:
 		return {"ok": True, "ignored": "shipment not found", "parcel_id": parcel_id}
