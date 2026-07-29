@@ -68,6 +68,29 @@ NUMBER_CARDS = [
 		"color": "#CB2929",
 		"currency": "",
 	},
+	{
+		# Carrier'ın oversize/overweight surcharge kestiği gönderi sayısı (aksiyon:
+		# beyan ağırlık/ölçü düzelt). Tıklayınca filtreli Shipment listesine gider.
+		"name": "Weight/Size Surcharges",
+		"label": "Weight/Size Surcharges",
+		"document_type": "Shipment",
+		"function": "Count",
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipment", "custom_has_weight_surcharge", "=", 1]]),
+		"color": "#CB2929",
+		"currency": "",
+	},
+	{
+		"name": "Surcharge Total Last Month",
+		"label": "Surcharge Total (Last Month)",
+		"document_type": "Shipping Cost Entry",
+		"function": "Sum",
+		"aggregate_function_based_on": "surcharge_amount",
+		"filters_json": json.dumps(
+			[["Shipping Cost Entry", "scan_date", "Timespan", "last month"]]
+		),
+		"color": "#FFC733",
+	},
 ]
 
 # Cards from earlier versions to remove (renamed / replaced).

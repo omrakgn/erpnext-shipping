@@ -227,6 +227,30 @@ def get_custom_fields():
 				),
 			},
 			{
+				"fieldname": "custom_surcharge_amount",
+				"label": _("Surcharge Amount"),
+				"fieldtype": "Currency",
+				"read_only": 1,
+				"options": "custom_shipping_cost_currency",
+				"insert_after": "custom_shipping_cost",
+				"description": _(
+					"Total carrier surcharges (fuel, oversize/overweight, peak, etc.) within the "
+					"shipping cost, from the imported invoice."
+				),
+			},
+			{
+				"fieldname": "custom_has_weight_surcharge",
+				"label": _("Weight/Size Surcharge"),
+				"fieldtype": "Check",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"insert_after": "custom_surcharge_amount",
+				"description": _(
+					"The carrier billed an oversize/overweight surcharge — the declared "
+					"weight/dimensions for this shipment may be wrong."
+				),
+			},
+			{
 				"fieldname": "custom_shipping_cost_currency",
 				"label": _("Shipping Cost Currency"),
 				"fieldtype": "Data",
@@ -234,7 +258,7 @@ def get_custom_fields():
 				"hidden": 1,
 				"translatable": 0,
 				"default": "EUR",
-				"insert_after": "custom_shipping_cost",
+				"insert_after": "custom_has_weight_surcharge",
 			},
 			{
 				"fieldname": "custom_shipping_cost_updated",

@@ -81,6 +81,27 @@ COMPONENT_COLUMNS = [
 	"Other surcharges 5",
 ]
 
+# Base (non-surcharge) component; the rest of the known DPD columns are surcharges.
+BASE_COMPONENT = "Product Net Amount"
+SURCHARGE_COMPONENTS = [c for c in COMPONENT_COLUMNS if c != BASE_COMPONENT]
+# Surcharges that point at a wrong declared weight/size (actionable).
+WEIGHT_SURCHARGE_COMPONENTS = ("Oversized/Overweight", "Heavy Weight parcels 20-31,5kg")
+
+
+def _surcharge_fields(breakdown, inv_weight, corr_weight):
+	"""Derived surcharge flags/amount from a parsed charge breakdown + weights. Only
+	the known DPD surcharge components are summed, so a FedEx breakdown (different
+	keys) safely yields 0 rather than counting its base freight as a surcharge."""
+	b = breakdown or {}
+	surcharge = sum(flt(b.get(c)) for c in SURCHARGE_COMPONENTS)
+	weight_sc = 1 if any(flt(b.get(c)) for c in WEIGHT_SURCHARGE_COMPONENTS) else 0
+	reweigh = 1 if (corr_weight and abs(flt(corr_weight) - flt(inv_weight)) > 0.01) else 0
+	return {
+		"surcharge_amount": surcharge,
+		"weight_surcharge": weight_sc,
+		"reweigh": reweigh,
+	}
+
 
 def _s(v):
 	"""Stringify a cell value without a trailing '.0' for whole numbers."""
@@ -325,13 +346,13 @@ def recompute_shipment_cost(shipment: str):
 	recompute_delivery_note_cost so orders without a Shipment still get their cost."""
 	if not shipment:
 		return
-	total = flt(
-		frappe.db.sql(
-			"""select coalesce(sum(total_net_amount), 0)
-			from `tabShipping Cost Entry` where shipment=%s""",
-			shipment,
-		)[0][0]
-	)
+	agg = frappe.db.sql(
+		"""select coalesce(sum(total_net_amount), 0), coalesce(sum(surcharge_amount), 0),
+			max(weight_surcharge), max(reweigh)
+		from `tabShipping Cost Entry` where shipment=%s""",
+		shipment,
+	)[0]
+	total, surcharge = flt(agg[0]), flt(agg[1])
 	currency = (
 		frappe.db.get_value(
 			"Shipping Cost Entry", {"shipment": shipment}, "currency"
@@ -343,6 +364,8 @@ def recompute_shipment_cost(shipment: str):
 		shipment,
 		{
 			"custom_shipping_cost": total,
+			"custom_surcharge_amount": surcharge,
+			"custom_has_weight_surcharge": 1 if agg[2] else 0,
 			"custom_shipping_cost_currency": currency,
 			"custom_shipping_cost_updated": now_datetime(),
 		},
@@ -537,6 +560,9 @@ def _parse_dpd_into(content, source_file, carrier, ctx, stats):
 			"height": flt(cell(row, COL_HEIGHT)),
 			"girth": flt(cell(row, COL_GIRTH)),
 			"charge_breakdown": json.dumps(breakdown, ensure_ascii=False),
+			**_surcharge_fields(
+				breakdown, flt(cell(row, COL_INV_WEIGHT)), flt(cell(row, COL_CORR_WEIGHT))
+			),
 			"source_file": source_file,
 		}
 		_upsert_cost_entry(values, ctx, stats)

@@ -37,6 +37,9 @@
   "width",
   "height",
   "breakdown_section",
+  "surcharge_amount",
+  "weight_surcharge",
+  "reweigh",
   "charge_breakdown",
   "source_file"
  ],
@@ -223,6 +226,33 @@
    "fieldname": "breakdown_section",
    "fieldtype": "Section Break",
    "label": "Charge Breakdown"
+  },
+  {
+   "fieldname": "surcharge_amount",
+   "fieldtype": "Currency",
+   "label": "Surcharge Amount",
+   "options": "currency",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Total of all surcharge components (everything except the base Product Net Amount)."
+  },
+  {
+   "default": "0",
+   "fieldname": "weight_surcharge",
+   "fieldtype": "Check",
+   "label": "Weight/Size Surcharge",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set when an Oversized/Overweight or Heavy-Weight surcharge was billed — our declared weight/dims may be wrong."
+  },
+  {
+   "default": "0",
+   "fieldname": "reweigh",
+   "fieldtype": "Check",
+   "label": "Re-weighed",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set when the carrier's Corrected Weight differs from the Invoicing Weight (parcel re-measured)."
   },
   {
    "fieldname": "charge_breakdown",
