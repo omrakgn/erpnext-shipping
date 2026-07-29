@@ -35,9 +35,13 @@ def sendcloud_webhook():
 	tracking = parcel.get("tracking_number")
 	status = (parcel.get("status") or {}).get("message")
 
-	# Sessiz denetim logu (logs browser'da değil, site log dosyasında).
-	# sig: None = secret yok (doğrulama kapalı), True/False = HMAC eşleşme sonucu.
-	_log(f"action={action!r} parcel={parcel_id} status={status!r} tracking={tracking} sig={sig}")
+	# Sessiz denetim logu (site log dosyasında). sig: webhook_secret ile eşleşme
+	# (None=secret yok). sig_api: SendCloud webhook'u API secret ile mi imzalıyor —
+	# eşleşirse ücretsiz imza güvenliğini açabiliriz (şimdilik yalnızca bilgi).
+	_log(
+		f"action={action!r} parcel={parcel_id} status={status!r} tracking={tracking} "
+		f"sig={sig} sig_api={_api_secret_match(body)}"
+	)
 
 	# İmza secret'ı tanımlı ve eşleşMİYORSA reddet (sahte webhook koruması).
 	if sig is False:
@@ -77,11 +81,28 @@ def _log(msg):
 
 
 def _signature_result(body):
-	"""None = no secret configured (verification off); True/False = HMAC-SHA256 match.
-	SendCloud signs the raw body with the integration secret."""
+	"""None = no webhook_secret configured (verification off); True/False = match."""
 	secret = frappe.db.get_single_value("SendCloud", "webhook_secret")
 	if not secret:
 		return None
+	return _hmac_match(secret, body)
+
+
+def _api_secret_match(body):
+	"""Diagnostic only: does the incoming signature match the API secret? If it does,
+	SendCloud signs webhooks with the API secret and we can enforce it for free."""
+	try:
+		from frappe.utils.password import get_decrypted_password
+
+		secret = get_decrypted_password("SendCloud", "SendCloud", "api_secret", raise_exception=False)
+	except Exception:
+		secret = None
+	if not secret or not (frappe.get_request_header("Sendcloud-Signature") or ""):
+		return None
+	return _hmac_match(secret, body)
+
+
+def _hmac_match(secret, body):
 	received = frappe.get_request_header("Sendcloud-Signature") or ""
 	expected = hmac.new(secret.encode("utf-8"), body or b"", hashlib.sha256).hexdigest()
 	return hmac.compare_digest(received, expected)
