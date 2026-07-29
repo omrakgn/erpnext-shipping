@@ -49,7 +49,7 @@
    "fieldname": "webhook_secret",
    "fieldtype": "Data",
    "label": "Webhook Secret",
-   "description": "SendCloud integration secret used to verify the signature of incoming webhooks. Webhook URL: /api/method/erpnext_shipping.erpnext_shipping.webhook.sendcloud_webhook — leave blank to skip signature verification (not recommended)."
+   "description": "Optional override for the webhook signature secret. Leave blank to verify with the API Secret (SendCloud signs webhooks with it). Webhook URL: /api/method/erpnext_shipping.erpnext_shipping.webhook.sendcloud_webhook"
   },
   {
    "fieldname": "preferred_options_section",

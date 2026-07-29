@@ -22,7 +22,8 @@ import frappe
 @frappe.whitelist(allow_guest=True)
 def sendcloud_webhook():
 	body = frappe.request.get_data() if frappe.request else b""
-	sig = _signature_result(body)
+	secret = _signing_secret()
+	sig_valid = _hmac_match(secret, body) if secret else None
 
 	try:
 		payload = json.loads(body or b"{}")
@@ -35,16 +36,12 @@ def sendcloud_webhook():
 	tracking = parcel.get("tracking_number")
 	status = (parcel.get("status") or {}).get("message")
 
-	# Sessiz denetim logu (site log dosyasında). sig: webhook_secret ile eşleşme
-	# (None=secret yok). sig_api: SendCloud webhook'u API secret ile mi imzalıyor —
-	# eşleşirse ücretsiz imza güvenliğini açabiliriz (şimdilik yalnızca bilgi).
-	_log(
-		f"action={action!r} parcel={parcel_id} status={status!r} tracking={tracking} "
-		f"sig={sig} sig_api={_api_secret_match(body)}"
-	)
+	# Sessiz denetim logu. sig: imza eşleşmesi (None = secret yok).
+	_log(f"action={action!r} parcel={parcel_id} status={status!r} tracking={tracking} sig={sig_valid}")
 
-	# İmza secret'ı tanımlı ve eşleşMİYORSA reddet (sahte webhook koruması).
-	if sig is False:
+	# Gerçek durum-değişikliği eventleri imzalı olmalı (sahte webhook koruması).
+	# Bağlantı testi vb. (imzasız) aksiyonlar geçer.
+	if action == "parcel_status_changed" and secret and not sig_valid:
 		frappe.local.response["http_status_code"] = 401
 		return {"ok": False, "error": "invalid signature"}
 
@@ -80,30 +77,27 @@ def _log(msg):
 		pass
 
 
-def _signature_result(body):
-	"""None = no webhook_secret configured (verification off); True/False = match."""
+def _signing_secret():
+	"""Secret SendCloud signs webhooks with: the explicit Webhook Secret if set,
+	otherwise the API secret (SendCloud signs with it — confirmed via sig_api)."""
 	secret = frappe.db.get_single_value("SendCloud", "webhook_secret")
-	if not secret:
-		return None
-	return _hmac_match(secret, body)
-
-
-def _api_secret_match(body):
-	"""Diagnostic only: does the incoming signature match the API secret? If it does,
-	SendCloud signs webhooks with the API secret and we can enforce it for free."""
+	if secret:
+		return secret
 	try:
 		from frappe.utils.password import get_decrypted_password
 
-		secret = get_decrypted_password("SendCloud", "SendCloud", "api_secret", raise_exception=False)
+		return get_decrypted_password("SendCloud", "SendCloud", "api_secret", raise_exception=False)
 	except Exception:
-		secret = None
-	if not secret or not (frappe.get_request_header("Sendcloud-Signature") or ""):
 		return None
-	return _hmac_match(secret, body)
 
 
 def _hmac_match(secret, body):
+	"""True when the Sendcloud-Signature header matches HMAC-SHA256(secret, body)."""
+	if not secret:
+		return False
 	received = frappe.get_request_header("Sendcloud-Signature") or ""
+	if not received:
+		return False
 	expected = hmac.new(secret.encode("utf-8"), body or b"", hashlib.sha256).hexdigest()
 	return hmac.compare_digest(received, expected)
 
