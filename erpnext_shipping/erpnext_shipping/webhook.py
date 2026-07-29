@@ -42,11 +42,11 @@ def sendcloud_webhook():
 	# SendCloud bağlantı testi / diğer aksiyonlar (integration_connected, test vb.):
 	# 200 dön, işlem yapma. Böylece panelde "Unable to connect" hatası çıkmaz.
 	if action != "parcel_status_changed":
-		logger.info(f"received action={action!r} (ignored)")
+		logger.warning(f"received action={action!r} (ignored)")
 		return {"ok": True, "ignored": action or "no action"}
 
 	shipment = _find_shipment(parcel_id, tracking)
-	logger.info(f"parcel={parcel_id} status={status!r} tracking={tracking} matched={shipment}")
+	logger.warning(f"parcel={parcel_id} status={status!r} tracking={tracking} matched={shipment}")
 
 	if not shipment:
 		return {"ok": True, "ignored": "shipment not found", "parcel_id": parcel_id}
