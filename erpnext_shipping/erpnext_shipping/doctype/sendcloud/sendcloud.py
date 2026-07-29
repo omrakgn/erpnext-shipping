@@ -1224,7 +1224,9 @@ class SendCloudUtils:
 					"currency": info.get("currency") or currency,
 				},
 				"weight": {
-					"value": flt(unit_weight * qty, WEIGHT_DECIMALS) if unit_weight > 0 else 0.1,
+					# SendCloud koli içeriğini weight × quantity ile hesaplar; bu yüzden
+					# BİRİM ağırlık gönder (satır toplamı DEĞİL), yoksa qty ile çift sayılır.
+					"value": flt(unit_weight, WEIGHT_DECIMALS) if unit_weight > 0 else 0.1,
 					"unit": "kg",
 				},
 				"sku": item_code[:50],
@@ -1326,17 +1328,20 @@ class SendCloudUtils:
 
 					# Aynı SKU'ları birleştir
 					if sku in items_dict:
-						# Mevcut item'a ekle
+						# Aynı SKU: adet ve tutarı topla. Ağırlık BİRİM başına tutulduğu
+						# için toplanmaz (SendCloud zaten weight × quantity yapıyor).
 						items_dict[sku]["quantity"] += int(item.qty)
 						items_dict[sku]["price"]["value"] += flt(item.amount, CURRENCY_DECIMALS)
-						items_dict[sku]["weight"]["value"] += flt(item.total_weight or 0, WEIGHT_DECIMALS)
 						sku_qty_dict[sku] += int(item.qty)
 					else:
-						# Yeni item oluştur
-						item_weight = item.total_weight or 0
-						if not item_weight and item.qty:
-							item_weight = item.qty * (item_doc.weight_per_unit or 0)
-						
+						# BİRİM ağırlık (SendCloud weight × quantity yaptığından satır toplamı
+						# DEĞİL). DN satırının weight_per_unit'i, yoksa total/qty, yoksa Item.
+						per_unit_weight = flt(item.weight_per_unit or 0)
+						if not per_unit_weight and item.qty:
+							per_unit_weight = flt(item.total_weight or 0) / flt(item.qty)
+						if not per_unit_weight:
+							per_unit_weight = flt(item_doc.weight_per_unit or 0)
+
 						items_dict[sku] = {
 							"description": (item.item_name or item.item_code or "Product")[:200],
 							"quantity": int(item.qty),
@@ -1345,7 +1350,7 @@ class SendCloudUtils:
 								"currency": default_currency
 							},
 							"weight": {
-								"value": flt(item_weight, WEIGHT_DECIMALS) if item_weight > 0 else 0.1,
+								"value": flt(per_unit_weight, WEIGHT_DECIMALS) if per_unit_weight > 0 else 0.1,
 								"unit": "kg"
 							},
 							"sku": sku[:50]
@@ -1382,7 +1387,8 @@ class SendCloudUtils:
 				item_info[code] = {
 					"description": data["description"],
 					"unit_price": flt(data["price"]["value"]) / dn_qty if dn_qty else 0,
-					"unit_weight": flt(data["weight"]["value"]) / dn_qty if dn_qty else 0,
+					# data.weight artık BİRİM ağırlık (satır toplamı değil) -> bölme yok.
+					"unit_weight": flt(data["weight"]["value"]),
 					"currency": default_currency,
 					"hs_code": data.get("hs_code"),
 					"origin_country": data.get("origin_country"),
