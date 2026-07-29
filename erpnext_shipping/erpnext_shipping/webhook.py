@@ -6,26 +6,23 @@ Registered in the SendCloud panel as the integration webhook URL:
     https://<site>/api/method/erpnext_shipping.erpnext_shipping.webhook.sendcloud_webhook
 
 SendCloud POSTs a JSON body (with an HMAC-SHA256 signature in the
-`Sendcloud-Signature` header) whenever a parcel's status changes. We verify the
-signature, match the parcel to a Shipment and enqueue a normal tracking refresh —
-so the existing update_tracking logic (delivered_at, transit days, label-removed,
-Delivery Note updates) runs event-driven instead of on the hourly poll.
+`Sendcloud-Signature` header) whenever a parcel's status changes. We match the
+parcel to a Shipment and enqueue a normal tracking refresh — so the existing
+update_tracking logic (delivered_at, transit days, label-removed, Delivery Note
+updates) runs event-driven instead of on the hourly poll.
 """
 import hashlib
 import hmac
 import json
+import logging
 
 import frappe
 
 
 @frappe.whitelist(allow_guest=True)
 def sendcloud_webhook():
-	# Ham gövde (imza doğrulaması ham byte üzerinden yapılır).
 	body = frappe.request.get_data() if frappe.request else b""
-
-	if not _verify_signature(body):
-		frappe.local.response["http_status_code"] = 401
-		return {"ok": False, "error": "invalid signature"}
+	sig = _signature_result(body)
 
 	try:
 		payload = json.loads(body or b"{}")
@@ -35,28 +32,32 @@ def sendcloud_webhook():
 	action = payload.get("action")
 	parcel = payload.get("parcel") or {}
 	parcel_id = str(parcel.get("id") or "")
-	status = (parcel.get("status") or {}).get("message")
 	tracking = parcel.get("tracking_number")
+	status = (parcel.get("status") or {}).get("message")
 
-	# GEÇİCİ TEŞHİS: her gelen webhook'u Error Log'a yaz (UI'dan görünür, seviye/dosya
-	# yolu belirsizliği yok). Doğrulandıktan sonra kaldıracağız.
-	frappe.log_error(
-		title="sendcloud_webhook",
-		message=f"action={action!r} parcel={parcel_id} status={status!r} tracking={tracking}",
-	)
+	# Sessiz denetim logu (logs browser'da değil, site log dosyasında).
+	# sig: None = secret yok (doğrulama kapalı), True/False = HMAC eşleşme sonucu.
+	_log(f"action={action!r} parcel={parcel_id} status={status!r} tracking={tracking} sig={sig}")
 
-	# SendCloud bağlantı testi / diğer aksiyonlar (integration_connected, test vb.):
-	# 200 dön, işlem yapma. Böylece panelde "Unable to connect" hatası çıkmaz.
+	# İmza secret'ı tanımlı ve eşleşMİYORSA reddet (sahte webhook koruması).
+	if sig is False:
+		frappe.local.response["http_status_code"] = 401
+		return {"ok": False, "error": "invalid signature"}
+
+	# Bağlantı testi / diğer aksiyonlar: 200 dön, işlem yok.
 	if action != "parcel_status_changed":
 		return {"ok": True, "ignored": action or "no action"}
 
 	shipment = _find_shipment(parcel_id, tracking)
-	frappe.log_error(title="sendcloud_webhook", message=f"parcel={parcel_id} matched={shipment}")
-
 	if not shipment:
+		# Eşleşmeyen webhook nadir olmalı — görünür olsun diye Error Log'a yaz.
+		frappe.log_error(
+			title="SendCloud webhook: shipment not matched",
+			message=f"parcel={parcel_id} tracking={tracking} status={status!r}",
+		)
 		return {"ok": True, "ignored": "shipment not found", "parcel_id": parcel_id}
 
-	# Ağır işi (SendCloud'a tekrar sorup güncelleme) arka plana at; webhook'a hemen 200 dön.
+	# Ağır işi arka plana at; webhook'a hemen 200 dön.
 	frappe.enqueue(
 		"erpnext_shipping.erpnext_shipping.webhook.refresh_shipment_tracking",
 		queue="short",
@@ -66,12 +67,21 @@ def sendcloud_webhook():
 	return {"ok": True, "shipment": shipment}
 
 
-def _verify_signature(body):
-	"""True when the signature matches, or when no secret is configured (verification
-	is then skipped). SendCloud signs the raw body with HMAC-SHA256 (hex)."""
+def _log(msg):
+	try:
+		logger = frappe.logger("sendcloud_webhook", allow_site=True)
+		logger.setLevel(logging.INFO)
+		logger.info(msg)
+	except Exception:
+		pass
+
+
+def _signature_result(body):
+	"""None = no secret configured (verification off); True/False = HMAC-SHA256 match.
+	SendCloud signs the raw body with the integration secret."""
 	secret = frappe.db.get_single_value("SendCloud", "webhook_secret")
 	if not secret:
-		return True
+		return None
 	received = frappe.get_request_header("Sendcloud-Signature") or ""
 	expected = hmac.new(secret.encode("utf-8"), body or b"", hashlib.sha256).hexdigest()
 	return hmac.compare_digest(received, expected)
