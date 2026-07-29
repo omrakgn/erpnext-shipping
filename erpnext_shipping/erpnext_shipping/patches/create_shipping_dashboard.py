@@ -91,6 +91,18 @@ NUMBER_CARDS = [
 		),
 		"color": "#FFC733",
 	},
+	{
+		# Faturası quote'tan %20+ pahalı çıkan gönderi sayısı (anormal maliyet).
+		# Tıklayınca filtreli Shipment listesine gider.
+		"name": "High Cost Variance",
+		"label": "High Cost Variance (>20%)",
+		"document_type": "Shipment",
+		"function": "Count",
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipment", "custom_cost_variance_pct", ">", 20]]),
+		"color": "#CB2929",
+		"currency": "",
+	},
 ]
 
 # Cards from earlier versions to remove (renamed / replaced).
