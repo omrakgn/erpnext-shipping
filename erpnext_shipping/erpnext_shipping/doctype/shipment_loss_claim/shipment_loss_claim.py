@@ -117,7 +117,7 @@ def _send_claim_email(doc, recipients, subject, content, attachments=None, cc=No
 		frappe.throw(frappe._("No recipient e-mail is set."))
 	from frappe.core.doctype.communication.email import make as _make
 
-	_make(
+	comm = _make(
 		doctype="Shipment Loss Claim",
 		name=doc.name,
 		recipients=", ".join(recipient_list),
@@ -128,6 +128,15 @@ def _send_claim_email(doc, recipients, subject, content, attachments=None, cc=No
 		sent_or_received="Sent",
 		send_email=False,
 	)
+	# Also surface the email on the linked Shipment's timeline.
+	comm_name = (comm or {}).get("name")
+	if comm_name and doc.shipment:
+		try:
+			c = frappe.get_doc("Communication", comm_name)
+			c.add_link("Shipment", doc.shipment)
+			c.save(ignore_permissions=True)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "loss claim email timeline link")
 	frappe.sendmail(
 		recipients=recipient_list,
 		cc=[c.strip() for c in str(cc or "").replace(";", ",").split(",") if c.strip()] or None,
@@ -158,17 +167,10 @@ def download_claim_form(claim):
 	frappe.local.response.type = "pdf"
 
 
-@frappe.whitelist()
-def email_form_to_customer(claim):
-	"""Email the pre-filled DPD declaration form to the customer for signature."""
-	doc = frappe.get_doc("Shipment Loss Claim", claim)
-	if not doc.receiver_email:
-		frappe.throw(
-			frappe._("No receiver e-mail — use Print/Download and send it via the marketplace instead.")
-		)
-	pdf = _form_pdf(doc)
+def _form_email_defaults(doc):
+	"""Default recipient / subject / body for the customer form email."""
 	subject = frappe._("Delivery confirmation form — please sign and return ({0})").format(
-		doc.tracking_numbers or claim
+		doc.tracking_numbers or doc.name
 	)
 	content = frappe._(
 		"<p>Dear customer,</p><p>Regarding your order, the carrier needs a signed "
@@ -176,24 +178,12 @@ def email_form_to_customer(claim):
 		"attached form, tick the correct option, sign it and return it to us.</p>"
 		"<p>Thank you.</p>"
 	)
-	_send_claim_email(doc, doc.receiver_email, subject, content, attachments=[pdf])
-	doc.db_set("form_sent_date", frappe.utils.nowdate())
-	if doc.status == "Draft":
-		doc.db_set("status", "Form Sent to Customer")
-	return True
+	return {"recipient": doc.receiver_email or "", "subject": subject, "content": content}
 
 
-@frappe.whitelist()
-def submit_claim_to_carrier(claim):
-	"""Email the signed form + purchase invoice to the carrier's claim address."""
-	doc = frappe.get_doc("Shipment Loss Claim", claim)
-	recipient = _claim_email(doc)
-	if not recipient:
-		frappe.throw(frappe._("No carrier claim e-mail configured in Shipment Settings."))
-	attachments = [{"file_url": f} for f in (doc.signed_form, doc.purchase_invoice) if f]
-	if not attachments:
-		frappe.throw(frappe._("Attach the signed form (and purchase invoice) before submitting."))
-	subject = frappe._("Loss claim — parcel {0}").format(doc.tracking_numbers or claim)
+def _carrier_email_defaults(doc):
+	"""Default recipient / subject / body for the carrier claim submission."""
+	subject = frappe._("Loss claim — parcel {0}").format(doc.tracking_numbers or doc.name)
 	content = frappe._(
 		"<p>Dear DPD,</p><p>Please find attached the signed declaration of non-receipt "
 		"and the purchase invoice for the parcel(s) below. We would like to file a loss "
@@ -206,26 +196,113 @@ def submit_claim_to_carrier(claim):
 		doc.receiver_name or "",
 		doc.goods_value or "",
 	)
+	return {"recipient": _claim_email(doc) or "", "subject": subject, "content": content}
+
+
+@frappe.whitelist()
+def get_form_email_draft(claim):
+	"""Editable draft for the customer form email (shown in a confirm dialog)."""
+	return _form_email_defaults(frappe.get_doc("Shipment Loss Claim", claim))
+
+
+@frappe.whitelist()
+def get_carrier_email_draft(claim):
+	"""Editable draft for the carrier claim email (shown in a confirm dialog)."""
+	return _carrier_email_defaults(frappe.get_doc("Shipment Loss Claim", claim))
+
+
+@frappe.whitelist()
+def email_form_to_customer(claim, recipient=None, subject=None, content=None):
+	"""Email the pre-filled DPD declaration form to the customer for signature.
+	recipient/subject/content are the (edited) values confirmed in the dialog;
+	they fall back to the defaults when not supplied."""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	d = _form_email_defaults(doc)
+	recipient = recipient or d["recipient"]
+	if not recipient:
+		frappe.throw(
+			frappe._("No receiver e-mail — use Print/Download and send it via the marketplace instead.")
+		)
+	pdf = _form_pdf(doc)
+	_send_claim_email(doc, recipient, subject or d["subject"], content or d["content"], attachments=[pdf])
+	doc.db_set("form_sent_date", frappe.utils.nowdate())
+	if doc.status == "Draft":
+		doc.db_set("status", "Form Sent to Customer")
+	return True
+
+
+@frappe.whitelist()
+def submit_claim_to_carrier(claim, recipient=None, subject=None, content=None):
+	"""Email the signed form + purchase invoice to the carrier's claim address."""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	d = _carrier_email_defaults(doc)
+	recipient = recipient or d["recipient"]
+	if not recipient:
+		frappe.throw(frappe._("No carrier claim e-mail configured in Shipment Settings."))
+	attachments = [{"file_url": f} for f in (doc.signed_form, doc.purchase_invoice) if f]
+	if not attachments:
+		frappe.throw(frappe._("Attach the signed form (and purchase invoice) before submitting."))
 	cc = frappe.db.get_single_value("Shipment Settings", "claim_email_cc")
-	_send_claim_email(doc, recipient, subject, content, attachments=attachments, cc=cc)
+	_send_claim_email(
+		doc, recipient, subject or d["subject"], content or d["content"], attachments=attachments, cc=cc
+	)
 	doc.db_set("submitted_date", frappe.utils.nowdate())
 	doc.db_set("status", "Submitted to Carrier")
 	return True
 
 
-@frappe.whitelist()
-def create_loss_claim(shipment, claim_type="Not Delivered"):
-	"""Create a draft Shipment Loss Claim pre-filled from the shipment; return its name."""
-	existing = frappe.db.get_value(
-		"Shipment Loss Claim",
-		{"shipment": shipment, "status": ["not in", ["Rejected", "Recovered", "Written Off"]]},
-		"name",
-	)
+OPEN_CLAIM_STATUSES = ["Rejected", "Recovered", "Written Off"]
+
+
+def _create_one_claim(shipment, claim_type, tracking_number=None):
+	"""Create one draft claim (deduped per shipment + tracking number); the
+	tracking number scopes the claim to a single parcel when given."""
+	filters = {"shipment": shipment, "status": ["not in", OPEN_CLAIM_STATUSES]}
+	if tracking_number:
+		filters["tracking_numbers"] = tracking_number
+	existing = frappe.db.get_value("Shipment Loss Claim", filters, "name")
 	if existing:
 		return existing
 	doc = frappe.new_doc("Shipment Loss Claim")
 	doc.shipment = shipment
 	doc.claim_type = claim_type
 	doc.incident_date = frappe.utils.nowdate()
+	if tracking_number:
+		# set before insert so autofill keeps this single parcel (not all AWBs)
+		doc.tracking_numbers = tracking_number
 	doc.insert(ignore_permissions=True)
 	return doc.name
+
+
+@frappe.whitelist()
+def create_loss_claim(shipment, claim_type="Not Delivered", tracking_number=None):
+	"""Create a draft claim for one parcel (or the whole shipment); return its name."""
+	return _create_one_claim(shipment, claim_type, tracking_number or None)
+
+
+@frappe.whitelist()
+def create_loss_claims(shipment, claim_type="Not Delivered", tracking_numbers=None):
+	"""Create one claim per selected parcel tracking number; return their names."""
+	tns = frappe.parse_json(tracking_numbers) if tracking_numbers else [None]
+	return [_create_one_claim(shipment, claim_type, tn or None) for tn in (tns or [None])]
+
+
+@frappe.whitelist()
+def get_claim_parcels(shipment):
+	"""Parcels of a shipment for the 'which parcel is lost' picker, flagging any
+	that already have an open claim."""
+	from erpnext_shipping.erpnext_shipping.shipping import get_shipment_parcel_breakdown
+
+	rows = get_shipment_parcel_breakdown(shipment)
+	for r in rows:
+		tn = r.get("tracking_number")
+		r["existing_claim"] = (
+			frappe.db.get_value(
+				"Shipment Loss Claim",
+				{"shipment": shipment, "tracking_numbers": tn, "status": ["not in", OPEN_CLAIM_STATUSES]},
+				"name",
+			)
+			if tn
+			else None
+		)
+	return rows

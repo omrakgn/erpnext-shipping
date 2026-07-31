@@ -111,23 +111,16 @@ frappe.ui.form.on("Shipment", {
 				__("Delay")
 			);
 		}
-		// Kayıp / teslim sorunu için tazminat talebi (Loss Claim) aç.
+		// Kayıp / teslim sorunu için tazminat talebi (Loss Claim) aç. Birden çok
+		// parsel varsa hangisinin/hangilerinin kayıp olduğu seçilir; her seçilen
+		// parsel için ayrı claim açılır.
 		if (frm.doc.docstatus === 1 && frm.doc.awb_number) {
 			const delivered = frm.doc.custom_delivered_at || frm.doc.tracking_status === "Delivered";
+			const default_type = delivered ? "Delivered - Not Received" : "Not Delivered";
 			frm.add_custom_button(
 				__("File Loss Claim"),
 				function () {
-					frappe.call({
-						method: "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.create_loss_claim",
-						args: {
-							shipment: frm.doc.name,
-							claim_type: delivered ? "Delivered - Not Received" : "Not Delivered",
-						},
-						freeze: true,
-						callback: function (r) {
-							if (r.message) frappe.set_route("Form", "Shipment Loss Claim", r.message);
-						},
-					});
+					file_loss_claim(frm, default_type);
 				},
 				__("Loss")
 			);
@@ -384,6 +377,103 @@ function maybe_fill_description(frm) {
 		callback: function (r) {
 			if (r.message && !frm.doc.description_of_content) {
 				frm.set_value("description_of_content", r.message);
+			}
+		},
+	});
+}
+
+const LC_NS = "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim";
+
+// Kayıp parsel(ler)i seçtir; tek parsel varsa doğrudan claim aç.
+function file_loss_claim(frm, default_type) {
+	frappe.call({
+		method: `${LC_NS}.get_claim_parcels`,
+		args: { shipment: frm.doc.name },
+		freeze: true,
+		callback: function (r) {
+			const rows = r.message || [];
+			if (rows.length <= 1) {
+				const tn = rows.length ? rows[0].tracking_number : null;
+				create_loss_claims(frm, tn ? [tn] : [], default_type);
+				return;
+			}
+			const esc = frappe.utils.escape_html;
+			let html = `<div class="text-muted small" style="margin-bottom:8px;">${__(
+				"Select the parcel(s) that are lost. A separate claim is opened for each."
+			)}</div>`;
+			html +=
+				'<table class="table table-bordered" style="font-size:12px;"><thead><tr>' +
+				`<th style="width:36px;text-align:center;"><input type="checkbox" class="lc-all"></th>` +
+				`<th>${__("Tracking")}</th><th>${__("Carrier")}</th><th>${__("Status")}</th></tr></thead><tbody>`;
+			rows.forEach((p) => {
+				const has = p.existing_claim;
+				html +=
+					`<tr><td style="text-align:center;"><input type="checkbox" class="lc-pick" data-tn="${esc(
+						p.tracking_number || ""
+					)}" ${has ? "disabled" : ""}></td>` +
+					`<td>${esc(p.tracking_number || "")}</td><td>${esc(p.carrier || "")}</td>` +
+					`<td>${has ? __("Claim {0}", [esc(has)]) : esc(p.status || "")}</td></tr>`;
+			});
+			html += "</tbody></table>";
+
+			const d = new frappe.ui.Dialog({
+				title: __("File Loss Claim"),
+				fields: [
+					{
+						fieldname: "claim_type",
+						label: __("Claim Type"),
+						fieldtype: "Select",
+						options: "Not Delivered\nDelivered - Not Received\nDamaged",
+						default: default_type,
+						reqd: 1,
+					},
+					{ fieldname: "parcels", fieldtype: "HTML", options: html },
+				],
+				primary_action_label: __("Create Claim(s)"),
+				primary_action(values) {
+					const tns = [];
+					d.$wrapper.find(".lc-pick:checked").each(function () {
+						tns.push($(this).data("tn"));
+					});
+					if (!tns.length) {
+						frappe.msgprint(__("Select at least one parcel."));
+						return;
+					}
+					d.hide();
+					create_loss_claims(frm, tns, values.claim_type);
+				},
+			});
+			d.$wrapper.on("change", ".lc-all", function () {
+				d.$wrapper.find(".lc-pick:not(:disabled)").prop("checked", this.checked);
+			});
+			d.show();
+		},
+	});
+}
+
+function create_loss_claims(frm, tns, claim_type) {
+	frappe.call({
+		method: `${LC_NS}.create_loss_claims`,
+		args: { shipment: frm.doc.name, claim_type: claim_type, tracking_numbers: JSON.stringify(tns) },
+		freeze: true,
+		callback: function (r) {
+			const names = r.message || [];
+			if (!names.length) return;
+			if (names.length === 1) {
+				frappe.set_route("Form", "Shipment Loss Claim", names[0]);
+			} else {
+				frappe.msgprint({
+					title: __("Claims created"),
+					message: names
+						.map(
+							(n) =>
+								`<a href="/app/shipment-loss-claim/${encodeURIComponent(n)}">${frappe.utils.escape_html(
+									n
+								)}</a>`
+						)
+						.join("<br>"),
+					indicator: "green",
+				});
 			}
 		},
 	});
