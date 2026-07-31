@@ -74,6 +74,104 @@ class ShipmentLossClaim(Document):
 		self.net_loss = flt(self.goods_value) + flt(self.shipping_cost) - flt(self.compensation_amount)
 
 
+PRINT_FORMAT = "DPD Declaration of Non-Receipt"
+
+
+def _claim_email(doc):
+	"""Carrier claim-submission recipient by delivery region."""
+	country = (doc.delivery_country or "").lower()
+	field = (
+		"dpd_nl_claim_email"
+		if country in ("germany", "deutschland", "de")
+		else "dpd_belux_claim_email"
+	)
+	return frappe.db.get_single_value("Shipment Settings", field)
+
+
+def _send_claim_email(doc, recipients, subject, content, attachments=None, cc=None):
+	"""Send a claim email linked to the claim (shows in its Activity) with no
+	unsubscribe footer; attachments = [{fname,fcontent}] or [{file_url}]."""
+	recipient_list = [r.strip() for r in str(recipients or "").replace(";", ",").split(",") if r.strip()]
+	if not recipient_list:
+		frappe.throw(frappe._("No recipient e-mail is set."))
+	from frappe.core.doctype.communication.email import make as _make
+
+	_make(
+		doctype="Shipment Loss Claim",
+		name=doc.name,
+		recipients=", ".join(recipient_list),
+		cc=cc,
+		subject=subject,
+		content=content,
+		communication_medium="Email",
+		sent_or_received="Sent",
+		send_email=False,
+	)
+	frappe.sendmail(
+		recipients=recipient_list,
+		cc=[c.strip() for c in str(cc or "").replace(";", ",").split(",") if c.strip()] or None,
+		subject=subject,
+		message=content,
+		attachments=attachments or [],
+		add_unsubscribe_link=False,
+	)
+
+
+@frappe.whitelist()
+def email_form_to_customer(claim):
+	"""Email the pre-filled DPD declaration form to the customer for signature."""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	if not doc.receiver_email:
+		frappe.throw(
+			frappe._("No receiver e-mail — use Print/Download and send it via the marketplace instead.")
+		)
+	pdf = frappe.attach_print("Shipment Loss Claim", claim, print_format=PRINT_FORMAT)
+	subject = frappe._("Delivery confirmation form — please sign and return ({0})").format(
+		doc.tracking_numbers or claim
+	)
+	content = frappe._(
+		"<p>Dear customer,</p><p>Regarding your order, the carrier needs a signed "
+		"confirmation / declaration form to investigate the delivery. Please review the "
+		"attached form, tick the correct option, sign it and return it to us.</p>"
+		"<p>Thank you.</p>"
+	)
+	_send_claim_email(doc, doc.receiver_email, subject, content, attachments=[pdf])
+	doc.db_set("form_sent_date", frappe.utils.nowdate())
+	if doc.status == "Draft":
+		doc.db_set("status", "Form Sent to Customer")
+	return True
+
+
+@frappe.whitelist()
+def submit_claim_to_carrier(claim):
+	"""Email the signed form + purchase invoice to the carrier's claim address."""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	recipient = _claim_email(doc)
+	if not recipient:
+		frappe.throw(frappe._("No carrier claim e-mail configured in Shipment Settings."))
+	attachments = [{"file_url": f} for f in (doc.signed_form, doc.purchase_invoice) if f]
+	if not attachments:
+		frappe.throw(frappe._("Attach the signed form (and purchase invoice) before submitting."))
+	subject = frappe._("Loss claim — parcel {0}").format(doc.tracking_numbers or claim)
+	content = frappe._(
+		"<p>Dear DPD,</p><p>Please find attached the signed declaration of non-receipt "
+		"and the purchase invoice for the parcel(s) below. We would like to file a loss "
+		"claim.</p><ul>"
+		"<li>Parcel number(s): {0}</li><li>Dispatch date: {1}</li>"
+		"<li>Receiver: {2}</li><li>Goods value: {3}</li></ul><p>Kind regards.</p>"
+	).format(
+		doc.tracking_numbers or "",
+		frappe.utils.formatdate(doc.pickup_date) if doc.pickup_date else "",
+		doc.receiver_name or "",
+		doc.goods_value or "",
+	)
+	cc = frappe.db.get_single_value("Shipment Settings", "claim_email_cc")
+	_send_claim_email(doc, recipient, subject, content, attachments=attachments, cc=cc)
+	doc.db_set("submitted_date", frappe.utils.nowdate())
+	doc.db_set("status", "Submitted to Carrier")
+	return True
+
+
 @frappe.whitelist()
 def create_loss_claim(shipment, claim_type="Not Delivered"):
 	"""Create a draft Shipment Loss Claim pre-filled from the shipment; return its name."""

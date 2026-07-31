@@ -33,6 +33,9 @@
   "customer_shipping_account_head",
   "loss_section",
   "presumed_lost_days",
+  "dpd_nl_claim_email",
+  "dpd_belux_claim_email",
+  "claim_email_cc",
   "column_break_loss",
   "dpd_claim_window_days",
   "fedex_claim_window_days"
@@ -214,6 +217,28 @@
    "fieldtype": "Int",
    "label": "Presumed Lost After (days)",
    "description": "A shipment undelivered this many days after Pickup Date is flagged Presumed Lost (carriers rarely mark parcels Lost). Surfaced in the Presumed Lost report/card for a claim decision."
+  },
+  {
+   "fieldname": "dpd_nl_claim_email",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "DPD NL Claim Email (Germany)",
+   "description": "Recipient for 'Submit to Carrier' on German shipments (DPD Netherlands, Oirschot form)."
+  },
+  {
+   "default": "reply@dpd.be",
+   "fieldname": "dpd_belux_claim_email",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "DPD BELUX Claim Email",
+   "description": "Recipient for 'Submit to Carrier' on Belgium/NL/LU shipments."
+  },
+  {
+   "fieldname": "claim_email_cc",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "Claim Email CC",
+   "description": "Optional CC on claim submissions (e.g. SendCloud / your own address)."
   },
   {
    "fieldname": "column_break_loss",
