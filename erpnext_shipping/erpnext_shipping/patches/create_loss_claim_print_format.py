@@ -72,7 +72,7 @@ HTML = r"""
      {% else %}Ik/Wij bevestig(en) dat ik/wij, of een bij mij/ons bekende persoon, het bovenstaande pakket heb(ben) ontvangen. (datum): _______________{% endif %}
   </p>
 
-  <p>☐ <b style="color:#d40511;">{{ "Rechtsverbindliche Erklärung des Nicht-Erhalts" if is_de else "Wettelijk bindende verklaring van niet-ontvangst" }}</b>
+  <p>☒ <b style="color:#d40511;">{{ "Rechtsverbindliche Erklärung des Nicht-Erhalts" if is_de else "Wettelijk bindende verklaring van niet-ontvangst" }}</b>
      <span style="font-style:italic; color:#555;">(Legally Binding Declaration of Non-Receipt)</span><br>
      {% if is_de %}Ich/wir erkläre(n) hiermit, dass das oben genannte Paket nicht in meinen/unseren Besitz und auch nicht in den Besitz einer mir/uns bekannten Person gelangt ist.
      {% else %}Ik/Wij bevestig(en) dat ik/wij, of een bij mij/ons bekende persoon, het bovenstaande pakket niet heb(ben) ontvangen.{% endif %}
@@ -83,23 +83,34 @@ HTML = r"""
      {% else %}Houd er rekening mee dat als u een valse verklaring aflegt in deze wettelijk bindende verklaring, u mogelijk een misdrijf pleegt dat wettelijk strafbaar is.{% endif %}
      (Please note that a false statement in this Legally Binding Declaration may be a crime punishable by law.)</p>
 
-  <table style="width:100%; margin-top:24px;">
+  <table style="width:100%; margin-top:28px; border-collapse:collapse;">
     <tr>
-      <td style="width:50%;">______________________________<br>
-        {{ "Datum der Unterzeichnung" if is_de else "Datum van ondertekening" }}
-        <span style="font-style:italic; color:#555;">(Date of signing)</span></td>
-      <td>______________________________<br>
-        {{ "Name und Funktion des Unterzeichners" if is_de else "Naam en functie ondertekenaar" }}
-        <span style="font-style:italic; color:#555;">(Name and Position)</span></td>
+      <td style="width:50%; vertical-align:bottom; padding-right:24px;">
+        <div style="font-weight:bold; min-height:16px;">{{ frappe.utils.formatdate(frappe.utils.nowdate()) }}</div>
+        <div style="border-top:1px solid #333; padding-top:2px;">
+          {{ "Datum der Unterzeichnung" if is_de else "Datum van ondertekening" }}
+          <span style="font-style:italic; color:#555;">(Date of signing)</span></div>
+      </td>
+      <td style="width:50%; vertical-align:bottom;">
+        <div style="font-weight:bold; min-height:16px;">{{ doc.receiver_name or "" }}</div>
+        <div style="border-top:1px solid #333; padding-top:2px;">
+          {{ "Name und Funktion des Unterzeichners" if is_de else "Naam en functie ondertekenaar" }}
+          <span style="font-style:italic; color:#555;">(Name and Position of Signatory)</span></div>
+      </td>
     </tr>
-    <tr><td style="height:28px;"></td><td></td></tr>
     <tr>
-      <td>______________________________<br>
-        {{ "Name der Firma" if is_de else "Bedrijfsnaam" }}
-        <span style="font-style:italic; color:#555;">(Name of Company)</span></td>
-      <td>______________________________<br>
-        {{ "Unterschrift" if is_de else "Handtekening" }}
-        <span style="font-style:italic; color:#555;">(Signature)</span></td>
+      <td style="vertical-align:bottom; padding-top:34px; padding-right:24px;">
+        <div style="min-height:16px;"></div>
+        <div style="border-top:1px solid #333; padding-top:2px;">
+          {{ "Name der Firma" if is_de else "Bedrijfsnaam" }}
+          <span style="font-style:italic; color:#555;">(Name of Company)</span></div>
+      </td>
+      <td style="vertical-align:bottom; padding-top:34px;">
+        <div style="min-height:16px;"></div>
+        <div style="border-top:1px solid #333; padding-top:2px;">
+          {{ "Unterschrift" if is_de else "Handtekening" }}
+          <span style="font-style:italic; color:#555;">(Signature)</span></div>
+      </td>
     </tr>
   </table>
 

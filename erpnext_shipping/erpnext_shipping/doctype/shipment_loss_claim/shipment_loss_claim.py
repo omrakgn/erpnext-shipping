@@ -32,7 +32,12 @@ class ShipmentLossClaim(Document):
 		fill("tracking_numbers", sh.get("awb_number"))
 		fill("pickup_date", sh.get("pickup_date"))
 		fill("customer", sh.get("delivery_customer") or sh.get("delivery_company"))
-		fill("sender_name", sh.get("pickup_company") or frappe.defaults.get_default("company"))
+		fill(
+			"sender_name",
+			frappe.db.get_single_value("Shipment Settings", "claim_sender_name")
+			or sh.get("pickup_company")
+			or frappe.defaults.get_default("company"),
+		)
 		fill("receiver_name", _clean_contact(sh.get("delivery_contact_name")) or sh.get("delivery_customer"))
 		fill("receiver_email", sh.get("delivery_contact_email"))
 		fill("receiver_phone", sh.get("delivery_contact_phone"))

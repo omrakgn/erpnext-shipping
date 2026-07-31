@@ -32,6 +32,7 @@
   "margin_section",
   "customer_shipping_account_head",
   "loss_section",
+  "claim_sender_name",
   "presumed_lost_days",
   "dpd_nl_claim_email",
   "dpd_belux_claim_email",
@@ -210,6 +211,12 @@
    "fieldname": "loss_section",
    "fieldtype": "Section Break",
    "label": "Lost Shipments & Claims"
+  },
+  {
+   "fieldname": "claim_sender_name",
+   "fieldtype": "Data",
+   "label": "Sender Name on Claim Form",
+   "description": "Printed as 'Versendername / Sender' on the DPD declaration form (your brand as it appears on the DPD parcel label). Falls back to the shipment's pickup company when blank."
   },
   {
    "default": "20",
