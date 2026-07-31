@@ -21,6 +21,7 @@
   "receiver_name",
   "receiver_address",
   "delivery_country",
+  "claim_form_language",
   "column_break_parties",
   "receiver_email",
   "receiver_phone",
@@ -148,7 +149,15 @@
    "fieldname": "delivery_country",
    "fieldtype": "Data",
    "label": "Delivery Country",
-   "description": "Determines which DPD form / language is used (DE vs BELUX)."
+   "description": "Used to auto-pick the DPD form / language when Form Language is Auto (DE for Germany, BELUX otherwise)."
+  },
+  {
+   "default": "Auto (by country)",
+   "fieldname": "claim_form_language",
+   "fieldtype": "Select",
+   "label": "Form Language",
+   "options": "Auto (by country)\nGermany (DE)\nBELUX (NL)",
+   "description": "Which DPD form to print. Leave on Auto to decide by delivery country, or force a language here."
   },
   {
    "fieldname": "column_break_parties",

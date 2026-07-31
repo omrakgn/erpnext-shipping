@@ -25,6 +25,13 @@ FORM_FILES = {"de": "lbd_DE.pdf", "belux": "lbd_dutch.pdf"}
 
 
 def _region(doc):
+	"""Which DPD form to render. An explicit Form Language wins; otherwise
+	decide by delivery country (Germany -> DE, everything else -> BELUX)."""
+	choice = (doc.get("claim_form_language") or "").lower()
+	if "germany" in choice or choice.strip() == "de":
+		return "de"
+	if "belux" in choice or choice.strip() == "nl":
+		return "belux"
 	country = (doc.delivery_country or "").lower()
 	return "de" if country in ("germany", "deutschland", "de") else "belux"
 

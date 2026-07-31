@@ -10,6 +10,24 @@ from erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest i
 DEFAULT_CLAIM_WINDOW = {"dpd": 21, "fedex": 30}
 
 
+def _contact_details(contact_name):
+	"""Phone (mobile preferred) and email from the linked Contact, so the claim
+	fills even when the Shipment doesn't carry the contact phone directly."""
+	if not contact_name or not frappe.db.exists("Contact", contact_name):
+		return {}
+	c = frappe.get_doc("Contact", contact_name)
+	phone = c.get("mobile_no") or c.get("phone")
+	if not phone:
+		for row in c.get("phone_nos") or []:
+			if row.get("is_primary_mobile_no") or row.get("is_primary_phone"):
+				phone = row.get("phone")
+				break
+		else:
+			nums = c.get("phone_nos") or []
+			phone = nums[0].get("phone") if nums else None
+	return {"phone": phone, "email": c.get("email_id")}
+
+
 class ShipmentLossClaim(Document):
 	def validate(self):
 		self.autofill_from_shipment()
@@ -38,9 +56,10 @@ class ShipmentLossClaim(Document):
 			or sh.get("pickup_company")
 			or frappe.defaults.get_default("company"),
 		)
+		contact = _contact_details(sh.get("delivery_contact_name"))
 		fill("receiver_name", _clean_contact(sh.get("delivery_contact_name")) or sh.get("delivery_customer"))
-		fill("receiver_email", sh.get("delivery_contact_email"))
-		fill("receiver_phone", sh.get("delivery_contact_phone"))
+		fill("receiver_email", sh.get("delivery_contact_email") or contact.get("email"))
+		fill("receiver_phone", sh.get("delivery_contact_phone") or contact.get("phone"))
 		fill("goods_value", sh.get("value_of_goods"))
 		fill("shipping_cost", sh.get("custom_shipping_cost"))
 		if not self.currency:
