@@ -945,14 +945,22 @@ def sync_sendcloud_label(shipment):
 	pids = [str(p.get("id")) for p in parcels]
 	tracking_numbers = [p.get("tracking_number") for p in parcels if p.get("tracking_number")]
 	tracking_urls = [p.get("tracking_url") for p in parcels if p.get("tracking_url")]
-	first_carrier = parcels[0].get("carrier") or {}
 	total_weight = sum(flt(p.get("weight")) for p in parcels)
+
+	# Bir order farklı carrier'lara bölünmüş olabilir (yatak DPD + yastık FedEx);
+	# hepsini virgülle birleştir, yoksa Pickup Manifest tek carrier sanıp karışır.
+	carriers = []
+	for p in parcels:
+		c = p.get("carrier") or {}
+		name = c.get("name") or c.get("code")
+		if name and name not in carriers:
+			carriers.append(name)
 
 	shipment_ids = ", ".join(pids)
 	shipment_doc.db_set(
 		{
 			"service_provider": SENDCLOUD_PROVIDER,
-			"carrier": first_carrier.get("name") or first_carrier.get("code") or "SendCloud",
+			"carrier": ", ".join(carriers) or "SendCloud",
 			"shipment_id": shipment_ids,
 			"awb_number": ", ".join(tracking_numbers),
 			"tracking_url": ", ".join(tracking_urls),

@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
 
+import json
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -205,6 +207,16 @@ def generate_pickup_manifests(pickup_date, company=None):
 		sh = frappe.get_doc("Shipment", sh_row.name)
 		contact = _clean_contact(sh.get("delivery_contact_name"))
 		trackings = [t for t in (sh.awb_number or "").split(", ") if t]
+		# tracking no -> gerçek carrier (SendCloud tracking detayından). Panel'de
+		# oluşturulup sync edilen çok-carrier gönderilerde parça satırlarında carrier
+		# yok; bu harita her parçayı DOĞRU carrier manifestosuna koymayı sağlar.
+		track_carrier = {}
+		try:
+			for p in json.loads(sh.get("custom_tracking_details") or "[]"):
+				if p.get("tracking_number") and p.get("carrier"):
+					track_carrier[p["tracking_number"]] = p["carrier"]
+		except Exception:
+			pass
 		pmap = _parcel_item_map(sh)
 		parcels = sh.get("shipment_parcel") or []
 		all_items = _shipment_items(sh)
@@ -228,8 +240,13 @@ def generate_pickup_manifests(pickup_date, company=None):
 				for _c in range(int(prow.count or 1)):
 					tracking = trackings[track_idx] if track_idx < len(trackings) else (sh.awb_number or "")
 					track_idx += 1
-					# Koli kendi carrier'ı (per-parcel seçimi) yoksa gönderinin carrier'ı
-					pcarrier = prow.get("custom_shipping_carrier") or sh.carrier
+					# Parçanın gerçek carrier'ı: önce tracking->carrier (sync detayı),
+					# sonra per-parcel seçimi, en son gönderinin (birleşik olabilen) carrier'ı.
+					pcarrier = (
+						track_carrier.get(tracking)
+						or prow.get("custom_shipping_carrier")
+						or sh.carrier
+					)
 					if pmap:
 						items = [{"item_code": c, "qty": q} for c, q in (pmap.get(i) or {}).items()]
 					elif len(parcels) == 1:
