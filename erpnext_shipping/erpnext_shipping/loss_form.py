@@ -55,8 +55,20 @@ def _field_values(doc):
 		# Non-Receipt is always the selected option; Receipt stays empty.
 		"non_receipt_mark": "X",
 		"sign_date": formatdate(nowdate()),
+		# Signatory = the person; company name only when the customer is a Company.
 		"sign_name": doc.receiver_name or "",
+		"sign_company": _company_name(doc),
 	}
+
+
+def _company_name(doc):
+	"""Customer's company name for the 'Name der Firma' line — only when the
+	customer is a Company (individuals leave it blank)."""
+	cust = doc.customer
+	if cust and frappe.db.exists("Customer", cust):
+		if (frappe.db.get_value("Customer", cust, "customer_type") or "") == "Company":
+			return cust
+	return ""
 
 
 # --- strategy 1: fillable AcroForm ------------------------------------------
@@ -106,31 +118,35 @@ OVERLAY_FONT = "Helvetica"
 OVERLAY_FONT_SIZE = 9
 OVERLAY_MIN_SIZE = 6.5
 OVERLAY_COORDS = {
-	# Germany form (lbd_DE.pdf, 595 wide): value cell ~x=302..525.
+	# Germany form (lbd_DE.pdf, 595 wide): value cell x=298..524; signing
+	# lines at y=145.6 (date/signatory) and y=103.3 (company/signature).
 	"de": {
 		"dispatch_date":    (315, 562, 9, 205),
 		"tracking_numbers": (315, 541, 9, 205),
 		"sender_name":      (315, 520, 9, 205),
-		"receiver_name":    (315, 500, 9, 205),
-		"receiver_address": (315, 490, 8, 205),
-		"receiver_email":   (315, 478, 9, 205),
-		"receiver_phone":   (315, 457, 9, 205),
+		"receiver_name":    (315, 503, 9, 205),
+		"receiver_address": (315, 494, 7.5, 205),
+		"receiver_email":   (315, 480, 9, 205),
+		"receiver_phone":   (315, 459, 9, 205),
 		"non_receipt_mark": (71.5, 326.5, 10),
-		"sign_date":        (200, 173, 9, 95),
-		"sign_name":        (305, 156, 9, 240),
+		"sign_date":        (76, 150, 9, 195),
+		"sign_name":        (303, 150, 9, 215),
+		"sign_company":     (76, 108, 9, 195),
 	},
-	# BELUX form (lbd_dutch.pdf): value column ~x=285, cell right ~560.
+	# BELUX form (lbd_dutch.pdf): value cell x=178..560; signing lines at
+	# y=212.5 (date/signatory) and y=155.3 (company/signature).
 	"belux": {
-		"dispatch_date":    (285, 631, 9, 270),
-		"tracking_numbers": (285, 608, 9, 270),
-		"sender_name":      (285, 585, 9, 270),
-		"receiver_name":    (285, 562, 9, 270),
-		"receiver_address": (285, 552, 8, 270),
-		"receiver_email":   (285, 539, 9, 270),
-		"receiver_phone":   (285, 516, 9, 270),
+		"dispatch_date":    (285, 633, 9, 270),
+		"tracking_numbers": (285, 609, 9, 270),
+		"sender_name":      (285, 586, 9, 270),
+		"receiver_name":    (285, 567, 9, 270),
+		"receiver_address": (285, 558, 7.5, 270),
+		"receiver_email":   (285, 540, 9, 270),
+		"receiver_phone":   (285, 517, 9, 270),
 		"non_receipt_mark": (36.5, 366.5, 10),
-		"sign_date":        (213, 234, 9, 78),
-		"sign_name":        (300, 222, 9, 240),
+		"sign_date":        (41, 220, 9, 230),
+		"sign_name":        (300, 220, 9, 250),
+		"sign_company":     (41, 165, 9, 230),
 	},
 }
 
