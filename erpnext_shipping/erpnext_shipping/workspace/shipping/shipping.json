@@ -17,7 +17,7 @@
    "label": "Avg Transit Days by Carrier"
   }
  ],
- "content": "[{\"id\": \"hdr_main\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Shipping</b></span>\", \"col\": 12}}, {\"id\": \"sc_ship\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipment\", \"col\": 3}}, {\"id\": \"sc_cost\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipping Cost Entry\", \"col\": 3}}, {\"id\": \"sc_manifest\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Pickup Manifest\", \"col\": 3}}, {\"id\": \"sc_report\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipping Costs\", \"col\": 3}}, {\"id\": \"nc1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Shipping Cost Last Month\", \"col\": 3}}, {\"id\": \"nc2\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Unmatched Cost Entries\", \"col\": 3}}, {\"id\": \"nc3\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Labels Removed\", \"col\": 3}}, {\"id\": \"nc5\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Delayed (5+ days)\", \"col\": 3}}, {\"id\": \"nc4\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Avg Delivery Time (Days)\", \"col\": 3}}, {\"id\": \"nc6\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Weight/Size Surcharges\", \"col\": 3}}, {\"id\": \"nc7\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Surcharge Total (Last Month)\", \"col\": 3}}, {\"id\": \"nc8\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"High Cost Variance\", \"col\": 3}}, {\"id\": \"chart1\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Monthly Shipping Cost\", \"col\": 12}}, {\"id\": \"chart2\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Shipping Cost by Carrier\", \"col\": 6}}, {\"id\": \"chart3\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Shipping Cost by Country\", \"col\": 6}}, {\"id\": \"chart4\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Avg Transit Days by Carrier\", \"col\": 12}}, {\"id\": \"hdr_cards\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"card_ship\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping\", \"col\": 4}}, {\"id\": \"card_costs\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping Costs\", \"col\": 4}}, {\"id\": \"card_settings\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}]",
+ "content": "[{\"id\": \"hdr_main\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Shipping</b></span>\", \"col\": 12}}, {\"id\": \"sc_ship\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipment\", \"col\": 3}}, {\"id\": \"sc_cost\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipping Cost Entry\", \"col\": 3}}, {\"id\": \"sc_manifest\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Pickup Manifest\", \"col\": 3}}, {\"id\": \"sc_report\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shipping Costs\", \"col\": 3}}, {\"id\": \"nc1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Shipping Cost Last Month\", \"col\": 3}}, {\"id\": \"nc2\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Unmatched Cost Entries\", \"col\": 3}}, {\"id\": \"nc3\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Labels Removed\", \"col\": 3}}, {\"id\": \"nc5\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Delayed (5+ days)\", \"col\": 3}}, {\"id\": \"nc4\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Avg Delivery Time (Days)\", \"col\": 3}}, {\"id\": \"nc6\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Weight/Size Surcharges\", \"col\": 3}}, {\"id\": \"nc7\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Surcharge Total (Last Month)\", \"col\": 3}}, {\"id\": \"nc8\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"High Cost Variance\", \"col\": 3}}, {\"id\": \"nc9\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Presumed Lost\", \"col\": 3}}, {\"id\": \"nc10\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Open Loss Claims\", \"col\": 3}}, {\"id\": \"nc11\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Net Loss (Open Claims)\", \"col\": 3}}, {\"id\": \"chart1\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Monthly Shipping Cost\", \"col\": 12}}, {\"id\": \"chart2\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Shipping Cost by Carrier\", \"col\": 6}}, {\"id\": \"chart3\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Shipping Cost by Country\", \"col\": 6}}, {\"id\": \"chart4\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Avg Transit Days by Carrier\", \"col\": 12}}, {\"id\": \"hdr_cards\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"card_ship\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping\", \"col\": 4}}, {\"id\": \"card_costs\", \"type\": \"card\", \"data\": {\"card_name\": \"Shipping Costs\", \"col\": 4}}, {\"id\": \"card_settings\", \"type\": \"card\", \"data\": {\"card_name\": \"Settings\", \"col\": 4}}, {\"id\": \"card_lost\", \"type\": \"card\", \"data\": {\"card_name\": \"Lost & Claims\", \"col\": 4}}]",
  "creation": "2026-07-11 00:00:00.000000",
  "docstatus": 0,
  "doctype": "Workspace",
@@ -205,6 +205,47 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Lost & Claims",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shipment Loss Claim",
+   "link_count": 0,
+   "link_to": "Shipment Loss Claim",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Presumed Lost Shipments",
+   "link_count": 0,
+   "link_to": "Presumed Lost Shipments",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Carrier Loss Scorecard",
+   "link_count": 0,
+   "link_to": "Carrier Loss Scorecard",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
  "modified": "2026-07-18 00:00:00.000000",
@@ -243,6 +284,18 @@
   {
    "label": "High Cost Variance",
    "number_card_name": "High Cost Variance"
+  },
+  {
+   "label": "Presumed Lost",
+   "number_card_name": "Presumed Lost"
+  },
+  {
+   "label": "Open Loss Claims",
+   "number_card_name": "Open Loss Claims"
+  },
+  {
+   "label": "Net Loss (Open Claims)",
+   "number_card_name": "Net Loss (Open Claims)"
   }
  ],
  "owner": "Administrator",

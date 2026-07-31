@@ -33,6 +33,7 @@
   "column_break_dates",
   "submitted_date",
   "claim_deadline",
+  "deadline_reminded",
   "decision_date",
   "paid_date",
   "financials_section",
@@ -216,6 +217,12 @@
    "label": "Claim Deadline",
    "description": "Last date to file the claim with the carrier. Reminder fires before this.",
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "deadline_reminded",
+   "fieldtype": "Date",
+   "label": "Deadline Reminder Sent",
+   "read_only": 1
   },
   {
    "fieldname": "decision_date",

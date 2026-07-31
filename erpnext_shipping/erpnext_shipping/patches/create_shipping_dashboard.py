@@ -106,6 +106,42 @@ NUMBER_CARDS = [
 		"color": "#CB2929",
 		"currency": "",
 	},
+	{
+		# Eşiği aşıp teslim edilmemiş (kayıp varsayılan) gönderi sayısı.
+		"name": "Presumed Lost",
+		"label": "Presumed Lost",
+		"document_type": "Shipment",
+		"function": "Count",
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipment", "custom_presumed_lost", "=", 1]]),
+		"color": "#CB2929",
+		"currency": "",
+	},
+	{
+		# Kapanmamış (karar verilmemiş) tazminat talepleri.
+		"name": "Open Loss Claims",
+		"label": "Open Loss Claims",
+		"document_type": "Shipment Loss Claim",
+		"function": "Count",
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps(
+			[["Shipment Loss Claim", "status", "not in", ["Paid", "Rejected", "Written Off", "Recovered"]]]
+		),
+		"color": "#FFC733",
+		"currency": "",
+	},
+	{
+		# Açık taleplerdeki toplam net zarar (mal + kargo - tazminat). Para birimi kalsın.
+		"name": "Net Loss (Open Claims)",
+		"label": "Net Loss (Open Claims)",
+		"document_type": "Shipment Loss Claim",
+		"function": "Sum",
+		"aggregate_function_based_on": "net_loss",
+		"filters_json": json.dumps(
+			[["Shipment Loss Claim", "status", "not in", ["Rejected", "Recovered"]]]
+		),
+		"color": "#CB2929",
+	},
 ]
 
 # Cards from earlier versions to remove (renamed / replaced).

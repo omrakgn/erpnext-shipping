@@ -38,6 +38,40 @@ frappe.ui.form.on("Shipment Loss Claim", {
 			);
 		}
 
+		// Reship: kayıp parsel için yeni DN + yeni Shipment (taslak) oluştur.
+		if (frm.doc.replacement_shipment) {
+			frm.add_custom_button(
+				__("Open Replacement Shipment"),
+				() => frappe.set_route("Form", "Shipment", frm.doc.replacement_shipment),
+				__("Loss")
+			);
+		} else {
+			frm.add_custom_button(
+				__("Create Replacement Shipment"),
+				() => {
+					frappe.confirm(
+						__(
+							"Create a replacement Delivery Note and Shipment (both as drafts) for this lost parcel?"
+						),
+						() => {
+							frappe.call({
+								method: "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.create_replacement_shipment",
+								args: { claim: frm.doc.name },
+								freeze: true,
+								freeze_message: __("Creating replacement"),
+								callback: (r) => {
+									if (!r.exc && r.message && r.message.shipment) {
+										frappe.set_route("Form", "Shipment", r.message.shipment);
+									}
+								},
+							});
+						}
+					);
+				},
+				__("Loss")
+			);
+		}
+
 		// İmzalı form geldiyse carrier'a gönder (imzalı form + satınalma faturası).
 		if (frm.doc.signed_form && frm.doc.status !== "Submitted to Carrier") {
 			frm.add_custom_button(

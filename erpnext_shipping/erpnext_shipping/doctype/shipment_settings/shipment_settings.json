@@ -39,7 +39,8 @@
   "claim_email_cc",
   "column_break_loss",
   "dpd_claim_window_days",
-  "fedex_claim_window_days"
+  "fedex_claim_window_days",
+  "claim_deadline_reminder_days"
  ],
  "fields": [
   {
@@ -263,6 +264,13 @@
    "fieldname": "fedex_claim_window_days",
    "fieldtype": "Int",
    "label": "FedEx Claim Window (days)"
+  },
+  {
+   "default": "3",
+   "fieldname": "claim_deadline_reminder_days",
+   "fieldtype": "Int",
+   "label": "Deadline Reminder (days before)",
+   "description": "Email the Internal Recipient(s) this many days before a claim's deadline if it hasn't been submitted to the carrier yet. Sent once per claim. 0 = off."
   }
  ],
  "issingle": 1,

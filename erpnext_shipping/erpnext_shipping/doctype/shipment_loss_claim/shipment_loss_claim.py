@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 import frappe
 from frappe.model.document import Document
-from frappe.utils import add_days, flt
+from frappe.utils import add_days, cint, flt, nowdate
 
 from erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest import _clean_contact
 
@@ -306,3 +306,137 @@ def get_claim_parcels(shipment):
 			else None
 		)
 	return rows
+
+
+# --- deadline reminder (scheduler) ------------------------------------------
+# Claims already handed to the carrier (or closed) no longer need a reminder.
+REMINDER_DONE_STATUSES = [
+	"Submitted to Carrier",
+	"Under Review",
+	"Approved",
+	"Rejected",
+	"Paid",
+	"Written Off",
+	"Recovered",
+]
+
+
+def remind_claim_deadlines():
+	"""Daily job: email the internal recipient about claims whose carrier deadline
+	is within the reminder window and that haven't been submitted yet. Once per
+	claim (guarded by deadline_reminded)."""
+	days = cint(frappe.db.get_single_value("Shipment Settings", "claim_deadline_reminder_days"))
+	if days <= 0:
+		return
+	recipient = frappe.db.get_single_value("Shipment Settings", "delay_digest_recipient")
+	if not recipient:
+		return
+	claims = frappe.get_all(
+		"Shipment Loss Claim",
+		filters={
+			"claim_deadline": ["<=", add_days(nowdate(), days)],
+			"submitted_date": ["is", "not set"],
+			"deadline_reminded": ["is", "not set"],
+			"status": ["not in", REMINDER_DONE_STATUSES],
+		},
+		pluck="name",
+	)
+	for name in claims:
+		doc = frappe.get_doc("Shipment Loss Claim", name)
+		if not doc.claim_deadline:
+			continue
+		_send_deadline_reminder(doc, recipient)
+		doc.db_set("deadline_reminded", nowdate())
+	frappe.db.commit()
+
+
+def _send_deadline_reminder(doc, recipient):
+	overdue = doc.claim_deadline < nowdate()
+	subject = frappe._("{0}Claim deadline {1} — {2}").format(
+		"OVERDUE: " if overdue else "",
+		frappe.utils.formatdate(doc.claim_deadline),
+		doc.tracking_numbers or doc.name,
+	)
+	link = frappe.utils.get_url_to_form("Shipment Loss Claim", doc.name)
+	content = frappe._(
+		"<p>The loss claim <a href='{0}'>{1}</a> has not been submitted to the carrier "
+		"and its filing deadline is <b>{2}</b>{3}.</p>"
+		"<ul><li>Carrier: {4}</li><li>Parcel(s): {5}</li><li>Goods value: {6}</li></ul>"
+		"<p>Collect the signed form + invoice and use <b>Submit to Carrier</b> before the deadline.</p>"
+	).format(
+		link,
+		doc.name,
+		frappe.utils.formatdate(doc.claim_deadline),
+		frappe._(" (already passed)") if overdue else "",
+		doc.carrier or "",
+		doc.tracking_numbers or "",
+		doc.goods_value or "",
+	)
+	_send_claim_email(doc, recipient, subject, content)
+
+
+# --- replacement shipment (reship) ------------------------------------------
+# Cleared on the copied Shipment so the reship starts as a fresh, untracked draft.
+_RESET_SHIPMENT_FIELDS = [
+	"shipment_id",
+	"awb_number",
+	"tracking_url",
+	"tracking_status",
+	"carrier",
+	"service_provider",
+	"custom_delivered_at",
+	"custom_tracking_details",
+	"custom_is_delayed",
+	"custom_delay_notified",
+	"custom_delay_notified_at",
+	"custom_presumed_lost",
+	"custom_label_removed",
+	"custom_shipping_cost",
+	"custom_surcharge_amount",
+	"custom_has_weight_surcharge",
+	"custom_cost_variance",
+	"custom_cost_variance_pct",
+	"custom_customer_shipping_charge",
+	"custom_shipping_margin",
+	"shipment_amount",
+]
+
+
+@frappe.whitelist()
+def create_replacement_shipment(claim):
+	"""Reship a lost parcel: duplicate the original Delivery Note and Shipment as
+	fresh drafts (untracked), link the new Shipment back on the claim. Manual only."""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	if doc.replacement_shipment:
+		return {"shipment": doc.replacement_shipment}
+	if not doc.shipment:
+		frappe.throw(frappe._("This claim has no linked Shipment to reship."))
+	orig = frappe.get_doc("Shipment", doc.shipment)
+
+	dn_name = doc.delivery_note
+	if not dn_name and orig.get("shipment_delivery_note"):
+		dn_name = orig.shipment_delivery_note[0].delivery_note
+	new_dn_name = None
+	if dn_name and frappe.db.exists("Delivery Note", dn_name):
+		new_dn = frappe.copy_doc(frappe.get_doc("Delivery Note", dn_name))
+		new_dn.set("posting_date", nowdate())
+		new_dn.set("set_posting_time", 1)
+		new_dn.set(
+			"remarks",
+			frappe._("Replacement for lost shipment {0} (claim {1}).").format(doc.shipment, doc.name),
+		)
+		new_dn.insert(ignore_permissions=True)
+		new_dn_name = new_dn.name
+
+	new_ship = frappe.copy_doc(orig)
+	for f in _RESET_SHIPMENT_FIELDS:
+		if new_ship.meta.has_field(f):
+			new_ship.set(f, None)
+	new_ship.set("pickup_date", nowdate())
+	new_ship.set("shipment_delivery_note", [])
+	if new_dn_name:
+		new_ship.append("shipment_delivery_note", {"delivery_note": new_dn_name})
+	new_ship.insert(ignore_permissions=True)
+
+	doc.db_set("replacement_shipment", new_ship.name)
+	return {"shipment": new_ship.name, "delivery_note": new_dn_name}

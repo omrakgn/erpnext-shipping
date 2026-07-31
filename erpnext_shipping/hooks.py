@@ -125,6 +125,8 @@ scheduler_events = {
 		"erpnext_shipping.erpnext_shipping.delay.flag_and_notify_delayed",
 		# Eşiği aşan teslim edilmemiş gönderileri "Presumed Lost" işaretle.
 		"erpnext_shipping.erpnext_shipping.loss.flag_presumed_lost",
+		# Süresi yaklaşan (ve henüz gönderilmemiş) tazminat taleplerini hatırlat.
+		"erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.remind_claim_deadlines",
 	],
 }
 
