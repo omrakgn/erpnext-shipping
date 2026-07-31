@@ -111,6 +111,27 @@ frappe.ui.form.on("Shipment", {
 				__("Delay")
 			);
 		}
+		// Kayıp / teslim sorunu için tazminat talebi (Loss Claim) aç.
+		if (frm.doc.docstatus === 1 && frm.doc.awb_number) {
+			const delivered = frm.doc.custom_delivered_at || frm.doc.tracking_status === "Delivered";
+			frm.add_custom_button(
+				__("File Loss Claim"),
+				function () {
+					frappe.call({
+						method: "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.create_loss_claim",
+						args: {
+							shipment: frm.doc.name,
+							claim_type: delivered ? "Delivered - Not Received" : "Not Delivered",
+						},
+						freeze: true,
+						callback: function (r) {
+							if (r.message) frappe.set_route("Form", "Shipment Loss Claim", r.message);
+						},
+					});
+				},
+				__("Loss")
+			);
+		}
 		if (frm.doc.docstatus === 1 && !frm.doc.shipment_id) {
 			frm.add_custom_button(__("Fetch Shipping Rates"), function () {
 				if (frm.doc.shipment_parcel.length > 1) {

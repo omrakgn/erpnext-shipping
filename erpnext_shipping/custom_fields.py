@@ -216,12 +216,25 @@ def get_custom_fields():
 				"insert_after": "custom_delay_notified",
 			},
 			{
+				"fieldname": "custom_presumed_lost",
+				"label": _("Presumed Lost"),
+				"fieldtype": "Check",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"insert_after": "custom_delay_notified_at",
+				"description": _(
+					"Auto-set when a shipment stays undelivered beyond the presumed-lost "
+					"threshold (carriers rarely mark parcels Lost). Review and open a Shipment "
+					"Loss Claim if needed."
+				),
+			},
+			{
 				"fieldname": "custom_shipping_cost",
 				"label": _("Shipping Cost (Net)"),
 				"fieldtype": "Currency",
 				"read_only": 1,
 				"options": "custom_shipping_cost_currency",
-				"insert_after": "custom_delay_notified_at",
+				"insert_after": "custom_presumed_lost",
 				"description": _(
 					"Net carrier cost rolled up from imported invoice lines (Shipping Cost Entry)."
 				),

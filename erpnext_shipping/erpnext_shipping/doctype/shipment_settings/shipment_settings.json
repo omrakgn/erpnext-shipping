@@ -30,7 +30,12 @@
   "dpd_delay_email",
   "fedex_delay_email",
   "margin_section",
-  "customer_shipping_account_head"
+  "customer_shipping_account_head",
+  "loss_section",
+  "presumed_lost_days",
+  "column_break_loss",
+  "dpd_claim_window_days",
+  "fedex_claim_window_days"
  ],
  "fields": [
   {
@@ -197,6 +202,35 @@
    "options": "Account",
    "label": "Customer Shipping Charge Account",
    "description": "Optional. If you charge customers for shipping via a Sales Taxes & Charges row on this account, the Delivery Note's Customer Shipping Charge is auto-filled from it (for the shipping margin). Leave blank if shipping is free."
+  },
+  {
+   "fieldname": "loss_section",
+   "fieldtype": "Section Break",
+   "label": "Lost Shipments & Claims"
+  },
+  {
+   "default": "20",
+   "fieldname": "presumed_lost_days",
+   "fieldtype": "Int",
+   "label": "Presumed Lost After (days)",
+   "description": "A shipment undelivered this many days after Pickup Date is flagged Presumed Lost (carriers rarely mark parcels Lost). Surfaced in the Presumed Lost report/card for a claim decision."
+  },
+  {
+   "fieldname": "column_break_loss",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "21",
+   "fieldname": "dpd_claim_window_days",
+   "fieldtype": "Int",
+   "label": "DPD Claim Window (days)",
+   "description": "Days from dispatch to file a loss claim with DPD. Used to compute the claim deadline."
+  },
+  {
+   "default": "30",
+   "fieldname": "fedex_claim_window_days",
+   "fieldtype": "Int",
+   "label": "FedEx Claim Window (days)"
   }
  ],
  "issingle": 1,

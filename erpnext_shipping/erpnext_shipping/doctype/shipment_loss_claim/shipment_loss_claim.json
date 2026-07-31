@@ -1,0 +1,375 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-07-29 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "shipment_section",
+  "naming_series",
+  "shipment",
+  "claim_type",
+  "status",
+  "column_break_ship",
+  "carrier",
+  "delivery_note",
+  "customer",
+  "tracking_numbers",
+  "parties_section",
+  "sender_name",
+  "receiver_name",
+  "receiver_address",
+  "delivery_country",
+  "column_break_parties",
+  "receiver_email",
+  "receiver_phone",
+  "pickup_date",
+  "dates_section",
+  "incident_date",
+  "form_sent_date",
+  "form_signed_date",
+  "column_break_dates",
+  "submitted_date",
+  "claim_deadline",
+  "decision_date",
+  "paid_date",
+  "financials_section",
+  "currency",
+  "goods_value",
+  "shipping_cost",
+  "claim_amount",
+  "column_break_fin",
+  "compensation_amount",
+  "net_loss",
+  "resolution_section",
+  "resolved_by",
+  "replacement_shipment",
+  "refunded",
+  "column_break_res",
+  "carrier_claim_ref",
+  "attachments_section",
+  "signed_form",
+  "purchase_invoice",
+  "column_break_att",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "shipment_section",
+   "fieldtype": "Section Break",
+   "label": "Shipment"
+  },
+  {
+   "default": "LC-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "LC-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shipment",
+   "fieldtype": "Link",
+   "label": "Shipment",
+   "options": "Shipment",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "default": "Not Delivered",
+   "fieldname": "claim_type",
+   "fieldtype": "Select",
+   "label": "Claim Type",
+   "options": "Not Delivered\nDelivered - Not Received\nDamaged",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nForm Sent to Customer\nForm Signed\nSubmitted to Carrier\nUnder Review\nApproved\nRejected\nPaid\nWritten Off\nRecovered",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_ship",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "label": "Carrier",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "label": "Delivery Note",
+   "options": "Delivery Note"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Data",
+   "label": "Customer / Recipient"
+  },
+  {
+   "fieldname": "tracking_numbers",
+   "fieldtype": "Small Text",
+   "label": "Tracking Number(s)",
+   "description": "14-digit parcel number(s) for the DPD form."
+  },
+  {
+   "fieldname": "parties_section",
+   "fieldtype": "Section Break",
+   "label": "Parties (for the carrier form)"
+  },
+  {
+   "fieldname": "sender_name",
+   "fieldtype": "Data",
+   "label": "Sender Name"
+  },
+  {
+   "fieldname": "receiver_name",
+   "fieldtype": "Data",
+   "label": "Receiver Name"
+  },
+  {
+   "fieldname": "receiver_address",
+   "fieldtype": "Small Text",
+   "label": "Receiver Address"
+  },
+  {
+   "fieldname": "delivery_country",
+   "fieldtype": "Data",
+   "label": "Delivery Country",
+   "description": "Determines which DPD form / language is used (DE vs BELUX)."
+  },
+  {
+   "fieldname": "column_break_parties",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "receiver_email",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "Receiver Email"
+  },
+  {
+   "fieldname": "receiver_phone",
+   "fieldtype": "Data",
+   "label": "Receiver Phone"
+  },
+  {
+   "fieldname": "pickup_date",
+   "fieldtype": "Date",
+   "label": "Date of Dispatch"
+  },
+  {
+   "fieldname": "dates_section",
+   "fieldtype": "Section Break",
+   "label": "Timeline"
+  },
+  {
+   "fieldname": "incident_date",
+   "fieldtype": "Date",
+   "label": "Incident Date"
+  },
+  {
+   "fieldname": "form_sent_date",
+   "fieldtype": "Date",
+   "label": "Form Sent to Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "form_signed_date",
+   "fieldtype": "Date",
+   "label": "Signed Form Received"
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "submitted_date",
+   "fieldtype": "Date",
+   "label": "Submitted to Carrier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "claim_deadline",
+   "fieldtype": "Date",
+   "label": "Claim Deadline",
+   "description": "Last date to file the claim with the carrier. Reminder fires before this.",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "decision_date",
+   "fieldtype": "Date",
+   "label": "Decision Date"
+  },
+  {
+   "fieldname": "paid_date",
+   "fieldtype": "Date",
+   "label": "Compensation Paid Date"
+  },
+  {
+   "fieldname": "financials_section",
+   "fieldtype": "Section Break",
+   "label": "Financials"
+  },
+  {
+   "default": "EUR",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "options": "Currency",
+   "label": "Currency"
+  },
+  {
+   "fieldname": "goods_value",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "label": "Goods Value"
+  },
+  {
+   "fieldname": "shipping_cost",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "label": "Shipping Cost"
+  },
+  {
+   "fieldname": "claim_amount",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "label": "Claim Amount",
+   "description": "Amount claimed from the carrier (defaults to goods value + shipping cost)."
+  },
+  {
+   "fieldname": "column_break_fin",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "compensation_amount",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "label": "Compensation Received"
+  },
+  {
+   "fieldname": "net_loss",
+   "fieldtype": "Currency",
+   "options": "currency",
+   "label": "Net Loss",
+   "read_only": 1,
+   "description": "Goods value + shipping cost - compensation received."
+  },
+  {
+   "fieldname": "resolution_section",
+   "fieldtype": "Section Break",
+   "label": "Resolution"
+  },
+  {
+   "fieldname": "resolved_by",
+   "fieldtype": "Select",
+   "label": "Customer Resolved By",
+   "options": "\nMarketplace\nUs"
+  },
+  {
+   "fieldname": "replacement_shipment",
+   "fieldtype": "Link",
+   "options": "Shipment",
+   "label": "Replacement Shipment"
+  },
+  {
+   "default": "0",
+   "fieldname": "refunded",
+   "fieldtype": "Check",
+   "label": "Customer Refunded"
+  },
+  {
+   "fieldname": "column_break_res",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "carrier_claim_ref",
+   "fieldtype": "Data",
+   "label": "Carrier Claim Reference"
+  },
+  {
+   "fieldname": "attachments_section",
+   "fieldtype": "Section Break",
+   "label": "Documents"
+  },
+  {
+   "fieldname": "signed_form",
+   "fieldtype": "Attach",
+   "label": "Signed Declaration Form"
+  },
+  {
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Attach",
+   "label": "Purchase Invoice"
+  },
+  {
+   "fieldname": "column_break_att",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-29 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Shipment Loss Claim",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

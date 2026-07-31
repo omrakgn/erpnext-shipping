@@ -119,8 +119,12 @@ after_migrate = [
 
 scheduler_events = {
 	"hourly": ["erpnext_shipping.erpnext_shipping.utils.update_tracking_info"],
-	# Geciken gönderileri işaretle ve (açıksa) günlük digest e-postasını yolla.
-	"daily": ["erpnext_shipping.erpnext_shipping.delay.flag_and_notify_delayed"],
+	"daily": [
+		# Geciken gönderileri işaretle ve (açıksa) günlük digest e-postasını yolla.
+		"erpnext_shipping.erpnext_shipping.delay.flag_and_notify_delayed",
+		# Eşiği aşan teslim edilmemiş gönderileri "Presumed Lost" işaretle.
+		"erpnext_shipping.erpnext_shipping.loss.flag_presumed_lost",
+	],
 }
 
 # Testing
