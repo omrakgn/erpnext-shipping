@@ -7,7 +7,12 @@ description = "Shipping Integrations for ERPNext"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = []
+# reportlab: text-overlay layer for the DPD claim form (stamped onto the
+# original PDF); pypdf: read/merge the base PDF (also a Frappe dependency).
+dependencies = [
+    "reportlab>=4.0",
+    "pypdf>=3.0",
+]
 
 [tool.bench.frappe-dependencies]
 frappe = ">=15.0.0,<16.0.0"

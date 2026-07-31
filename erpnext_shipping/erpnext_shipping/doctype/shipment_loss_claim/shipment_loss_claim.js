@@ -10,15 +10,10 @@ frappe.ui.form.on("Shipment Loss Claim", {
 		frm.add_custom_button(
 			__("Print / Download Form"),
 			() => {
-				const url =
-					"/printview?doctype=" +
-					encodeURIComponent(frm.doc.doctype) +
-					"&name=" +
-					encodeURIComponent(frm.doc.name) +
-					"&format=" +
-					encodeURIComponent("DPD Declaration of Non-Receipt") +
-					"&no_letterhead=1&trigger_print=1";
-				window.open(url, "_blank");
+				open_url_post(
+					"/api/method/erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.download_claim_form",
+					{ claim: frm.doc.name }
+				);
 			},
 			__("Form")
 		);

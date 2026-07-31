@@ -79,9 +79,6 @@ class ShipmentLossClaim(Document):
 		self.net_loss = flt(self.goods_value) + flt(self.shipping_cost) - flt(self.compensation_amount)
 
 
-PRINT_FORMAT = "DPD Declaration of Non-Receipt"
-
-
 def _claim_email(doc):
 	"""Carrier claim-submission recipient by delivery region."""
 	country = (doc.delivery_country or "").lower()
@@ -122,6 +119,26 @@ def _send_claim_email(doc, recipients, subject, content, attachments=None, cc=No
 	)
 
 
+def _form_pdf(doc):
+	"""Rendered DPD form as an attachment dict, stamped onto the original PDF."""
+	from erpnext_shipping.erpnext_shipping.loss_form import render_claim_form
+
+	return {
+		"fname": f"DPD-Non-Receipt-{doc.name}.pdf",
+		"fcontent": render_claim_form(doc),
+	}
+
+
+@frappe.whitelist()
+def download_claim_form(claim):
+	"""Stream the filled DPD form PDF to the browser (Print / Download button)."""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	att = _form_pdf(doc)
+	frappe.local.response.filename = att["fname"]
+	frappe.local.response.filecontent = att["fcontent"]
+	frappe.local.response.type = "pdf"
+
+
 @frappe.whitelist()
 def email_form_to_customer(claim):
 	"""Email the pre-filled DPD declaration form to the customer for signature."""
@@ -130,7 +147,7 @@ def email_form_to_customer(claim):
 		frappe.throw(
 			frappe._("No receiver e-mail — use Print/Download and send it via the marketplace instead.")
 		)
-	pdf = frappe.attach_print("Shipment Loss Claim", claim, print_format=PRINT_FORMAT)
+	pdf = _form_pdf(doc)
 	subject = frappe._("Delivery confirmation form — please sign and return ({0})").format(
 		doc.tracking_numbers or claim
 	)
