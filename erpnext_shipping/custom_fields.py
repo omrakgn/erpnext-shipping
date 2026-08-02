@@ -147,11 +147,18 @@ def get_custom_fields():
 				),
 			},
 			{
+				"fieldname": "custom_delivery_status_section",
+				"label": _("Delivery Status"),
+				"fieldtype": "Section Break",
+				"collapsible": 1,
+				"insert_after": "tracking_status",
+			},
+			{
 				"fieldname": "custom_delivered_at",
 				"label": _("Delivered At"),
 				"fieldtype": "Datetime",
 				"read_only": 1,
-				"insert_after": "tracking_status",
+				"insert_after": "custom_delivery_status_section",
 			},
 			{
 				"fieldname": "custom_transit_days",
@@ -202,6 +209,7 @@ def get_custom_fields():
 				"label": _("Delay Notified"),
 				"fieldtype": "Check",
 				"read_only": 1,
+				"hidden": 1,
 				"insert_after": "custom_is_delayed",
 				"description": _(
 					"Set once the automatic delay email(s) have been sent for this shipment, so "
@@ -213,6 +221,7 @@ def get_custom_fields():
 				"label": _("Delay Notified At"),
 				"fieldtype": "Datetime",
 				"read_only": 1,
+				"hidden": 1,
 				"insert_after": "custom_delay_notified",
 			},
 			{
@@ -294,12 +303,19 @@ def get_custom_fields():
 				"insert_after": "custom_sla_risk_notified",
 			},
 			{
+				"fieldname": "custom_cost_section",
+				"label": _("Shipping Cost & Margin"),
+				"fieldtype": "Section Break",
+				"collapsible": 1,
+				"insert_after": "custom_sla_breach_notified",
+			},
+			{
 				"fieldname": "custom_shipping_cost",
 				"label": _("Shipping Cost (Net)"),
 				"fieldtype": "Currency",
 				"read_only": 1,
 				"options": "custom_shipping_cost_currency",
-				"insert_after": "custom_sla_breach_notified",
+				"insert_after": "custom_cost_section",
 				"description": _(
 					"Net carrier cost rolled up from imported invoice lines (Shipping Cost Entry)."
 				),
