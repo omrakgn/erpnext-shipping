@@ -229,12 +229,77 @@ def get_custom_fields():
 				),
 			},
 			{
+				"fieldname": "custom_sla_section",
+				"label": _("Delivery SLA"),
+				"fieldtype": "Section Break",
+				"collapsible": 1,
+				"insert_after": "custom_presumed_lost",
+			},
+			{
+				"fieldname": "custom_sales_channel",
+				"label": _("Sales Channel"),
+				"fieldtype": "Select",
+				"options": "\nAmazon\nBol.com\nShopify\nOther",
+				"translatable": 0,
+				"in_standard_filter": 1,
+				"insert_after": "custom_sla_section",
+				"description": _("Marketplace / channel this order was sold on (for SLA performance)."),
+			},
+			{
+				"fieldname": "custom_promised_delivery_date",
+				"label": _("Promised Delivery Date"),
+				"fieldtype": "Date",
+				"insert_after": "custom_sales_channel",
+				"description": _(
+					"Delivery date promised to the customer/marketplace. Overrides the "
+					"carrier SLA when set; leave blank to use Pickup Date + carrier SLA days."
+				),
+			},
+			{
+				"fieldname": "custom_sla_date",
+				"label": _("SLA Date"),
+				"fieldtype": "Date",
+				"read_only": 1,
+				"insert_after": "custom_promised_delivery_date",
+				"description": _("Effective SLA delivery date (promised date, else Pickup + carrier SLA days)."),
+			},
+			{
+				"fieldname": "custom_sla_status",
+				"label": _("SLA Status"),
+				"fieldtype": "Select",
+				"options": "\nOn Track\nAt Risk\nBreached\nMet\nMissed",
+				"translatable": 0,
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"insert_after": "custom_sla_date",
+				"description": _(
+					"On Track / At Risk / Breached for undelivered; Met / Missed once delivered "
+					"(vs the SLA Date)."
+				),
+			},
+			{
+				"fieldname": "custom_sla_risk_notified",
+				"label": _("SLA Risk Notified"),
+				"fieldtype": "Date",
+				"read_only": 1,
+				"hidden": 1,
+				"insert_after": "custom_sla_status",
+			},
+			{
+				"fieldname": "custom_sla_breach_notified",
+				"label": _("SLA Breach Notified"),
+				"fieldtype": "Date",
+				"read_only": 1,
+				"hidden": 1,
+				"insert_after": "custom_sla_risk_notified",
+			},
+			{
 				"fieldname": "custom_shipping_cost",
 				"label": _("Shipping Cost (Net)"),
 				"fieldtype": "Currency",
 				"read_only": 1,
 				"options": "custom_shipping_cost_currency",
-				"insert_after": "custom_presumed_lost",
+				"insert_after": "custom_sla_breach_notified",
 				"description": _(
 					"Net carrier cost rolled up from imported invoice lines (Shipping Cost Entry)."
 				),

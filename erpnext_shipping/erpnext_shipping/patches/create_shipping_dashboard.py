@@ -142,6 +142,28 @@ NUMBER_CARDS = [
 		),
 		"color": "#CB2929",
 	},
+	{
+		# SLA tarihine yaklaşıp hâlâ teslim edilmemiş gönderiler.
+		"name": "SLA At Risk",
+		"label": "SLA At Risk",
+		"document_type": "Shipment",
+		"function": "Count",
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipment", "custom_sla_status", "=", "At Risk"]]),
+		"color": "#FFC733",
+		"currency": "",
+	},
+	{
+		# SLA tarihi geçmiş, hâlâ teslim edilmemiş gönderiler.
+		"name": "SLA Breached",
+		"label": "SLA Breached",
+		"document_type": "Shipment",
+		"function": "Count",
+		"aggregate_function_based_on": "",
+		"filters_json": json.dumps([["Shipment", "custom_sla_status", "=", "Breached"]]),
+		"color": "#CB2929",
+		"currency": "",
+	},
 ]
 
 # Cards from earlier versions to remove (renamed / replaced).

@@ -24,6 +24,7 @@ erpnext_shipping.erpnext_shipping.patches.backfill_sendcloud_delivered_dates # 2
 erpnext_shipping.erpnext_shipping.patches.create_shipment_surcharge_fields # 2026-07-29
 erpnext_shipping.erpnext_shipping.patches.create_margin_fields # 2026-07-29
 erpnext_shipping.erpnext_shipping.patches.create_presumed_lost_field # 2026-07-29
+erpnext_shipping.erpnext_shipping.patches.create_sla_fields # 2026-07-31
 erpnext_shipping.erpnext_shipping.patches.create_loss_claim_print_format # 2026-07-29
 erpnext_shipping.erpnext_shipping.patches.backfill_surcharge_fields # 2026-07-29
 erpnext_shipping.erpnext_shipping.patches.backfill_variance_margin # 2026-07-29

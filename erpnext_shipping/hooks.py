@@ -127,6 +127,8 @@ scheduler_events = {
 		"erpnext_shipping.erpnext_shipping.loss.flag_presumed_lost",
 		# Süresi yaklaşan (ve henüz gönderilmemiş) tazminat taleplerini hatırlat.
 		"erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.remind_claim_deadlines",
+		# SLA Date/Status güncelle; risk/aşım durumunda iç ekibe bildir.
+		"erpnext_shipping.erpnext_shipping.sla.flag_and_notify_sla",
 	],
 }
 
@@ -163,6 +165,8 @@ doc_events = {
 			"erpnext_shipping.erpnext_shipping.utils.validate_parcel_items",
 			"erpnext_shipping.erpnext_shipping.shipping.set_shipment_description",
 			"erpnext_shipping.erpnext_shipping.shipping.set_parcel_values",
+			# SLA Date + Status'ı güncel tut (taahhüt tarihi ya da pickup + carrier SLA).
+			"erpnext_shipping.erpnext_shipping.sla.set_sla_fields",
 		]
 	},
 	"Delivery Note": {

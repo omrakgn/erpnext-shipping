@@ -40,7 +40,14 @@
   "column_break_loss",
   "dpd_claim_window_days",
   "fedex_claim_window_days",
-  "claim_deadline_reminder_days"
+  "claim_deadline_reminder_days",
+  "sla_section",
+  "sla_enabled",
+  "sla_risk_days",
+  "column_break_sla",
+  "sla_dpd_days",
+  "sla_fedex_days",
+  "sla_default_days"
  ],
  "fields": [
   {
@@ -271,6 +278,50 @@
    "fieldtype": "Int",
    "label": "Deadline Reminder (days before)",
    "description": "Email the Internal Recipient(s) this many days before a claim's deadline if it hasn't been submitted to the carrier yet. Sent once per claim. 0 = off."
+  },
+  {
+   "fieldname": "sla_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery SLA (marketplace)"
+  },
+  {
+   "default": "0",
+   "fieldname": "sla_enabled",
+   "fieldtype": "Check",
+   "label": "Enable SLA notifications",
+   "description": "Daily check: email the Internal Recipient(s) (see Delayed Shipment Alerts) when an undelivered shipment is at risk of missing, or has missed, its SLA date. The SLA Date and Status are computed regardless of this switch."
+  },
+  {
+   "default": "1",
+   "depends_on": "sla_enabled",
+   "fieldname": "sla_risk_days",
+   "fieldtype": "Int",
+   "label": "At-Risk Warning (days before)",
+   "description": "Flag/notify 'At Risk' this many days before the SLA date while still undelivered."
+  },
+  {
+   "fieldname": "column_break_sla",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3",
+   "fieldname": "sla_dpd_days",
+   "fieldtype": "Int",
+   "label": "DPD SLA (transit days)",
+   "description": "Delivery-time SLA in days from Pickup Date for DPD (used when no Promised Delivery Date is set)."
+  },
+  {
+   "default": "2",
+   "fieldname": "sla_fedex_days",
+   "fieldtype": "Int",
+   "label": "FedEx SLA (transit days)"
+  },
+  {
+   "default": "3",
+   "fieldname": "sla_default_days",
+   "fieldtype": "Int",
+   "label": "Default SLA (transit days)",
+   "description": "Fallback transit-day SLA for carriers without a specific value above."
   }
  ],
  "issingle": 1,
