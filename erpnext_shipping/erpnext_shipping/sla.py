@@ -82,6 +82,7 @@ def flag_and_notify_sla():
 	recipient when one goes At Risk or Breaches (once each)."""
 	today = getdate(nowdate())
 	risk_days = cint(_setting("sla_risk_days", 1))
+	max_overdue = cint(_setting("sla_notify_max_overdue_days", 14))
 	notify = bool(_setting("sla_enabled", 0))
 	recipient = _setting("delay_digest_recipient")
 	for name in _active_shipments():
@@ -98,7 +99,13 @@ def flag_and_notify_sla():
 			)
 		if not notify or not recipient or delivered_on or not sla_date:
 			continue
+		# Presumed-lost shipments belong to the loss/claim workflow, not SLA nudges.
+		if sh.get("custom_presumed_lost"):
+			continue
 		if status == "Breached" and not sh.get("custom_sla_breach_notified"):
+			# Skip stale breaches — the marketplace action window is long gone (loss case).
+			if max_overdue and (today - sla_date).days > max_overdue:
+				continue
 			_notify(sh, sla_date, recipient, breached=True)
 			frappe.db.set_value("Shipment", name, "custom_sla_breach_notified", nowdate(), update_modified=False)
 		elif status == "At Risk" and not sh.get("custom_sla_risk_notified"):

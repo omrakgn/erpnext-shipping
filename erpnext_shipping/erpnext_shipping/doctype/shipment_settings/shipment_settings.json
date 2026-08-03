@@ -44,6 +44,7 @@
   "sla_section",
   "sla_enabled",
   "sla_risk_days",
+  "sla_notify_max_overdue_days",
   "column_break_sla",
   "sla_dpd_days",
   "sla_fedex_days",
@@ -298,6 +299,14 @@
    "fieldtype": "Int",
    "label": "At-Risk Warning (days before)",
    "description": "Flag/notify 'At Risk' this many days before the SLA date while still undelivered."
+  },
+  {
+   "default": "14",
+   "depends_on": "sla_enabled",
+   "fieldname": "sla_notify_max_overdue_days",
+   "fieldtype": "Int",
+   "label": "Breach Notify Max Overdue (days)",
+   "description": "Only email a breach when the SLA date is at most this many days ago; older breaches are skipped (they are loss cases, not marketplace actions). Presumed-lost shipments are skipped regardless. 0 = no limit. The SLA Status is still set."
   },
   {
    "fieldname": "column_break_sla",
