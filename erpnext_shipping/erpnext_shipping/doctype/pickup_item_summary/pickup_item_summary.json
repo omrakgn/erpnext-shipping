@@ -1,20 +1,14 @@
 {
  "actions": [],
- "autoname": "PICKUP-.YYYY.-.#####",
- "creation": "2026-06-22 00:00:00.000000",
+ "autoname": "PICK-.YYYY.-.#####",
+ "creation": "2026-08-04 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "pickup_date",
-  "carrier",
   "company",
-  "column_break_handover",
-  "courier_name",
-  "vehicle_plate",
-  "signed_document",
-  "totals_section",
-  "total_packages",
-  "column_break_totals",
+  "column_break_1",
+  "total_items",
   "total_qty",
   "items_section",
   "items"
@@ -30,78 +24,48 @@
    "reqd": 1
   },
   {
-   "fieldname": "carrier",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Carrier",
-   "reqd": 1
-  },
-  {
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
    "options": "Company"
   },
   {
-   "fieldname": "column_break_handover",
+   "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "description": "Teslim alan kurye - Ad Soyad",
-   "fieldname": "courier_name",
-   "fieldtype": "Data",
-   "label": "Courier Name"
-  },
-  {
-   "fieldname": "vehicle_plate",
-   "fieldtype": "Data",
-   "label": "Vehicle Plate"
-  },
-  {
-   "description": "İmzalanmış teslim tutanağının taranmış kopyası",
-   "fieldname": "signed_document",
-   "fieldtype": "Attach",
-   "label": "Signed Document"
-  },
-  {
-   "fieldname": "totals_section",
-   "fieldtype": "Section Break",
-   "label": "Totals"
-  },
-  {
-   "fieldname": "total_packages",
+   "fieldname": "total_items",
    "fieldtype": "Int",
-   "label": "Total Packages",
+   "in_list_view": 1,
+   "label": "Distinct Items",
    "read_only": 1
-  },
-  {
-   "fieldname": "column_break_totals",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "total_qty",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Total Quantity",
    "read_only": 1
   },
   {
    "fieldname": "items_section",
    "fieldtype": "Section Break",
-   "label": "Shipments"
+   "label": "Items"
   },
   {
+   "description": "Total quantity per item across all shipments on the Pickup Date. Use 'Generate / Refresh Items' to (re)build.",
    "fieldname": "items",
    "fieldtype": "Table",
-   "label": "Shipments",
-   "options": "Pickup Manifest Item"
+   "label": "Items",
+   "options": "Pickup Item Summary Line"
   }
  ],
+ "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-06-22 10:00:00.000000",
+ "modified": "2026-08-04 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
- "name": "Pickup Manifest",
+ "name": "Pickup Item Summary",
  "owner": "Administrator",
  "permissions": [
   {
@@ -141,6 +105,7 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "title_field": "carrier",
+ "states": [],
+ "title_field": "pickup_date",
  "track_changes": 1
 }

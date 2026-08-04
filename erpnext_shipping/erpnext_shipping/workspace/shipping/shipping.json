@@ -32,7 +32,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Shipping",
-   "link_count": 4,
+   "link_count": 5,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -65,6 +65,17 @@
    "label": "Pickup Manifest",
    "link_count": 0,
    "link_to": "Pickup Manifest",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Pickup Item Summary",
+   "link_count": 0,
+   "link_to": "Pickup Item Summary",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
