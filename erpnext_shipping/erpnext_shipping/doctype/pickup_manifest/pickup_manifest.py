@@ -116,6 +116,31 @@ def get_manifest_packages(manifest):
 	return [groups[k] for k in order]
 
 
+@frappe.whitelist()
+def get_manifest_item_summary(manifest):
+	"""Total quantity per item across the whole manifest, most first.
+
+	Returns: [{item_code, item_name, qty}]
+	"""
+	doc = manifest if hasattr(manifest, "items") else frappe.get_doc("Pickup Manifest", manifest)
+	totals = {}
+	for row in doc.items:
+		code = (row.item_code or "").strip()
+		if not code:
+			continue
+		totals[code] = totals.get(code, 0) + flt(row.qty)
+	rows = [
+		{
+			"item_code": code,
+			"item_name": frappe.get_cached_value("Item", code, "item_name") or "",
+			"qty": qty,
+		}
+		for code, qty in totals.items()
+	]
+	rows.sort(key=lambda r: (-r["qty"], r["item_code"]))
+	return rows
+
+
 def _clean_contact(name):
 	"""'Cathrin Ralfs-Cathrin Ralfs' gibi yinelenmiş ad-soyad'ı tekille (X-X -> X)."""
 	name = (name or "").strip()

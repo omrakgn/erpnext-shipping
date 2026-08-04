@@ -38,6 +38,7 @@ jinja = {
 	"methods": [
 		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_company_logo_src",
 		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_manifest_packages",
+		"erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest.get_manifest_item_summary",
 	]
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}

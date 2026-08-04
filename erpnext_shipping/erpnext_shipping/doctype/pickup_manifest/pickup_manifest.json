@@ -16,6 +16,8 @@
   "total_packages",
   "column_break_totals",
   "total_qty",
+  "item_summary_section",
+  "item_summary",
   "items_section",
   "items"
  ],
@@ -84,6 +86,17 @@
    "fieldtype": "Float",
    "label": "Total Quantity",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "item_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Item Summary"
+  },
+  {
+   "fieldname": "item_summary",
+   "fieldtype": "HTML",
+   "label": "Item Summary"
   },
   {
    "fieldname": "items_section",

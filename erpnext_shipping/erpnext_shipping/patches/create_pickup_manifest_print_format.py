@@ -43,6 +43,29 @@ HTML = r"""
 	</tbody>
 </table>
 
+{% set summary = get_manifest_item_summary(doc.name) %}
+{% if summary %}
+<h4 style="margin:16px 0 4px;">{{ _("Item Summary") }}</h4>
+<table style="width:60%; border-collapse:collapse; font-size:12px;" border="1">
+	<thead>
+		<tr style="background:#f5f5f5;">
+			<th style="padding:3px 5px;">{{ _("Item Code") }}</th>
+			<th style="padding:3px 5px;">{{ _("Description") }}</th>
+			<th style="padding:3px 5px; width:18%; text-align:right;">{{ _("Total Qty") }}</th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for s in summary %}
+			<tr>
+				<td style="padding:3px 5px;">{{ s['item_code'] }}</td>
+				<td style="padding:3px 5px;">{{ s['item_name'] }}</td>
+				<td style="padding:3px 5px; text-align:right;">{{ "%g"|format(s['qty']) }}</td>
+			</tr>
+		{% endfor %}
+	</tbody>
+</table>
+{% endif %}
+
 <table style="width:100%; border:none; margin-top:18px;">
 	<tr>
 		<td style="border:none; width:55%; vertical-align:bottom; font-size:12px;">
