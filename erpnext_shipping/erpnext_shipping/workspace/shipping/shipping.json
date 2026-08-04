@@ -251,7 +251,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Delivery SLA",
-   "link_count": 1,
+   "link_count": 2,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -263,6 +263,17 @@
    "link_count": 0,
    "link_to": "SLA Performance",
    "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Carrier SLA Lane",
+   "link_count": 0,
+   "link_to": "Carrier SLA Lane",
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
   }

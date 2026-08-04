@@ -127,6 +127,8 @@ scheduler_events = {
 		"erpnext_shipping.erpnext_shipping.loss.flag_presumed_lost",
 		# Süresi yaklaşan (ve henüz gönderilmemiş) tazminat taleplerini hatırlat.
 		"erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.remind_claim_deadlines",
+		# Teslim sürelerinden carrier x hedef SLA gün ortalamalarını öğren.
+		"erpnext_shipping.erpnext_shipping.sla.rebuild_carrier_sla_lanes",
 		# SLA Date/Status güncelle; risk/aşım durumunda iç ekibe bildir.
 		"erpnext_shipping.erpnext_shipping.sla.flag_and_notify_sla",
 	],

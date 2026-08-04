@@ -45,6 +45,8 @@
   "sla_enabled",
   "sla_risk_days",
   "sla_notify_max_overdue_days",
+  "sla_unknown_days",
+  "sla_min_samples",
   "column_break_sla",
   "sla_dpd_days",
   "sla_fedex_days",
@@ -309,6 +311,22 @@
    "description": "Only email a breach when the SLA date is at most this many days ago; older breaches are skipped (they are loss cases, not marketplace actions). Presumed-lost shipments are skipped regardless. 0 = no limit. The SLA Status is still set."
   },
   {
+   "default": "5",
+   "depends_on": "sla_enabled",
+   "fieldname": "sla_unknown_days",
+   "fieldtype": "Int",
+   "label": "Unknown Destination SLA (days)",
+   "description": "Transit-day SLA used when there is no delivery history for the destination (carrier + country/city/postal). The SLA otherwise learns from actual delivery times per destination (Carrier SLA Lane)."
+  },
+  {
+   "default": "1",
+   "depends_on": "sla_enabled",
+   "fieldname": "sla_min_samples",
+   "fieldtype": "Int",
+   "label": "Min Deliveries to Learn a Lane",
+   "description": "A destination lane is only learned once it has at least this many delivered shipments; sparser destinations fall back to a broader level (city / country) or the unknown default."
+  },
+  {
    "fieldname": "column_break_sla",
    "fieldtype": "Column Break"
   },
@@ -317,7 +335,7 @@
    "fieldname": "sla_dpd_days",
    "fieldtype": "Int",
    "label": "DPD SLA (transit days)",
-   "description": "Delivery-time SLA in days from Pickup Date for DPD (used when no Promised Delivery Date is set)."
+   "description": "Legacy per-carrier baseline. The SLA now learns transit days per destination; this is kept only for reference."
   },
   {
    "default": "2",

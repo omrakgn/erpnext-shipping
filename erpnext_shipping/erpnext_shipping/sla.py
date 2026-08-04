@@ -9,10 +9,15 @@ SLA transit days (Shipment Settings). Each shipment gets an SLA Date and Status
 job emails the internal recipient when an undelivered shipment goes At Risk or
 Breaches its SLA — once each — so the team can act on the marketplace.
 """
+import math
+
 import frappe
-from frappe.utils import add_days, cint, getdate, nowdate
+from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
 DEFAULT_SLA_DAYS = {"dpd": 3, "fedex": 2}
+# Max realistic transit days; above this a delivery is an outlier (stuck/lost) and
+# is excluded from the learned averages.
+MAX_LEARN_TRANSIT = 21
 
 
 def _setting(field, default=None):
@@ -21,13 +26,54 @@ def _setting(field, default=None):
 
 
 def carrier_sla_days(carrier):
-	"""SLA transit days for a carrier from settings, with sensible fallbacks."""
+	"""Flat per-carrier SLA days from settings (legacy baseline; the primary path
+	is now the learned destination lanes, see sla_transit_days)."""
 	c = (carrier or "").lower()
 	if "fedex" in c:
 		return cint(_setting("sla_fedex_days", DEFAULT_SLA_DAYS["fedex"]))
 	if "dpd" in c:
 		return cint(_setting("sla_dpd_days", DEFAULT_SLA_DAYS["dpd"]))
 	return cint(_setting("sla_default_days", 3))
+
+
+def _norm_carrier(carrier):
+	return (carrier or "").split(",")[0].strip().lower()
+
+
+def _destination(sh):
+	"""Delivery country / postal / city (normalised) from the delivery Address."""
+	addr = sh.get("delivery_address_name")
+	a = (
+		frappe.db.get_value("Address", addr, ["country", "pincode", "city"], as_dict=True)
+		if addr
+		else None
+	) or {}
+	return {
+		"country": (a.get("country") or "").strip().lower(),
+		"pincode": (a.get("pincode") or "").replace(" ", "").upper(),
+		"city": (a.get("city") or "").strip().lower(),
+	}
+
+
+def sla_transit_days(sh):
+	"""Learned transit-day SLA for this shipment's carrier + destination: the most
+	specific lane wins (postal code -> city -> country); when the destination has
+	no history, fall back to the configurable unknown-destination default."""
+	unknown = cint(_setting("sla_unknown_days", 5)) or 5
+	carrier = _norm_carrier(sh.get("carrier"))
+	dest = _destination(sh)
+	if carrier and dest["country"]:
+		for level, key in (("Postal", dest["pincode"]), ("City", dest["city"]), ("Country", "")):
+			if level != "Country" and not key:
+				continue
+			days = frappe.db.get_value(
+				"Carrier SLA Lane",
+				{"carrier": carrier, "country": dest["country"], "region_type": level, "region_key": key},
+				"sla_days",
+			)
+			if days:
+				return cint(days)
+	return unknown
 
 
 def _base_date(sh):
@@ -53,7 +99,84 @@ def compute_sla_date(sh):
 	base = _base_date(sh)
 	if not base:
 		return None
-	return add_days(base, carrier_sla_days(sh.get("carrier")))
+	return add_days(base, sla_transit_days(sh))
+
+
+def rebuild_carrier_sla_lanes():
+	"""Daily job: learn the transit-day SLA per carrier + destination from the
+	actual delivery times of delivered shipments, at three granularities (postal
+	code -> city -> country). Rebuilds all non-manual lanes each run."""
+	min_samples = cint(_setting("sla_min_samples", 1)) or 1
+	rows = frappe.db.sql(
+		"""
+		select sh.carrier as carrier, addr.country as country,
+			addr.pincode as pincode, addr.city as city,
+			sh.custom_transit_days as td
+		from `tabShipment` sh
+		left join `tabAddress` addr on addr.name = sh.delivery_address_name
+		where sh.custom_delivered_at is not null
+			and sh.custom_transit_days is not null
+			and sh.custom_transit_days >= 0 and sh.custom_transit_days <= %s
+			and ifnull(sh.carrier, '') != ''
+			and ifnull(addr.country, '') != ''
+		""",
+		MAX_LEARN_TRANSIT,
+		as_dict=True,
+	)
+
+	agg = {}
+
+	def add(carrier, country, level, key, td):
+		s = agg.setdefault((carrier, country, level, key), [0.0, 0])
+		s[0] += td
+		s[1] += 1
+
+	for r in rows:
+		carrier = _norm_carrier(r.carrier)
+		country = (r.country or "").strip().lower()
+		if not carrier or not country:
+			continue
+		td = float(r.td or 0)
+		pincode = (r.pincode or "").replace(" ", "").upper()
+		city = (r.city or "").strip().lower()
+		add(carrier, country, "Country", "", td)
+		if city:
+			add(carrier, country, "City", city, td)
+		if pincode:
+			add(carrier, country, "Postal", pincode, td)
+
+	# Preserve manually-overridden lanes; rebuild the rest.
+	manual = {
+		(l.carrier, l.country, l.region_type, l.region_key or "")
+		for l in frappe.get_all(
+			"Carrier SLA Lane",
+			filters={"manual_override": 1},
+			fields=["carrier", "country", "region_type", "region_key"],
+		)
+	}
+	for name in frappe.get_all("Carrier SLA Lane", filters={"manual_override": 0}, pluck="name"):
+		frappe.delete_doc("Carrier SLA Lane", name, force=True, ignore_permissions=True)
+
+	stamp = now_datetime()
+	for (carrier, country, level, key), (total, cnt) in agg.items():
+		if cnt < min_samples or (carrier, country, level, key) in manual:
+			continue
+		avg = total / cnt
+		doc = frappe.new_doc("Carrier SLA Lane")
+		doc.update(
+			{
+				"carrier": carrier,
+				"country": country,
+				"region_type": level,
+				"region_key": key,
+				"avg_transit_days": round(avg, 1),
+				"sla_days": max(1, int(math.ceil(avg))),
+				"sample_count": cnt,
+				"last_computed": stamp,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def _status(sla_date, delivered_on, today, risk_days):

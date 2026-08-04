@@ -1,0 +1,134 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-04 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "carrier",
+  "country",
+  "region_type",
+  "region_key",
+  "column_break_1",
+  "sla_days",
+  "avg_transit_days",
+  "sample_count",
+  "manual_override",
+  "last_computed"
+ ],
+ "fields": [
+  {
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Carrier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "country",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Country"
+  },
+  {
+   "fieldname": "region_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Region Level",
+   "options": "Country\nCity\nPostal"
+  },
+  {
+   "fieldname": "region_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Region Key",
+   "description": "Postal code / city / blank for country-level."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sla_days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "SLA Days",
+   "description": "Transit-day SLA used for this lane (ceil of the learned average, or your manual value)."
+  },
+  {
+   "fieldname": "avg_transit_days",
+   "fieldtype": "Float",
+   "precision": "1",
+   "read_only": 1,
+   "label": "Avg Transit Days (learned)"
+  },
+  {
+   "fieldname": "sample_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "read_only": 1,
+   "label": "Samples"
+  },
+  {
+   "default": "0",
+   "fieldname": "manual_override",
+   "fieldtype": "Check",
+   "label": "Manual Override",
+   "description": "When set, the daily rebuild will not overwrite this lane's SLA Days."
+  },
+  {
+   "fieldname": "last_computed",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Last Computed"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Carrier SLA Lane",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Stock User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
