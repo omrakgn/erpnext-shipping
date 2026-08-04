@@ -30,13 +30,30 @@ def carrier_sla_days(carrier):
 	return cint(_setting("sla_default_days", 3))
 
 
+def _base_date(sh):
+	"""Dispatch reference for the SLA: Pickup Date, else the linked Delivery Note
+	date, else the Shipment's creation date — so an SLA is always computable
+	(and always dispatch + lead, never same-day) without manual entry."""
+	if sh.get("pickup_date"):
+		return getdate(sh.get("pickup_date"))
+	for row in sh.get("shipment_delivery_note") or []:
+		if row.get("delivery_note"):
+			pd = frappe.db.get_value("Delivery Note", row.get("delivery_note"), "posting_date")
+			if pd:
+				return getdate(pd)
+	return getdate(sh.get("creation")) if sh.get("creation") else None
+
+
 def compute_sla_date(sh):
-	"""Effective SLA date: promised date if set, else pickup + carrier SLA days."""
+	"""Effective SLA date: the Promised Delivery Date if set, otherwise the
+	dispatch date (see _base_date) + the carrier's SLA transit days. No manual
+	date entry is needed — leave Promised Delivery Date blank to auto-compute."""
 	if sh.get("custom_promised_delivery_date"):
 		return getdate(sh.get("custom_promised_delivery_date"))
-	if not sh.get("pickup_date"):
+	base = _base_date(sh)
+	if not base:
 		return None
-	return add_days(getdate(sh.get("pickup_date")), carrier_sla_days(sh.get("carrier")))
+	return add_days(base, carrier_sla_days(sh.get("carrier")))
 
 
 def _status(sla_date, delivered_on, today, risk_days):

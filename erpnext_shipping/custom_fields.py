@@ -260,8 +260,9 @@ def get_custom_fields():
 				"fieldtype": "Date",
 				"insert_after": "custom_sales_channel",
 				"description": _(
-					"Delivery date promised to the customer/marketplace. Overrides the "
-					"carrier SLA when set; leave blank to use Pickup Date + carrier SLA days."
+					"Optional override. Leave blank — the SLA Date is computed automatically "
+					"as the dispatch date (Pickup Date, else Delivery Note date) + the carrier "
+					"SLA days. Only set this to force a specific promised date."
 				),
 			},
 			{
