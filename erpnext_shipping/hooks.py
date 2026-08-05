@@ -150,9 +150,13 @@ scheduler_events = {
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "erpnext_shipping.task.get_dashboard_data"
-# }
+
+# Connections sekmesine kargo kayıtlarını ekle. Fonksiyonlar zincirleme çalışır
+# ve gelen data'nın üstüne ekler — ERPNext'in ve başka app'lerin girdileri korunur.
+override_doctype_dashboards = {
+	"Shipment": "erpnext_shipping.erpnext_shipping.dashboard_overrides.get_shipment_dashboard_data",
+	"Delivery Note": "erpnext_shipping.erpnext_shipping.dashboard_overrides.get_delivery_note_dashboard_data",
+}
 
 # exempt linked doctypes from being automatically cancelled
 #
