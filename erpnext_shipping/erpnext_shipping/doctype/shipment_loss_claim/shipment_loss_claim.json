@@ -50,6 +50,11 @@
   "refunded",
   "column_break_res",
   "carrier_claim_ref",
+  "found_section",
+  "found_date",
+  "found_outcome",
+  "column_break_found",
+  "found_notes",
   "attachments_section",
   "signed_form",
   "purchase_invoice",
@@ -314,6 +319,38 @@
    "fieldname": "carrier_claim_ref",
    "fieldtype": "Data",
    "label": "Carrier Claim Reference"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "found_outcome",
+   "fieldname": "found_section",
+   "fieldtype": "Section Break",
+   "label": "Parcel Found"
+  },
+  {
+   "description": "Set by the 'Mark as Found' action.",
+   "fieldname": "found_date",
+   "fieldtype": "Date",
+   "label": "Found On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "found_outcome",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Where It Ended Up",
+   "options": "\nDelivered to Customer\nReturned to Us",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_found",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "found_notes",
+   "fieldtype": "Small Text",
+   "label": "Found Notes",
+   "read_only": 1
   },
   {
    "fieldname": "attachments_section",

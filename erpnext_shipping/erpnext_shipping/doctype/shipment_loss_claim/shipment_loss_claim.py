@@ -95,7 +95,14 @@ class ShipmentLossClaim(Document):
 		self.claim_deadline = add_days(self.pickup_date, int(days or DEFAULT_CLAIM_WINDOW.get(key, 21)))
 
 	def compute_net_loss(self):
-		self.net_loss = flt(self.goods_value) + flt(self.shipping_cost) - flt(self.compensation_amount)
+		goods = flt(self.goods_value)
+		# Parsel sonradan bulunduysa mal kaybı yok — ne müşteriye ulaştıysa ne de
+		# bize döndüyse. Tek istisna: bu arada yerine yenisi gönderilmişse, o ikinci
+		# parselin malı gerçekten çıkmış olur, o yüzden zarar olarak kalır.
+		if self.found_outcome and not self.replacement_shipment:
+			goods = 0
+		# Kargo bedeli her hâlükârda ödenmiş durumda.
+		self.net_loss = goods + flt(self.shipping_cost) - flt(self.compensation_amount)
 
 
 def _claim_email(doc):
@@ -226,6 +233,11 @@ def email_form_to_customer(claim, recipient=None, subject=None, content=None):
 	pdf = _form_pdf(doc)
 	_send_claim_email(doc, recipient, subject or d["subject"], content or d["content"], attachments=[pdf])
 	doc.db_set("form_sent_date", frappe.utils.nowdate())
+	# Pazaryeri siparişlerinde adres genelde anonim proxy olarak geliyor ya da hiç
+	# gelmiyor; gerçek adres dialog'da elle yazılıyor. Talebe geri yaz ki kayıtta
+	# kalsın ve bir dahakine hazır gelsin.
+	if recipient and "," not in recipient and recipient != doc.receiver_email:
+		doc.db_set("receiver_email", recipient.strip())
 	if doc.status == "Draft":
 		doc.db_set("status", "Form Sent to Customer")
 	return True
@@ -249,6 +261,50 @@ def submit_claim_to_carrier(claim, recipient=None, subject=None, content=None):
 	doc.db_set("submitted_date", frappe.utils.nowdate())
 	doc.db_set("status", "Submitted to Carrier")
 	return True
+
+
+FOUND_OUTCOMES = ("Delivered to Customer", "Returned to Us")
+
+
+@frappe.whitelist()
+def mark_as_found(claim, outcome, found_date=None, notes=None):
+	"""Kayıp sanılan parsel ortaya çıktı: talebi 'Recovered' olarak kapat.
+
+	Bu aylar sonra bile olabiliyor, o yüzden talebin hangi statüde olduğuna
+	bakmıyoruz — carrier'a gönderilmiş, reddedilmiş, hatta ödenmiş bir talep de
+	sonradan bulunabilir. outcome parselin nerede olduğunu söyler:
+	müşteriye ulaşmış ya da bize geri dönmüş.
+	"""
+	if outcome not in FOUND_OUTCOMES:
+		frappe.throw(frappe._("Unknown outcome: {0}").format(outcome))
+
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	if doc.found_outcome:
+		frappe.throw(
+			frappe._("This claim is already marked as found on {0} ({1}).").format(
+				frappe.utils.formatdate(doc.found_date), doc.found_outcome
+			)
+		)
+
+	doc.found_outcome = outcome
+	doc.found_date = found_date or frappe.utils.nowdate()
+	doc.found_notes = notes
+	doc.status = "Recovered"
+	# compute_net_loss validate içinde yeniden hesaplar.
+	doc.save(ignore_permissions=True)
+
+	# Ödenmiş tazminat varsa carrier'a geri bildirilmesi gerekebilir — sessizce
+	# geçmek yerine kullanıcıya söyle.
+	if flt(doc.compensation_amount):
+		frappe.msgprint(
+			frappe._(
+				"Compensation of {0} was already received for this claim. "
+				"Check whether it has to be returned to the carrier."
+			).format(frappe.utils.fmt_money(doc.compensation_amount, currency=doc.currency)),
+			indicator="orange",
+			alert=True,
+		)
+	return {"status": doc.status, "found_outcome": doc.found_outcome, "net_loss": doc.net_loss}
 
 
 OPEN_CLAIM_STATUSES = ["Rejected", "Recovered", "Written Off"]

@@ -18,9 +18,11 @@ frappe.ui.form.on("Shipment Loss Claim", {
 			__("Form")
 		);
 
-		// Müşteriye e-posta (adres varsa) — formu imza için yollar. Doğrudan
-		// göndermek yerine onay + düzenlenebilir içerik dialog'u açar.
-		if (frm.doc.receiver_email && ["Draft", "Form Sent to Customer"].includes(frm.doc.status)) {
+		// Müşteriye e-posta — formu imza için yollar. Adres alanı boş olabilir:
+		// pazaryeri siparişlerinde gelen adres çoğu zaman anonim proxy oluyor ve
+		// müşterinin gerçek adresi sonradan öğreniliyor. O yüzden buton her zaman
+		// görünür; adres dialog'daki "To" alanına yazılır.
+		if (["Draft", "Form Sent to Customer"].includes(frm.doc.status)) {
 			frm.add_custom_button(
 				__("Email Form to Customer"),
 				() => {
@@ -67,6 +69,64 @@ frappe.ui.form.on("Shipment Loss Claim", {
 							});
 						}
 					);
+				},
+				__("Loss")
+			);
+		}
+
+		// Kayıp sanılan parsel sonradan (bazen aylar sonra) çıkabiliyor. Statüsü
+		// ne olursa olsun işaretlenebilmeli — carrier'a gönderilmiş, hatta ödenmiş
+		// bir talep de bulunabilir.
+		if (!frm.doc.found_outcome) {
+			frm.add_custom_button(
+				__("Mark as Found"),
+				() => {
+					const d = new frappe.ui.Dialog({
+						title: __("Parcel Found"),
+						fields: [
+							{
+								fieldname: "outcome",
+								label: __("Where did it end up?"),
+								fieldtype: "Select",
+								options: ["Delivered to Customer", "Returned to Us"],
+								reqd: 1,
+							},
+							{
+								fieldname: "found_date",
+								label: __("Found On"),
+								fieldtype: "Date",
+								default: frappe.datetime.get_today(),
+								reqd: 1,
+							},
+							{ fieldname: "notes", label: __("Notes"), fieldtype: "Small Text" },
+							{
+								fieldname: "info",
+								fieldtype: "HTML",
+								options: `<div class="text-muted small">${__(
+									"The claim is closed as Recovered. The goods value stops counting as a loss unless a replacement was already shipped."
+								)}</div>`,
+							},
+						],
+						primary_action_label: __("Mark as Found"),
+						primary_action(values) {
+							frappe.call({
+								method: "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.mark_as_found",
+								args: { claim: frm.doc.name, ...values },
+								freeze: true,
+								callback: (r) => {
+									if (!r.exc) {
+										d.hide();
+										frappe.show_alert({
+											message: __("Marked as found"),
+											indicator: "green",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						},
+					});
+					d.show();
 				},
 				__("Loss")
 			);
