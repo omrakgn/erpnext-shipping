@@ -51,12 +51,22 @@ def sendcloud_webhook():
 
 	shipment = _find_shipment(parcel_id, tracking)
 	if not shipment:
-		# Eşleşmeyen webhook nadir olmalı — görünür olsun diye Error Log'a yaz.
-		frappe.log_error(
-			title="SendCloud webhook: shipment not matched",
-			message=f"parcel={parcel_id} tracking={tracking} status={status!r}",
+		# Yarış durumu: SendCloud ilk event'i ("Being announced") paketi yaratır
+		# yaratmaz atıyor, bizim booking işlemimiz ise shipment_id'yi henüz
+		# commit etmemiş oluyor. Saniyeler sonra eşleşme tutuyor — o yüzden
+		# hemen Error Log'a yazmak yerine arka planda tekrar deniyoruz.
+		frappe.enqueue(
+			"erpnext_shipping.erpnext_shipping.webhook.rematch_parcel",
+			queue="short",
+			timeout=120,
+			parcel_id=parcel_id,
+			tracking=tracking,
+			status=status,
+			job_id=f"sendcloud_rematch::{parcel_id}",
+			deduplicate=True,
+			enqueue_after_commit=True,
 		)
-		return {"ok": True, "ignored": "shipment not found", "parcel_id": parcel_id}
+		return {"ok": True, "deferred": "shipment not found yet", "parcel_id": parcel_id}
 
 	# Ağır işi arka plana at; webhook'a hemen 200 dön.
 	frappe.enqueue(
@@ -121,6 +131,41 @@ def _find_shipment(parcel_id, tracking_number=None):
 		)
 		if name:
 			return name
+	return None
+
+
+# Eşleşmeyi kaç kez, kaç saniye arayla tekrar deneyeceğiz. Gözlenen gecikme
+# birkaç saniye; 5 x 5sn hem fazlasıyla yeter hem de worker'ı boşuna tutmaz.
+_REMATCH_ATTEMPTS = 5
+_REMATCH_INTERVAL = 5
+
+
+def rematch_parcel(parcel_id, tracking=None, status=None):
+	"""Arka plan: booking işlemi commit olana kadar eşleşmeyi tekrar dene.
+
+	Eşleşirse normal tracking yenilemesi çalışır. Tüm denemeler biterse artık
+	gerçek bir sorun vardır (bize ait olmayan paket, silinmiş Shipment) —
+	ancak o zaman Error Log'a yazılır.
+	"""
+	import time
+
+	for attempt in range(1, _REMATCH_ATTEMPTS + 1):
+		time.sleep(_REMATCH_INTERVAL)
+		# Commit'i başka bir bağlantı yaptı; okuduğumuz snapshot'ı tazele.
+		frappe.db.rollback()
+		shipment = _find_shipment(parcel_id, tracking)
+		if shipment:
+			_log(f"rematch OK parcel={parcel_id} -> {shipment} (deneme {attempt})")
+			refresh_shipment_tracking(shipment)
+			return shipment
+
+	frappe.log_error(
+		title="SendCloud webhook: shipment not matched",
+		message=(
+			f"parcel={parcel_id} tracking={tracking} status={status!r}\n"
+			f"{_REMATCH_ATTEMPTS} deneme x {_REMATCH_INTERVAL}sn sonra da eşleşmedi."
+		),
+	)
 	return None
 
 
