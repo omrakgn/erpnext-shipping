@@ -74,6 +74,30 @@ frappe.ui.form.on("Shipment Loss Claim", {
 			);
 		}
 
+		// Otomatik doldurma sadece oluşturulurken çalışır (silinen alan geri
+		// gelmesin diye). Sonradan Shipment'a bilgi eklendiyse elle çekme yolu.
+		frm.add_custom_button(
+			__("Refresh from Shipment"),
+			() => {
+				frappe.confirm(
+					__(
+						"Fill empty fields from the Shipment again? Fields you cleared on purpose (e.g. an unusable marketplace e-mail) may come back."
+					),
+					() => {
+						frappe.call({
+							method: "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.refresh_from_shipment",
+							args: { claim: frm.doc.name },
+							freeze: true,
+							callback: (r) => {
+								if (!r.exc) frm.reload_doc();
+							},
+						});
+					}
+				);
+			},
+			__("Form")
+		);
+
 		// Kayıp sanılan parsel sonradan (bazen aylar sonra) çıkabiliyor. Statüsü
 		// ne olursa olsun işaretlenebilmeli — carrier'a gönderilmiş, hatta ödenmiş
 		// bir talep de bulunabilir.

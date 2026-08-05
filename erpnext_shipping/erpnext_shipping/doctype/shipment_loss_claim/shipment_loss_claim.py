@@ -30,7 +30,13 @@ def _contact_details(contact_name):
 
 class ShipmentLossClaim(Document):
 	def validate(self):
-		self.autofill_from_shipment()
+		# Yalnızca talep ilk oluşturulurken doldur. Her kayıtta çalıştırılırsa
+		# kullanıcının bilerek boşalttığı alan geri gelir — tipik durum: pazaryeri
+		# siparişinin anonim e-postası siliniyor, kayıtta geri yazılıyor ve DPD
+		# formuna ulaşılamayan bir adres basılıyor. Sonradan yeniden çekmek için
+		# "Refresh from Shipment" düğmesi var.
+		if self.is_new():
+			self.autofill_from_shipment()
 		self.set_claim_amount()
 		self.set_deadline()
 		self.compute_net_loss()
@@ -260,6 +266,20 @@ def submit_claim_to_carrier(claim, recipient=None, subject=None, content=None):
 	)
 	doc.db_set("submitted_date", frappe.utils.nowdate())
 	doc.db_set("status", "Submitted to Carrier")
+	return True
+
+
+@frappe.whitelist()
+def refresh_from_shipment(claim):
+	"""Boş alanları Shipment'tan yeniden doldur (açık kullanıcı isteğiyle).
+
+	Otomatik doldurma yalnızca talep oluşturulurken çalışır; bu, sonradan
+	Shipment'a eklenen bilgiyi çekmek isteyen kullanıcı için elle çıkış yoludur.
+	Dolu alanlara dokunmaz — sildiğiniz bir alan varsa geri geleceğini bilin.
+	"""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	doc.autofill_from_shipment()
+	doc.save()
 	return True
 
 
