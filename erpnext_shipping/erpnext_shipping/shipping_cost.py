@@ -549,14 +549,24 @@ def _parse_dpd_into(content, source_file, carrier, ctx, stats):
 
 	wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
 	ws = wb.active
+	# DPD's export declares a bogus sheet dimension (<dimension ref="A1:A1"/>).
+	# read_only mode trusts that declaration, so iter_rows would yield a single
+	# cell and the header would look like just ("Invoice Number",) — every import
+	# then failed with "Column 'Parcel Number' not found". Recompute the real
+	# extent from the rows themselves.
+	if hasattr(ws, "reset_dimensions"):
+		ws.reset_dimensions()
 	rows = ws.iter_rows(values_only=True)
 	header = next(rows, None)
 	if not header:
 		raise ValueError(_("The uploaded file is empty."))
 	idx = {str(h).strip(): i for i, h in enumerate(header) if h is not None}
 	if COL_PARCEL not in idx:
+		# List what we did see — if DPD renames a column again this says so outright.
 		raise ValueError(
-			_("Column '{0}' not found. Is this a DPD invoice detail file?").format(COL_PARCEL)
+			_("Column '{0}' not found. Is this a DPD invoice detail file? Columns found: {1}").format(
+				COL_PARCEL, ", ".join(sorted(idx)) or _("(none)")
+			)
 		)
 
 	def cell(row, colname):
