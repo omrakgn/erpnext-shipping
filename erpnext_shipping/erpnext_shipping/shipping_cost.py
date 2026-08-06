@@ -145,7 +145,14 @@ def _read_file_content(file_url: str) -> bytes:
 		file_doc = frappe.get_doc("File", file_url)
 	if not file_doc:
 		frappe.throw(_("Uploaded file not found: {0}").format(file_url))
-	return file_doc.get_content()
+
+	content = file_doc.get_content()
+	# get_content() hands back str for files it recognises as text (.csv) and
+	# bytes for binary ones (.xlsx, .zip). Every parser below expects bytes, so
+	# normalise here rather than in each of them.
+	if isinstance(content, str):
+		content = content.encode("utf-8")
+	return content
 
 
 def find_shipment_by_parcel(parcel_number: str):
@@ -681,7 +688,13 @@ def _parse_sendcloud_into(content, source_file, ctx, stats):
 	"""
 	import csv
 
-	text = content.decode("utf-8-sig", errors="replace")
+	# Callers may hand us bytes (zip member, raw upload) or str (Frappe's
+	# File.get_content decodes text files); accept either, BOM included.
+	if isinstance(content, bytes):
+		text = content.decode("utf-8-sig", errors="replace")
+	else:
+		text = content.lstrip("﻿")
+
 	reader = csv.DictReader(io.StringIO(text))
 	if not reader.fieldnames or "Reference" not in reader.fieldnames:
 		raise ValueError(
@@ -835,7 +848,10 @@ def _process_content(content, filename, ctx, stats):
 		_parse_fedex_into(content, filename, ctx, stats)
 	else:
 		# İçeriğe göre kaba tahmin: XML mi?
-		head = content[:200].lstrip()
+		head = content[:200]
+		if isinstance(head, str):
+			head = head.encode("utf-8", errors="replace")
+		head = head.lstrip()
 		if head.startswith(b"<?xml") or b"Invoice-2" in head:
 			_parse_fedex_into(content, filename, ctx, stats)
 		else:
@@ -863,7 +879,7 @@ def import_invoice(file_url: str):
 				if member.endswith("/"):
 					continue
 				base = member.rsplit("/", 1)[-1]
-				if base.startswith(".") or not base.lower().endswith((".xml", ".xlsx", ".xls")):
+				if base.startswith(".") or not base.lower().endswith((".xml", ".xlsx", ".xls", ".csv")):
 					continue
 				try:
 					_process_content(zf.read(member), base, ctx, stats)
