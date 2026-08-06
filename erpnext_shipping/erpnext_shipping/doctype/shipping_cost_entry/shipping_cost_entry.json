@@ -9,6 +9,8 @@
   "parcel_number",
   "invoice_number",
   "carrier",
+  "billed_via",
+  "sales_channel",
   "scan_date",
   "product_name",
   "country",
@@ -62,10 +64,27 @@
   },
   {
    "default": "DPD",
+   "description": "The carrier that actually moved the parcel, whoever billed it.",
    "fieldname": "carrier",
    "fieldtype": "Data",
    "in_standard_filter": 1,
    "label": "Carrier"
+  },
+  {
+   "description": "Who issued the invoice. A DPD parcel booked through SendCloud is carrier=DPD, billed_via=SendCloud.",
+   "fieldname": "billed_via",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Billed Via",
+   "read_only": 1
+  },
+  {
+   "description": "Sales channel the parcel came from, as reported by SendCloud (shopify_v2_importer, bolv3_importer, amazon_v2_importer, ...).",
+   "fieldname": "sales_channel",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Sales Channel",
+   "read_only": 1
   },
   {
    "fieldname": "scan_date",

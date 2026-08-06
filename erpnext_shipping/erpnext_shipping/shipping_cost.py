@@ -458,6 +458,12 @@ def _upsert_cost_entry(values, ctx, stats, pdf=None):
 	values["delivery_note"] = delivery_note
 	values["match_method"] = MATCH_METHOD_LABELS.get(status)
 
+	# Some lines never name the carrier: a SendCloud label fee, or a surcharge
+	# invoiced separately from the freight it belongs to. Take it from the matched
+	# Shipment so carrier reporting still sees these costs.
+	if not values.get("carrier") and shipment:
+		values["carrier"] = frappe.db.get_value("Shipment", shipment, "carrier") or ""
+
 	if shipment:
 		stats["affected_shipments"].add(shipment)
 	if delivery_note:
@@ -586,6 +592,7 @@ def _parse_dpd_into(content, source_file, carrier, ctx, stats):
 			"parcel_number": parcel,
 			"invoice_number": _s(cell(row, COL_INVOICE)),
 			"carrier": carrier,
+			"billed_via": carrier,
 			"scan_date": _parse_date(cell(row, COL_SCAN_DATE)),
 			"product_name": _s(cell(row, COL_PRODUCT)),
 			"country": _s(cell(row, COL_COUNTRY)),
@@ -607,6 +614,128 @@ def _parse_dpd_into(content, source_file, carrier, ctx, stats):
 			**_surcharge_fields(
 				breakdown, flt(cell(row, COL_INV_WEIGHT)), flt(cell(row, COL_CORR_WEIGHT))
 			),
+			"source_file": source_file,
+		}
+		_upsert_cost_entry(values, ctx, stats)
+
+
+# ---------------------------------------------------------------------------
+# SendCloud CSV
+# ---------------------------------------------------------------------------
+# Both SendCloud invoice kinds export the same 19 columns; only `Type` differs.
+# Shipping invoices carry `Shipments` (freight) + `Surcharge` lines; subscription
+# invoices carry `Subscription - fee per parcel` + `Parcel Fee Refund`.
+SC_TYPE_FREIGHT = "Shipments"
+SC_TYPE_SURCHARGE = "Surcharge"
+
+# Carriers recognised at the front of a freight description ("DPD Classic B2B").
+SC_KNOWN_CARRIERS = (
+	"PostNL",
+	"Colissimo",
+	"Sendcloud",
+	"FedEx",
+	"Correos",
+	"Hermes",
+	"Bpost",
+	"DHL",
+	"DPD",
+	"GLS",
+	"UPS",
+)
+
+# Surcharge descriptions that point at a wrong declared weight/size (actionable).
+SC_WEIGHT_SURCHARGE_HINTS = ("heavy weight", "overschrijden afmetingen", "oversized", "overweight")
+
+
+def _sendcloud_invoice_number(source_file):
+	"""SendCloud CSVs carry no invoice number column - the file is named after it
+	(e.g. `1-26-BE0061815.csv`)."""
+	return (source_file or "").replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+
+
+def _sendcloud_carrier(rows):
+	"""Real carrier from the freight line ("DPD Classic B2B" -> "DPD").
+
+	Subscription-only parcels have no freight line, so the carrier is unknown from
+	the file; the entry still records billed_via=SendCloud and rolls up correctly.
+	"""
+	for row in rows:
+		if _s(row.get("Type")) != SC_TYPE_FREIGHT:
+			continue
+		desc = _s(row.get("Description"))
+		for carrier in SC_KNOWN_CARRIERS:
+			if desc.lower().startswith(carrier.lower()):
+				return carrier
+		return desc.split(" ")[0] if desc else ""
+	return ""
+
+
+def _parse_sendcloud_into(content, source_file, ctx, stats):
+	"""Parse a SendCloud invoice .csv; one Shipping Cost Entry per parcel.
+
+	A parcel legitimately appears on more than one invoice: SendCloud bills the
+	label fee (subscription) separately from the freight, and the freight itself
+	may come from SendCloud or from our own carrier contract. Entries are keyed by
+	parcel+invoice, so the Shipment/Delivery Note rollup sums them - which is the
+	real total cost of that parcel.
+	"""
+	import csv
+
+	text = content.decode("utf-8-sig", errors="replace")
+	reader = csv.DictReader(io.StringIO(text))
+	if not reader.fieldnames or "Reference" not in reader.fieldnames:
+		raise ValueError(
+			_("Column 'Reference' not found. Is this a SendCloud invoice CSV? Columns found: {0}").format(
+				", ".join(reader.fieldnames or []) or _("(none)")
+			)
+		)
+
+	invoice_number = _sendcloud_invoice_number(source_file)
+
+	# Group the lines by parcel; a parcel has one freight line plus N surcharges.
+	groups = {}
+	for row in reader:
+		parcel = _norm_parcel(row.get("Reference"))
+		if not parcel:
+			continue
+		groups.setdefault(parcel, []).append(row)
+
+	for parcel, rows in groups.items():
+		breakdown = {}
+		total = 0.0
+		surcharge = 0.0
+		weight_surcharge = 0
+		for row in rows:
+			amount = flt(row.get("Amount"))
+			total += amount
+			desc = _s(row.get("Description")) or _s(row.get("Type")) or "Charge"
+			# Same description can repeat on one parcel (two fuel surcharges).
+			breakdown[desc] = flt(breakdown.get(desc)) + amount
+			if _s(row.get("Type")) == SC_TYPE_SURCHARGE:
+				surcharge += amount
+				if any(h in desc.lower() for h in SC_WEIGHT_SURCHARGE_HINTS):
+					weight_surcharge = 1
+
+		first = rows[0]
+		freight = next((r for r in rows if _s(r.get("Type")) == SC_TYPE_FREIGHT), None)
+
+		values = {
+			"parcel_number": parcel,
+			"invoice_number": invoice_number,
+			"carrier": _sendcloud_carrier(rows),
+			"billed_via": "SendCloud",
+			"sales_channel": _s(first.get("Integration")),
+			"scan_date": _parse_date(first.get("Date")),
+			"product_name": _s((freight or first).get("Description")),
+			"country": _s(first.get("To Country")),
+			"currency": "EUR",
+			"total_net_amount": flt(total),
+			"reference_1": _s(first.get("Order number")),
+			"receiver_zip": _s(first.get("To Postal Code")),
+			"receiver_city": _s(first.get("To City")),
+			"charge_breakdown": json.dumps(breakdown, ensure_ascii=False),
+			"surcharge_amount": flt(surcharge),
+			"weight_surcharge": weight_surcharge,
 			"source_file": source_file,
 		}
 		_upsert_cost_entry(values, ctx, stats)
@@ -678,6 +807,7 @@ def _parse_fedex_into(content, source_file, ctx, stats):
 			"parcel_number": awb,
 			"invoice_number": invoice or "",
 			"carrier": carrier,
+			"billed_via": carrier,
 			"scan_date": _parse_date(m_coll.group(1) if m_coll else issue),
 			"product_name": _fedex_text(line, "cac:Item/cac:SellersItemIdentification/cbc:ID") or "",
 			"country": (m_rcv.group(3).strip() if m_rcv else ""),
@@ -699,6 +829,8 @@ def _process_content(content, filename, ctx, stats):
 	low = (filename or "").lower()
 	if low.endswith((".xlsx", ".xls")):
 		_parse_dpd_into(content, filename, "DPD", ctx, stats)
+	elif low.endswith(".csv"):
+		_parse_sendcloud_into(content, filename, ctx, stats)
 	elif low.endswith(".xml"):
 		_parse_fedex_into(content, filename, ctx, stats)
 	else:
