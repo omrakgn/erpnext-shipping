@@ -136,13 +136,64 @@ def _norm_parcel(v):
 	return s
 
 
+# Imported carrier invoices are filed here so they stop piling up loose in the
+# File manager's Home folder. Note this is the File doctype's folder, not a
+# directory: Frappe keeps every private file flat under private/files/ on disk.
+CARRIER_INVOICE_FOLDER = "Carrier Invoices"
+
+
+def _get_file_doc(file_url: str):
+	"""The File document for an uploaded file, looked up by url or by name."""
+	if frappe.db.exists("File", {"file_url": file_url}):
+		return frappe.get_doc("File", {"file_url": file_url})
+	if frappe.db.exists("File", file_url):
+		return frappe.get_doc("File", file_url)
+	return None
+
+
+def _carrier_invoice_folder() -> str:
+	"""Name of the folder imported invoices live in, creating it on first use."""
+	name = f"Home/{CARRIER_INVOICE_FOLDER}"
+	if frappe.db.exists("File", name):
+		return name
+
+	folder = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": CARRIER_INVOICE_FOLDER,
+			"is_folder": 1,
+			"folder": "Home",
+		}
+	)
+	folder.insert(ignore_permissions=True)
+	return folder.name
+
+
+def file_imported_invoice(file_url: str) -> str | None:
+	"""Move an imported invoice into the Carrier Invoices folder.
+
+	Cosmetic only - it changes where the File manager shows the file, never the
+	path on disk - so a failure here must not fail the import that just
+	succeeded.
+	"""
+	try:
+		file_doc = _get_file_doc(file_url)
+		if not file_doc or file_doc.get("is_folder"):
+			return None
+		folder = _carrier_invoice_folder()
+		if file_doc.folder == folder:
+			return folder
+		file_doc.folder = folder
+		file_doc.save(ignore_permissions=True)
+		return folder
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Filing imported carrier invoice")
+		return None
+
+
 def _read_file_content(file_url: str) -> bytes:
 	"""Return the binary content of an uploaded File by url or File name."""
-	file_doc = None
-	if frappe.db.exists("File", {"file_url": file_url}):
-		file_doc = frappe.get_doc("File", {"file_url": file_url})
-	elif frappe.db.exists("File", file_url):
-		file_doc = frappe.get_doc("File", file_url)
+	file_doc = _get_file_doc(file_url)
 	if not file_doc:
 		frappe.throw(_("Uploaded file not found: {0}").format(file_url))
 
@@ -891,6 +942,7 @@ def import_invoice(file_url: str):
 		stats["files"] += 1
 
 	_finalize_import(stats)
+	file_imported_invoice(file_url)
 	return _stats_summary(stats)
 
 
@@ -903,6 +955,7 @@ def import_dpd_invoice(file_url: str, carrier: str = "DPD"):
 	_parse_dpd_into(content, file_url.rsplit("/", 1)[-1], carrier, ctx, stats)
 	stats["files"] = 1
 	_finalize_import(stats)
+	file_imported_invoice(file_url)
 	return _stats_summary(stats)
 
 
