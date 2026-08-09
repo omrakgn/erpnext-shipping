@@ -808,6 +808,9 @@ def fulfill_sendcloud_order(shipment):
 		if not shipping_option_code and row.get("custom_shipping_option_code"):
 			shipping_option_code = row.get("custom_shipping_option_code")
 			contract_id = row.get("custom_shipping_contract_id")
+	# Shipment üzerindeki elle sözleşme seçimi parseldekini ezer: teklif listesi
+	# broker sözleşmeleri döndürmediği için "Sendcloud rates" ancak böyle seçilebiliyor.
+	contract_id = shipment_doc.get("custom_sendcloud_contract_id") or contract_id
 	if total_weight <= 0:
 		frappe.throw(
 			_("Set parcel weight(s) on the Shipment before fulfilling — total weight is 0.")

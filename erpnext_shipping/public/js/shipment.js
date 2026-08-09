@@ -126,6 +126,74 @@ frappe.ui.form.on("Shipment", {
 			);
 		}
 		if (frm.doc.docstatus === 1 && !frm.doc.shipment_id) {
+			// SendCloud's rate endpoint only offers each carrier's default contract,
+			// so a broker contract ("Sendcloud rates") never appears in the rate list
+			// even though it can be picked in SendCloud's own panel. Without an
+			// explicit choice SendCloud silently uses the account default.
+			frm.add_custom_button(
+				__("SendCloud Contract"),
+				function () {
+					frappe.call({
+						method: "erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud.get_sendcloud_contracts",
+						freeze: true,
+						freeze_message: __("Loading contracts..."),
+						callback: function (r) {
+							const rows = r.message || [];
+							if (!rows.length) {
+								frappe.msgprint(__("No SendCloud contracts found."));
+								return;
+							}
+							const options = [{ value: "", label: __("Account default") }].concat(
+								rows.map((c) => ({
+									value: String(c.id),
+									label: `${c.label} — ${c.type}${
+										c.state && c.state !== "active" ? " [" + c.state + "]" : ""
+									}`,
+								}))
+							);
+							const d = new frappe.ui.Dialog({
+								title: __("SendCloud Contract"),
+								fields: [
+									{
+										fieldname: "contract",
+										label: __("Contract"),
+										fieldtype: "Select",
+										options: options,
+										default: frm.doc.custom_sendcloud_contract_id || "",
+										reqd: 0,
+									},
+									{
+										fieldname: "info",
+										fieldtype: "HTML",
+										options: `<div class="text-muted small">${__(
+											"broker = SendCloud's rates; SendCloud invoices us and a loss claim goes to SendCloud. direct = our own contract with the carrier; the carrier invoices us and the claim goes to the carrier. Leave on account default to let SendCloud decide."
+										)}</div>`,
+									},
+								],
+								primary_action_label: __("Set"),
+								primary_action(values) {
+									const picked = rows.find(
+										(c) => String(c.id) === String(values.contract)
+									);
+									frm.set_value(
+										"custom_sendcloud_contract_id",
+										values.contract || ""
+									);
+									frm.set_value(
+										"custom_sendcloud_contract",
+										picked ? `${picked.label} — ${picked.type}` : ""
+									);
+									d.hide();
+									frm.save();
+								},
+							});
+							d.show();
+						},
+					});
+				},
+				__("Tools")
+			);
+
 			frm.add_custom_button(__("Fetch Shipping Rates"), function () {
 				if (frm.doc.shipment_parcel.length > 1) {
 					frappe.confirm(

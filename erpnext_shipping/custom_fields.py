@@ -155,6 +155,38 @@ def get_custom_fields():
 		],
 		"Shipment": [
 			{
+				# SendCloud's rate endpoint only returns contracts that are default
+				# for their carrier, so a broker contract ("Sendcloud rates") can be
+				# picked in SendCloud's own panel but never appears in the rate list
+				# here. Without an explicit choice SendCloud falls back to whatever
+				# the account default happens to be — which is how every shipment
+				# quietly moved from SendCloud's DPD rates to our own DPD contract
+				# when that default changed.
+				"fieldname": "custom_sendcloud_contract",
+				"label": _("SendCloud Contract"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"translatable": 0,
+				"description": _(
+					"Leave empty to use the account default. Set it with "
+					"'SendCloud Contract' under Tools to ship on a specific contract — "
+					"'Sendcloud rates' (broker) bills through SendCloud, our own "
+					"contract (direct) bills through the carrier."
+				),
+				"insert_after": "shipment_parcel",
+				"allow_on_submit": 1,
+			},
+			{
+				"fieldname": "custom_sendcloud_contract_id",
+				"label": _("SendCloud Contract ID"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"hidden": 1,
+				"translatable": 0,
+				"insert_after": "custom_sendcloud_contract",
+				"allow_on_submit": 1,
+			},
+			{
 				"fieldname": "custom_parcel_items",
 				"label": _("Parcel Items"),
 				"fieldtype": "Table",

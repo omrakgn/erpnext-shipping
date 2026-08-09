@@ -257,9 +257,16 @@ class SendCloudUtils:
 			api_order_number = shipment_items_data["order_number"]
 
 		ship_with_properties = {"shipping_option_code": service_info["service_id"]}
-		# Sözleşme seçimi (panel'deki "Enabled contract"): varsa açıkça gönder
-		if service_info.get("contract_id"):
-			ship_with_properties["contract"] = service_info["contract_id"]
+		# Sözleşme seçimi (panel'deki "Enabled contract"): varsa açıkça gönder.
+		# Shipment üzerindeki elle seçim teklifin sözleşmesini ezer — teklif uç
+		# noktası yalnız varsayılan sözleşmeleri döndürdüğü için broker sözleşme
+		# ("Sendcloud rates") ancak böyle seçilebiliyor.
+		contract_override = frappe.db.get_value(
+			"Shipment", shipment, "custom_sendcloud_contract_id"
+		) if shipment else None
+		contract = contract_override or service_info.get("contract_id")
+		if contract:
+			ship_with_properties["contract"] = int(contract) if str(contract).isdigit() else contract
 
 		payload = {
 			"order_number": api_order_number,
@@ -799,6 +806,27 @@ class SendCloudUtils:
 				}
 			)
 		return contracts
+
+	def get_contract_options(self, carrier_code=None):
+		"""Contracts formatted for a picker: newest-looking first, default marked."""
+		rows = []
+		for c in self.get_contracts(carrier_code=carrier_code):
+			label = c["name"]
+			if c.get("is_default"):
+				label += " " + _("(account default)")
+			rows.append(
+				{
+					"id": c["id"],
+					"label": label,
+					"type": c.get("type"),
+					"carrier": c.get("carrier_name"),
+					"state": c.get("state"),
+				}
+			)
+		# broker önce: teklif listesinde hiç görünmeyen ve elle seçilmesi gereken
+		# sözleşmeler bunlar; direct olanlar zaten varsayılan olarak geliyor.
+		rows.sort(key=lambda r: (r.get("type") != "broker", str(r.get("carrier") or "")))
+		return rows
 
 	def get_preferred_codes(self):
 		"""SendCloud Settings'teki favori (yıldızlı) shipping option kodları."""
@@ -1516,3 +1544,12 @@ class SendCloudUtils:
 			)
 			# Hata durumunda güvenli tarafta kal, boş döndür
 			return ""
+
+@frappe.whitelist()
+def get_sendcloud_contracts(carrier_code=None):
+	"""Contract list for the Shipment picker.
+
+	SendCloud only offers each carrier default contract through the rate
+	endpoint, so a broker contract has to be chosen by hand.
+	"""
+	return SendCloudUtils().get_contract_options(carrier_code=carrier_code)
