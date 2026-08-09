@@ -170,6 +170,12 @@ def create_invoice(invoice_number, submit=None):
         if value:
             charges[cost_center] = value
 
+    if not charges:
+        # Nothing in scope rather than nothing owed: every line was filtered
+        # out, almost always by the cutover date. Distinct from a credit
+        # balance below, which is a real situation needing a real decision.
+        return None
+
     total = flt(sum(charges.values()), 2)
     if total <= 0:
         # A carrier invoice that nets to a credit is a refund, and the right
