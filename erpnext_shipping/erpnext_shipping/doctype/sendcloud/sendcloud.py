@@ -315,7 +315,6 @@ class SendCloudUtils:
 					return None
 
 				parcels_data = response_data.get("data", {}).get("parcels", [])
-				self._check_contract(contract, parcels_data)
 				if parcels_data:
 					shipment_ids = [str(parcel["id"]) for parcel in parcels_data]
 					tracking_numbers = [parcel.get("tracking_number") or "" for parcel in parcels_data]
@@ -328,6 +327,7 @@ class SendCloudUtils:
 						"shipment_amount": service_info.get("total_price") or 0,
 						"awb_number": ", ".join(tracking_numbers),
 						"tracking_url": ", ".join(tracking_urls),
+						"contract_id": self._used_contract(contract, parcels_data),
 					}
 			except Exception:
 				show_error_alert("creating SendCloud Shipment (multicollo)")
@@ -366,9 +366,9 @@ class SendCloudUtils:
 						continue
 
 					parcels_data = response_data.get("data", {}).get("parcels", [])
-					self._check_contract(contract, parcels_data)
 					if parcels_data:
 						parcel_data = parcels_data[0]
+						used_contract = self._used_contract(contract, parcels_data)
 						shipments_results.append(
 							{
 								"shipment_id": str(parcel_data["id"]),
@@ -377,6 +377,7 @@ class SendCloudUtils:
 								"carrier": self.get_carrier(service_info["carrier"], post_or_get="post"),
 								"carrier_service": service_info["service_name"],
 								"shipment_amount": service_info.get("total_price") or 0,
+								"contract_id": used_contract,
 							}
 						)
 				except Exception:
@@ -396,6 +397,7 @@ class SendCloudUtils:
 					"tracking_url": ", ".join(
 						item["tracking_url"] for item in shipments_results if item.get("tracking_url")
 					),
+					"contract_id": shipments_results[0].get("contract_id"),
 				}
 				return combined_result
 
@@ -532,7 +534,6 @@ class SendCloudUtils:
 						continue
 
 					parcels_data = response_data.get("data", {}).get("parcels", [])
-					self._check_contract(contract, parcels_data)
 					if parcels_data:
 						pd = parcels_data[0]
 						results.append(
@@ -543,6 +544,7 @@ class SendCloudUtils:
 								"carrier": self.get_carrier(service["carrier"], post_or_get="post"),
 								"carrier_service": service["service_name"],
 								"shipment_amount": service.get("total_price") or 0,
+								"contract_id": self._used_contract(contract, parcels_data),
 							}
 						)
 				except Exception:
@@ -553,6 +555,9 @@ class SendCloudUtils:
 
 		carriers = sorted({r["carrier"] for r in results})
 		services = sorted({r["carrier_service"] for r in results})
+		# Koliler ayrı sözleşmelerle gidebilir; hepsini yaz, biri seçilmiş gibi
+		# görünmesin. Koli bazındaki ayrıntı zaten parça satırlarında duruyor.
+		contracts = sorted({str(r["contract_id"]) for r in results if r.get("contract_id")})
 		return {
 			"service_provider": "SendCloud",
 			"shipment_id": ", ".join(r["shipment_id"] for r in results if r.get("shipment_id")),
@@ -561,6 +566,7 @@ class SendCloudUtils:
 			"shipment_amount": sum(flt(r.get("shipment_amount")) for r in results),
 			"awb_number": ", ".join(r["awb_number"] for r in results if r.get("awb_number")),
 			"tracking_url": ", ".join(r["tracking_url"] for r in results if r.get("tracking_url")),
+			"contract_id": ", ".join(contracts),
 		}
 
 	def get_label(self, shipment_id):
@@ -721,41 +727,75 @@ class SendCloudUtils:
 		properties["contract_id"] = contract_id
 		return contract_id
 
-	def _check_contract(self, requested, parcels_data):
-		"""Warn when SendCloud shipped on a contract other than the one asked for.
+	def _used_contract(self, requested, parcels_data):
+		"""The contract SendCloud actually shipped on; warns if it is not `requested`.
 
 		Which contract carried the parcel decides where a compensation claim is
-		filed (own contract → carrier, broker → SendCloud), so a silent swap has
-		to surface at label time rather than weeks later at claim time.
+		filed (own contract → carrier, broker → SendCloud), so a swap has to
+		surface at label time rather than weeks later when the claim is rejected.
+
+		Falls back to `requested` when the response carries no contract, so the
+		caller never records a guess as fact.
 		"""
-		if not requested or not parcels_data:
-			return
-		for parcel in parcels_data:
-			used = parcel.get("contract")
-			if isinstance(used, dict):
-				used = used.get("id")
-			if used is None:
-				continue  # yanıt sözleşme taşımıyor — sessiz kal, uydurma
-			if str(used) != str(requested):
+		used = None
+		for parcel in parcels_data or []:
+			value = parcel.get("contract")
+			if isinstance(value, dict):
+				value = value.get("id")
+			if value is None:
+				continue
+			used = value
+			if requested and str(value) != str(requested):
 				frappe.msgprint(
 					_("SendCloud used contract {0} instead of the selected {1} for parcel {2}.").format(
-						frappe.bold(used), frappe.bold(requested), parcel.get("tracking_number") or parcel.get("id")
+						frappe.bold(value), frappe.bold(requested), parcel.get("tracking_number") or parcel.get("id")
 					),
 					indicator="orange",
 					alert=True,
 				)
+		return used or requested
+
+	def _contract_index(self):
+		"""{contract_id: {name, type}} — cached; the contract list is small and stable.
+
+		The rate response does not always carry the contract type, and a label
+		response carries only the id, so both are looked up here.
+		"""
+		if getattr(self, "_contract_cache", None) is None:
+			self._contract_cache = {}
+			for c in self.get_contracts():
+				if c.get("id"):
+					self._contract_cache[c["id"]] = {"name": c.get("name"), "type": c.get("type")}
+		return self._contract_cache
 
 	def _contract_types(self):
-		"""{contract_id: type} — the rate response does not always carry the type.
+		"""{contract_id: type}."""
+		types = {}
+		for cid, info in self._contract_index().items():
+			types[cid] = info.get("type")
+		return types
 
-		Cached per request: a rate lookup asks for it once per service and the
-		contract list rarely changes within one.
+	def contract_fields(self, contract_id):
+		"""Shipment fields recording which contract carried the parcels.
+
+		Written on every label, not only on a manual pick: once the account
+		default is a broker contract the field would otherwise stay empty and
+		claim routing would have nothing to go on.
 		"""
-		if getattr(self, "_contract_type_cache", None) is None:
-			self._contract_type_cache = {
-				c["id"]: c.get("type") for c in self.get_contracts() if c.get("id")
-			}
-		return self._contract_type_cache
+		if not contract_id:
+			return {}
+		try:
+			key = int(contract_id)
+		except (TypeError, ValueError):
+			key = contract_id
+		info = self._contract_index().get(key) or {}
+		label = info.get("name") or str(contract_id)
+		if info.get("type"):
+			label = f"{label} — {info['type']}"
+		return {
+			"custom_sendcloud_contract": label,
+			"custom_sendcloud_contract_id": str(contract_id),
+		}
 
 	def get_service_dict(self, service, parcels: list[dict]):
 		"""Returns a dictionary with service info."""
@@ -1190,7 +1230,7 @@ class SendCloudUtils:
 			parcel = data
 		parcel_id = parcel.get("parcel_id") or parcel.get("id")
 		label = parcel.get("label") or data.get("label") or {}
-		self._check_contract(contract_id, [parcel])
+		used_contract = self._used_contract(contract_id, [parcel])
 
 		# Hiç parcel_id bulunamazsa yanıtı logla ki yapıyı görebilelim
 		if not parcel_id:
@@ -1217,6 +1257,7 @@ class SendCloudUtils:
 			"carrier_service": (parcel.get("shipment") or {}).get("name") or shipping_option_code or "",
 			"label_file": label.get("file"),
 			"label_mime_type": label.get("mime_type"),
+			"contract_id": used_contract,
 		}
 
 	def get_parcel(self, parcel, shipment, index, shipment_items_data=None, parcel_item_map=None):
