@@ -70,6 +70,11 @@ after_install = "erpnext_shipping.install.after_install"
 # Her migrate'te Pickup Manifest print format'ını güncel tut (patch'ler bir kez
 # çalıştığından, format değişiklikleri ancak böyle yayılır).
 after_migrate = [
+	# Özel alanlar ve property setter'lar. Yalnız after_install'da çalıştıkları
+	# sürece, kurulumdan sonra eklenen bir alan mevcut sitede hiç oluşmuyordu;
+	# alana bakan kod "Field ... not found" ile düşüyor ve sebebi görünmüyor,
+	# çünkü migrate sırasında hiçbir hata çıkmıyor.
+	"erpnext_shipping.install.sync_customisations",
 	"erpnext_shipping.erpnext_shipping.patches.create_pickup_manifest_print_format.execute",
 	"erpnext_shipping.erpnext_shipping.patches.create_pickup_item_summary_print_format.execute",
 	"erpnext_shipping.erpnext_shipping.patches.create_loss_claim_print_format.execute",
