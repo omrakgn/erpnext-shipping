@@ -264,9 +264,9 @@ class SendCloudUtils:
 		contract_override = frappe.db.get_value(
 			"Shipment", shipment, "custom_sendcloud_contract_id"
 		) if shipment else None
-		contract = contract_override or service_info.get("contract_id")
-		if contract:
-			ship_with_properties["contract"] = int(contract) if str(contract).isdigit() else contract
+		contract = self._contract_property(
+			ship_with_properties, contract_override or service_info.get("contract_id")
+		)
 
 		payload = {
 			"order_number": api_order_number,
@@ -315,6 +315,7 @@ class SendCloudUtils:
 					return None
 
 				parcels_data = response_data.get("data", {}).get("parcels", [])
+				self._check_contract(contract, parcels_data)
 				if parcels_data:
 					shipment_ids = [str(parcel["id"]) for parcel in parcels_data]
 					tracking_numbers = [parcel.get("tracking_number") or "" for parcel in parcels_data]
@@ -365,6 +366,7 @@ class SendCloudUtils:
 						continue
 
 					parcels_data = response_data.get("data", {}).get("parcels", [])
+					self._check_contract(contract, parcels_data)
 					if parcels_data:
 						parcel_data = parcels_data[0]
 						shipments_results.append(
@@ -495,8 +497,11 @@ class SendCloudUtils:
 			for _j in range(parcel_count):
 				parcel_data = self.get_parcel(parcel, shipment, i, shipment_items_data, parcel_item_map)
 				ship_with_properties = {"shipping_option_code": service["service_id"]}
-				if service.get("contract_id"):
-					ship_with_properties["contract"] = service["contract_id"]
+				# Koli satırında sözleşme seçilmemişse Shipment başlığındaki seçime düş.
+				contract = self._contract_property(
+					ship_with_properties,
+					service.get("contract_id") or shipment_doc.get("custom_sendcloud_contract_id"),
+				)
 
 				payload = dict(base_payload)
 				payload["parcels"] = [parcel_data]
@@ -527,6 +532,7 @@ class SendCloudUtils:
 						continue
 
 					parcels_data = response_data.get("data", {}).get("parcels", [])
+					self._check_contract(contract, parcels_data)
 					if parcels_data:
 						pd = parcels_data[0]
 						results.append(
@@ -695,6 +701,49 @@ class SendCloudUtils:
 		for parcel in parcels:
 			count += parcel.get("count")
 		return flt(parcel_price) * count
+
+	def _contract_property(self, properties, contract_id):
+		"""Put the chosen contract into a ship_with `properties` dict.
+
+		The key is `contract_id`, not `contract`. SendCloud v3 drops properties it
+		does not recognise without raising, so the wrong key produced a label on
+		the carrier default contract and nothing anywhere said so — the only
+		visible trace was a tracking number with the wrong prefix.
+
+		Returns the id actually sent (or None), for the response check below.
+		"""
+		if not contract_id:
+			return None
+		try:
+			contract_id = int(contract_id)
+		except (TypeError, ValueError):
+			pass
+		properties["contract_id"] = contract_id
+		return contract_id
+
+	def _check_contract(self, requested, parcels_data):
+		"""Warn when SendCloud shipped on a contract other than the one asked for.
+
+		Which contract carried the parcel decides where a compensation claim is
+		filed (own contract → carrier, broker → SendCloud), so a silent swap has
+		to surface at label time rather than weeks later at claim time.
+		"""
+		if not requested or not parcels_data:
+			return
+		for parcel in parcels_data:
+			used = parcel.get("contract")
+			if isinstance(used, dict):
+				used = used.get("id")
+			if used is None:
+				continue  # yanıt sözleşme taşımıyor — sessiz kal, uydurma
+			if str(used) != str(requested):
+				frappe.msgprint(
+					_("SendCloud used contract {0} instead of the selected {1} for parcel {2}.").format(
+						frappe.bold(used), frappe.bold(requested), parcel.get("tracking_number") or parcel.get("id")
+					),
+					indicator="orange",
+					alert=True,
+				)
 
 	def _contract_types(self):
 		"""{contract_id: type} — the rate response does not always carry the type.
@@ -1085,15 +1134,8 @@ class SendCloudUtils:
 			"order": order_ref,
 		}
 		if shipping_option_code:
-			# NOT: Ship an Order, Shipments API'den farklı olarak properties içinde
-			# "contract" değil "contract_id" anahtarını bekler.
 			properties = {"shipping_option_code": shipping_option_code}
-			if contract_id:
-				# API contract_id'yi integer bekliyor (Data alanından string gelebilir)
-				try:
-					properties["contract_id"] = int(contract_id)
-				except (TypeError, ValueError):
-					properties["contract_id"] = contract_id
+			contract_id = self._contract_property(properties, contract_id)
 			payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
 		brand_id = self.get_brand_id()
 		if brand_id:
@@ -1148,6 +1190,7 @@ class SendCloudUtils:
 			parcel = data
 		parcel_id = parcel.get("parcel_id") or parcel.get("id")
 		label = parcel.get("label") or data.get("label") or {}
+		self._check_contract(contract_id, [parcel])
 
 		# Hiç parcel_id bulunamazsa yanıtı logla ki yapıyı görebilelim
 		if not parcel_id:
