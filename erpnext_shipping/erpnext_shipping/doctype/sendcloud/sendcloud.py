@@ -769,9 +769,20 @@ class SendCloudUtils:
 			if carrier_code and carrier.get("code") != carrier_code:
 				continue
 
-			# Okunur etiket: isim boşsa carrier + tip + id; aktif değilse durumu ekle
+			# Okunur etiket. SendCloud kendi sözleşmeleri için `name` döndürmüyor;
+			# panel "DPD — Sendcloud rates" diye gösteriyor. Aynı dili kullanıyoruz,
+			# yoksa listede "DPD broker (104790)" yazıyor ve panelde seçtiği
+			# sözleşmeyi arayan kullanıcı onu tanıyamıyor.
 			ctype = c.get("type") or "contract"
-			name = c.get("name") or f"{carrier.get('name')} {ctype} ({c.get('id')})"
+			carrier_label = carrier.get("name") or ""
+			if c.get("name"):
+				name = c["name"]
+			elif ctype == "broker":
+				name = f"{carrier_label} — Sendcloud rates"
+			elif ctype == "direct":
+				name = f"{carrier_label} — own contract"
+			else:
+				name = f"{carrier_label} {ctype} ({c.get('id')})"
 			state = c.get("state")
 			if state and state != "active":
 				name = f"{name} [{state}]"
