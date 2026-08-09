@@ -270,6 +270,50 @@ def submit_claim_to_carrier(claim, recipient=None, subject=None, content=None):
 
 
 @frappe.whitelist()
+def mark_claim_filed(claim, submitted_date=None, carrier_claim_ref=None, notes=None):
+	"""
+	Record a claim that was filed outside ERPNext.
+
+	Only DPD takes claims by e-mail — Shipment Settings has a claim address for
+	DPD and none for anyone else. SendCloud and FedEx accept them through their
+	own portals, so `submit_claim_to_carrier` cannot be used: it insists on a
+	carrier address and on attachments, then sends a mail nobody reads.
+
+	Without this the claim stays at `submitted_date = None` however diligently
+	it was actually filed, and the deadline reminder keeps warning about a claim
+	that is already with the carrier — which is how a real reminder gets learned
+	as noise.
+
+	The carrier's own reference goes in `carrier_claim_ref`, so the portal case
+	is traceable in the same field the e-mail case would use.
+	"""
+	doc = frappe.get_doc("Shipment Loss Claim", claim)
+	if doc.submitted_date:
+		frappe.throw(
+			frappe._("Claim {0} is already recorded as submitted on {1}.").format(
+				doc.name, frappe.utils.formatdate(doc.submitted_date)
+			)
+		)
+
+	doc.db_set("submitted_date", submitted_date or frappe.utils.nowdate())
+	if carrier_claim_ref:
+		doc.db_set("carrier_claim_ref", carrier_claim_ref.strip())
+	doc.db_set("status", "Submitted to Carrier")
+	# Stop the deadline reminder: it fires only while submitted_date is empty,
+	# but clearing the flag as well keeps a re-opened claim from re-notifying.
+	doc.db_set("deadline_reminded", frappe.utils.nowdate())
+
+	line = frappe._("Filed with {0}").format(doc.carrier or frappe._("carrier"))
+	if carrier_claim_ref:
+		line += frappe._(", reference {0}").format(carrier_claim_ref.strip())
+	if notes:
+		line += f" — {notes}"
+	doc.add_comment("Comment", line)
+
+	return True
+
+
+@frappe.whitelist()
 def refresh_from_shipment(claim):
 	"""Boş alanları Shipment'tan yeniden doldur (açık kullanıcı isteğiyle).
 

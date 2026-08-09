@@ -98,6 +98,64 @@ frappe.ui.form.on("Shipment Loss Claim", {
 			__("Form")
 		);
 
+		// Yalnız DPD talebi e-posta ile alıyor; SendCloud ve FedEx kendi
+		// portallarından. O yüzden "gönderildi" demenin e-postadan bağımsız bir
+		// yolu olmalı — yoksa portal üzerinden açılmış bir talep sonsuza kadar
+		// "gönderilmedi" görünür ve süre hatırlatması boşuna öter.
+		if (!frm.doc.submitted_date) {
+			frm.add_custom_button(
+				__("Mark as Filed with Carrier"),
+				() => {
+					const d = new frappe.ui.Dialog({
+						title: __("Filed with Carrier"),
+						fields: [
+							{
+								fieldname: "submitted_date",
+								label: __("Filed On"),
+								fieldtype: "Date",
+								default: frappe.datetime.get_today(),
+								reqd: 1,
+							},
+							{
+								fieldname: "carrier_claim_ref",
+								label: __("Carrier Claim Reference"),
+								fieldtype: "Data",
+								description: __("The reference the carrier's portal gave you."),
+							},
+							{ fieldname: "notes", label: __("Notes"), fieldtype: "Small Text" },
+							{
+								fieldname: "info",
+								fieldtype: "HTML",
+								options: `<div class="text-muted small">${__(
+									"Use this when the claim was filed through the carrier's portal instead of by e-mail. No mail is sent; the claim is recorded as submitted and the deadline reminder stops."
+								)}</div>`,
+							},
+						],
+						primary_action_label: __("Record"),
+						primary_action(values) {
+							frappe.call({
+								method: "erpnext_shipping.erpnext_shipping.doctype.shipment_loss_claim.shipment_loss_claim.mark_claim_filed",
+								args: { claim: frm.doc.name, ...values },
+								freeze: true,
+								callback: (r) => {
+									if (!r.exc) {
+										d.hide();
+										frappe.show_alert({
+											message: __("Recorded as filed"),
+											indicator: "green",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						},
+					});
+					d.show();
+				},
+				__("Loss")
+			);
+		}
+
 		// Kayıp sanılan parsel sonradan (bazen aylar sonra) çıkabiliyor. Statüsü
 		// ne olursa olsun işaretlenebilmeli — carrier'a gönderilmiş, hatta ödenmiş
 		// bir talep de bulunabilir.
