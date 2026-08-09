@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 import frappe
 from frappe.model.document import Document
-from frappe.utils import add_days, cint, flt, nowdate
+from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest import _clean_contact
 
@@ -427,7 +427,12 @@ def remind_claim_deadlines():
 
 
 def _send_deadline_reminder(doc, recipient):
-	overdue = doc.claim_deadline < nowdate()
+	# Both sides through getdate(): a loaded document hands back claim_deadline as
+	# a date object while nowdate() returns a string, and comparing the two raises.
+	# The job looked healthy for months because it only reaches this line once a
+	# claim actually enters the reminder window — so the first claim that needed a
+	# reminder was the one that broke it, and none has been sent since.
+	overdue = getdate(doc.claim_deadline) < getdate()
 	subject = frappe._("{0}Claim deadline {1} — {2}").format(
 		"OVERDUE: " if overdue else "",
 		frappe.utils.formatdate(doc.claim_deadline),
