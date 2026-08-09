@@ -17,7 +17,7 @@
 							<td class="service-info" style="width:20%;">{{ data.preferred_services[i].carrier }}</td>
 							<td class="service-info" style="width:40%;">
 								{{ data.preferred_services[i].service_name }}
-								<div class="text-muted" style="font-size: 11px;">{{ data.preferred_services[i].service_id }}{{ data.preferred_services[i].contract_name ? " · " + data.preferred_services[i].contract_name : "" }}</div>
+								<div class="text-muted" style="font-size: 11px;">{{ data.preferred_services[i].service_id }}{{ data.preferred_services[i].contract_name ? " · " + data.preferred_services[i].contract_name : "" }}{{ data.preferred_services[i].contract_type ? " · " + data.preferred_services[i].contract_type : "" }}</div>
 							</td>
 							<td class="service-info" style="width:20%;">{{ data.preferred_services[i].total_price == null ? __("Price on request") : format_currency(data.preferred_services[i].total_price, data.preferred_services[i].currency, 2) }}</td>
 							<td style="width:10%;vertical-align: middle; white-space: nowrap;">
@@ -63,7 +63,7 @@
 							<td class="service-info" style="width:20%;">{{ data.other_services[i].carrier }}</td>
 							<td class="service-info" style="width:40%;">
 								{{ data.other_services[i].service_name }}
-								<div class="text-muted" style="font-size: 11px;">{{ data.other_services[i].service_id }}{{ data.other_services[i].contract_name ? " · " + data.other_services[i].contract_name : "" }}</div>
+								<div class="text-muted" style="font-size: 11px;">{{ data.other_services[i].service_id }}{{ data.other_services[i].contract_name ? " · " + data.other_services[i].contract_name : "" }}{{ data.other_services[i].contract_type ? " · " + data.other_services[i].contract_type : "" }}</div>
 							</td>
 							<td class="service-info" style="width:20%;">{{ data.other_services[i].total_price == null ? __("Price on request") : format_currency(data.other_services[i].total_price, data.other_services[i].currency, 2) }}</td>
 							<td style="width:10%;vertical-align: middle; white-space: nowrap;">

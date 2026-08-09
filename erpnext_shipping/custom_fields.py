@@ -119,7 +119,27 @@ def get_custom_fields():
 				"fieldtype": "Data",
 				"read_only": 1,
 				"translatable": 0,
+				"in_list_view": 1,
 				"insert_after": "custom_shipping_price",
+				"allow_on_submit": 1,
+			},
+			{
+				# Which contract paid for the parcel decides who a loss claim goes
+				# to, and the carrier name cannot tell you: the same DPD parcel can
+				# ride our own contract or SendCloud's. Shown in the grid so the
+				# answer is visible without opening the row.
+				"fieldname": "custom_shipping_contract_type",
+				"label": _("Contract Type"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"translatable": 0,
+				"in_list_view": 1,
+				"description": _(
+					"direct = our own contract with the carrier; the carrier invoices us "
+					"and a loss claim goes to the carrier. broker = SendCloud's contract; "
+					"SendCloud invoices us and the claim goes to SendCloud."
+				),
+				"insert_after": "custom_shipping_contract",
 				"allow_on_submit": 1,
 			},
 			{
@@ -129,7 +149,7 @@ def get_custom_fields():
 				"read_only": 1,
 				"hidden": 1,
 				"translatable": 0,
-				"insert_after": "custom_shipping_contract",
+				"insert_after": "custom_shipping_contract_type",
 				"allow_on_submit": 1,
 			},
 		],

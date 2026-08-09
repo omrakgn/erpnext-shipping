@@ -689,6 +689,18 @@ class SendCloudUtils:
 			count += parcel.get("count")
 		return flt(parcel_price) * count
 
+	def _contract_types(self):
+		"""{contract_id: type} — the rate response does not always carry the type.
+
+		Cached per request: a rate lookup asks for it once per service and the
+		contract list rarely changes within one.
+		"""
+		if getattr(self, "_contract_type_cache", None) is None:
+			self._contract_type_cache = {
+				c["id"]: c.get("type") for c in self.get_contracts() if c.get("id")
+			}
+		return self._contract_type_cache
+
 	def get_service_dict(self, service, parcels: list[dict]):
 		"""Returns a dictionary with service info."""
 		available_service = frappe._dict()
@@ -703,6 +715,12 @@ class SendCloudUtils:
 		contract = service.get("contract") or {}
 		available_service.contract_id = contract.get("id")
 		available_service.contract_name = contract.get("name")
+		# direct = kendi sözleşmemiz, taşıyıcı bize fatura keser ve tazminat talebi
+		# ona açılır. broker = SendCloud'un sözleşmesi, fatura da talep de SendCloud'a.
+		# Aynı taşıyıcı iki türlü de gönderilebildiği için taşıyıcı adına bakmak yetmez.
+		available_service.contract_type = contract.get("type") or self._contract_types().get(
+			contract.get("id")
+		)
 
 		quotes = service.get("quotes", [])
 		if quotes:
