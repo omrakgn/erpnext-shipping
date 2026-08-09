@@ -14,7 +14,18 @@
   "dn_return_tracking_number_field",
   "column_break_return",
   "dn_return_carrier_field",
-  "dn_return_tracking_link_field"
+  "dn_return_tracking_link_field",
+  "accounting_section",
+  "enable_cost_invoicing",
+  "company",
+  "cutover_date",
+  "column_break_accounting",
+  "default_cost_center",
+  "auto_submit_invoices",
+  "carrier_accounts_section",
+  "carrier_accounts_info",
+  "carrier_accounts",
+  "unmapped_carrier_action"
  ],
  "fields": [
   {
@@ -86,6 +97,81 @@
    "fieldtype": "Data",
    "label": "Return Tracking Link Field",
    "description": "Optional: Delivery Note fieldname holding the return tracking URL."
+  },
+  {
+   "fieldname": "accounting_section",
+   "fieldtype": "Section Break",
+   "label": "Carrier Invoice Accounting",
+   "description": "Turn imported carrier invoices into Purchase Invoices, so freight reaches the ledger and the supplier balance can be reconciled against the bank."
+  },
+  {
+   "default": "0",
+   "description": "Off by default: creating accounting documents is the site owner's decision.",
+   "fieldname": "enable_cost_invoicing",
+   "fieldtype": "Check",
+   "label": "Create Purchase Invoices from Carrier Invoices"
+  },
+  {
+   "depends_on": "enable_cost_invoicing",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "depends_on": "enable_cost_invoicing",
+   "description": "Carrier invoices dated before this are left alone. Older freight predates the accounting go-live and belongs to a one-off adjustment, not here. Leave empty to invoice everything.",
+   "fieldname": "cutover_date",
+   "fieldtype": "Date",
+   "label": "Accounting Cutover Date"
+  },
+  {
+   "fieldname": "column_break_accounting",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "enable_cost_invoicing",
+   "description": "Used for parcels that could not be matched to a delivery. Matched parcels follow the cost centre of the delivery they belong to, so freight lands wherever the sale did.",
+   "fieldname": "default_cost_center",
+   "fieldtype": "Link",
+   "label": "Fallback Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "default": "0",
+   "depends_on": "enable_cost_invoicing",
+   "description": "Submit automatically. Leave OFF to review drafts first (recommended).",
+   "fieldname": "auto_submit_invoices",
+   "fieldtype": "Check",
+   "label": "Auto Submit Purchase Invoices"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "enable_cost_invoicing",
+   "fieldname": "carrier_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Carrier Accounts"
+  },
+  {
+   "fieldname": "carrier_accounts_info",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted\"><small>One row per party that invoices you. Matched against <b>Billed Via</b> first and then <b>Carrier</b>: a DPD parcel booked through SendCloud is billed by SendCloud, so the debt is SendCloud's.<br>A carrier established abroad invoices at 0% with the VAT reverse charged and needs a reverse-charge tax template, not the domestic one.</small></p>"
+  },
+  {
+   "depends_on": "enable_cost_invoicing",
+   "fieldname": "carrier_accounts",
+   "fieldtype": "Table",
+   "label": "Carrier Accounts",
+   "options": "Shipping Carrier Account"
+  },
+  {
+   "default": "Stop and report",
+   "depends_on": "enable_cost_invoicing",
+   "description": "What to do when an invoice names a carrier that is not in the table. Stopping is the safe default: guessing the supplier books the freight against the wrong party and reports no error.",
+   "fieldname": "unmapped_carrier_action",
+   "fieldtype": "Select",
+   "label": "Unmapped Carrier",
+   "options": "Stop and report\nSkip"
   }
  ],
  "issingle": 1,

@@ -1,0 +1,59 @@
+{
+ "actions": [],
+ "creation": "2026-08-09 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "carrier",
+  "supplier",
+  "expense_account",
+  "purchase_tax_template"
+ ],
+ "fields": [
+  {
+   "description": "Who invoices us, matched against Billed Via first and then Carrier. Case is ignored.",
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Carrier / Billed Via",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1
+  },
+  {
+   "description": "Expense account for the freight charge.",
+   "fieldname": "expense_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Expense Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "description": "A carrier established abroad invoices at 0% with the VAT reverse charged, so it needs a reverse-charge template rather than the domestic one.",
+   "fieldname": "purchase_tax_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Purchase Tax Template",
+   "options": "Purchase Taxes and Charges Template"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-09 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Shipping Carrier Account",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

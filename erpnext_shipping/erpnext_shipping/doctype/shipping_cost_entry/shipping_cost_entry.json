@@ -24,6 +24,7 @@
   "match_method",
   "shipment",
   "delivery_note",
+  "purchase_invoice",
   "receiver_section",
   "receiver_name",
   "receiver_street",
@@ -169,6 +170,14 @@
    "fieldtype": "Link",
    "label": "Delivery Note",
    "options": "Delivery Note"
+  },
+  {
+   "description": "The Purchase Invoice this line was billed on. Set once, so a re-import cannot invoice the same freight twice.",
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Purchase Invoice",
+   "options": "Purchase Invoice",
+   "read_only": 1
   },
   {
    "collapsible": 1,
