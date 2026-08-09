@@ -780,14 +780,18 @@ class SendCloudUtils:
 			# panel "DPD — Sendcloud rates" diye gösteriyor. Aynı dili kullanıyoruz,
 			# yoksa listede "DPD broker (104790)" yazıyor ve panelde seçtiği
 			# sözleşmeyi arayan kullanıcı onu tanıyamıyor.
+			# Id kalıyor: bir taşıyıcının birden fazla broker sözleşmesi olabiliyor
+			# (DPD'de üç tane) ve isimsiz geldikleri için etiketleri birbirinin aynı
+			# olurdu. Hangisiyle gönderildiği tazminat talebini belirlediğinden
+			# ayırt edilebilir olmaları şart.
 			ctype = c.get("type") or "contract"
 			carrier_label = carrier.get("name") or ""
 			if c.get("name"):
-				name = c["name"]
+				name = f"{c['name']} ({c.get('id')})"
 			elif ctype == "broker":
-				name = f"{carrier_label} — Sendcloud rates"
+				name = f"{carrier_label} — Sendcloud rates ({c.get('id')})"
 			elif ctype == "direct":
-				name = f"{carrier_label} — own contract"
+				name = f"{carrier_label} — own contract ({c.get('id')})"
 			else:
 				name = f"{carrier_label} {ctype} ({c.get('id')})"
 			state = c.get("state")
