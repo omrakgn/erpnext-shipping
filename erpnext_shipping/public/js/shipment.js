@@ -620,7 +620,14 @@ function select_from_available_services(frm, available_services) {
 
 	dialog.fields_dict.available_services.$wrapper.html(
 		frappe.render_template("shipment_service_selector", {
-			header_columns: [__("Platform"), __("Carrier"), __("Parcel Service"), __("Price"), ""],
+			header_columns: [
+				__("Platform"),
+				__("Carrier"),
+				__("Parcel Service"),
+				__("Contract"),
+				__("Price"),
+				"",
+			],
 			data: arranged_services,
 		})
 	);
@@ -871,7 +878,14 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 
 	dialog.fields_dict.available_services.$wrapper.html(
 		frappe.render_template("shipment_service_selector", {
-			header_columns: [__("Platform"), __("Carrier"), __("Parcel Service"), __("Price"), ""],
+			header_columns: [
+				__("Platform"),
+				__("Carrier"),
+				__("Parcel Service"),
+				__("Contract"),
+				__("Price"),
+				"",
+			],
 			data: arranged_services,
 		})
 	);

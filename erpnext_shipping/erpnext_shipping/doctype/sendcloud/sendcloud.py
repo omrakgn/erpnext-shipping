@@ -859,7 +859,12 @@ class SendCloudUtils:
 		# Sözleşme (panel'deki "Enabled contract" karşılığı)
 		contract = service.get("contract") or {}
 		available_service.contract_id = contract.get("id")
-		available_service.contract_name = contract.get("name")
+		# Teklif yanıtı SendCloud'un kendi sözleşmeleri için isim döndürmüyor, bu
+		# yüzden ham değer kullanılırsa sütun boş kalır ve hangi sözleşmeyle fiyat
+		# verildiği görünmez. Sözleşme listesindeki adı kullan — orada bizim kendi
+		# verdiğimiz isim de var.
+		indexed = self._contract_index().get(contract.get("id")) or {}
+		available_service.contract_name = indexed.get("name") or contract.get("name")
 		# direct = kendi sözleşmemiz, taşıyıcı bize fatura keser ve tazminat talebi
 		# ona açılır. broker = SendCloud'un sözleşmesi, fatura da talep de SendCloud'a.
 		# Aynı taşıyıcı iki türlü de gönderilebildiği için taşıyıcı adına bakmak yetmez.
