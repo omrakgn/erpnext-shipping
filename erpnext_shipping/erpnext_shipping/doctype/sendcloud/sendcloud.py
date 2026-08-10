@@ -946,7 +946,14 @@ class SendCloudUtils:
 			# ayırt edilebilir olmaları şart.
 			ctype = c.get("type") or "contract"
 			carrier_label = carrier.get("name") or ""
-			if c.get("name"):
+			own = self._own_contract_labels().get(str(c.get("id"))) or {}
+
+			if apply_own_labels and own.get("own_label"):
+				# Kendi ismini verdiyse yalnız o kullanılır. SendCloud'un ürettiği
+				# ad ("DPD — Sendcloud rates") zaten bir isim değil, tarif; ikisi
+				# yan yana yazılınca aynı şey iki kez okunuyor.
+				name = f"{own['own_label']} ({c.get('id')})"
+			elif c.get("name"):
 				name = f"{c['name']} ({c.get('id')})"
 			elif ctype == "broker":
 				name = f"{carrier_label} — Sendcloud rates ({c.get('id')})"
@@ -954,12 +961,6 @@ class SendCloudUtils:
 				name = f"{carrier_label} — own contract ({c.get('id')})"
 			else:
 				name = f"{carrier_label} {ctype} ({c.get('id')})"
-
-			own = self._own_contract_labels().get(str(c.get("id"))) or {}
-			# Kendi ismimiz varsa öne geçer; SendCloud etiketi parantezde kalır ki
-			# panelde arayan da bulabilsin.
-			if apply_own_labels and own.get("own_label"):
-				name = f"{own['own_label']} · {name}"
 
 			state = c.get("state")
 			if state and state != "active":
