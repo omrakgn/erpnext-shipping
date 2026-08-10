@@ -80,12 +80,18 @@ class SendCloud(Document):
 
 
 @frappe.whitelist()
-def toggle_preferred_shipping_option(code, service_label=None, carrier=None):
+def toggle_preferred_shipping_option(
+	code, service_label=None, carrier=None, contract_id=None, contract_label=None
+):
 	"""Bir SendCloud shipping option kodunu favorilere ekle/çıkar.
 
 	Fetch Shipping Rates penceresindeki yıldız butonundan çağrılır. SendCloud
 	ayarları yalnızca System Manager'a açık olduğundan, kaydı izin atlayarak
 	yapar (yalnızca favori listesini günceller).
+
+	Sözleşme de kaydedilir: teklif listesi yalnız varsayılan sözleşmeyi getirdiği
+	için, favoriye alınmış bir seçenek sözleşmesiyle birlikte saklanmazsa her
+	seferinde elle seçilmek zorunda kalır.
 	"""
 	if not code:
 		return {"preferred": False}
@@ -102,12 +108,55 @@ def toggle_preferred_shipping_option(code, service_label=None, carrier=None):
 	else:
 		settings.append(
 			"preferred_shipping_options",
-			{"shipping_option_code": code, "service_label": service_label, "carrier": carrier},
+			{
+				"shipping_option_code": code,
+				"service_label": service_label,
+				"carrier": carrier,
+				"contract_id": contract_id or "",
+				"contract_label": contract_label or "",
+			},
 		)
 		preferred = True
 
 	settings.save(ignore_permissions=True)
 	return {"preferred": preferred}
+
+
+@frappe.whitelist()
+def sync_sendcloud_contracts():
+	"""Pull the account's contracts into SendCloud settings, keeping own names.
+
+	The names live in ERPNext rather than at SendCloud because SendCloud has no
+	field for them: its own ("broker") contracts come back nameless, so a carrier
+	with three of them renders as three identical labels.
+	"""
+	settings = frappe.get_doc("SendCloud", "SendCloud")
+	existing = {}
+	for row in settings.contract_options or []:
+		if row.contract_id:
+			existing[str(row.contract_id)] = row
+
+	seen = set()
+	added = 0
+	for c in SendCloudUtils().get_contracts(apply_own_labels=False):
+		cid = str(c.get("id"))
+		seen.add(cid)
+		row = existing.get(cid)
+		if not row:
+			row = settings.append("contract_options", {"contract_id": cid})
+			added += 1
+		row.carrier = c.get("carrier_name") or ""
+		row.contract_type = c.get("type") or ""
+		row.state = c.get("state") or ""
+		if not row.own_label:
+			row.own_label = c.get("name") or ""
+
+	# Hesaptan kalkmış sözleşmeleri silme — geçmiş gönderiler onlara atıfta
+	# bulunuyor ve tazminat talebi eski bir etiket için açılabiliyor.
+	stale = [str(r.contract_id) for r in (settings.contract_options or []) if str(r.contract_id) not in seen]
+
+	settings.save(ignore_permissions=True)
+	return {"total": len(seen), "added": added, "stale": stale}
 
 
 class SendCloudUtils:
@@ -842,10 +891,27 @@ class SendCloudUtils:
 		else:
 			return carrier_name.upper() if post_or_get == "get" else carrier_name.lower()
 
-	def get_contracts(self, carrier_code=None):
+	def _own_contract_labels(self):
+		"""{contract_id: {own_label, is_preferred}} — SendCloud ayarlarındaki isimler."""
+		if getattr(self, "_own_label_cache", None) is None:
+			self._own_label_cache = {}
+			settings = frappe.get_cached_doc("SendCloud", "SendCloud")
+			for row in settings.get("contract_options") or []:
+				if row.contract_id:
+					self._own_label_cache[str(row.contract_id)] = {
+						"own_label": (row.own_label or "").strip(),
+						"is_preferred": bool(row.is_preferred),
+					}
+		return self._own_label_cache
+
+	def get_contracts(self, carrier_code=None, apply_own_labels=True):
 		"""Hesaptaki aktif kontratları döndür (panel'deki 'Enabled contract' listesi).
 
-		Returns: [{id, name, carrier_code, carrier_name, is_default, type}]
+		Returns: [{id, name, carrier_code, carrier_name, is_default, type, state,
+		is_preferred}]
+
+		`apply_own_labels=False` yalnız senkron içindir — kendi isimlerimizi
+		SendCloud'dan gelmiş gibi geri yazmamak için.
 		"""
 		if not self.enabled or not self.api_key or not self.api_secret:
 			return []
@@ -883,6 +949,13 @@ class SendCloudUtils:
 				name = f"{carrier_label} — own contract ({c.get('id')})"
 			else:
 				name = f"{carrier_label} {ctype} ({c.get('id')})"
+
+			own = self._own_contract_labels().get(str(c.get("id"))) or {}
+			# Kendi ismimiz varsa öne geçer; SendCloud etiketi parantezde kalır ki
+			# panelde arayan da bulabilsin.
+			if apply_own_labels and own.get("own_label"):
+				name = f"{own['own_label']} · {name}"
+
 			state = c.get("state")
 			if state and state != "active":
 				name = f"{name} [{state}]"
@@ -896,12 +969,13 @@ class SendCloudUtils:
 					"is_default": c.get("is_default_per_carrier"),
 					"type": ctype,
 					"state": state,
+					"is_preferred": bool(own.get("is_preferred")) if apply_own_labels else False,
 				}
 			)
 		return contracts
 
 	def get_contract_options(self, carrier_code=None):
-		"""Contracts formatted for a picker: newest-looking first, default marked."""
+		"""Contracts formatted for a picker: the ones you marked first, default noted."""
 		rows = []
 		for c in self.get_contracts(carrier_code=carrier_code):
 			label = c["name"]
@@ -910,15 +984,22 @@ class SendCloudUtils:
 			rows.append(
 				{
 					"id": c["id"],
-					"label": label,
+					"label": ("★ " + label) if c.get("is_preferred") else label,
 					"type": c.get("type"),
 					"carrier": c.get("carrier_name"),
 					"state": c.get("state"),
+					"is_preferred": c.get("is_preferred"),
 				}
 			)
-		# broker önce: teklif listesinde hiç görünmeyen ve elle seçilmesi gereken
-		# sözleşmeler bunlar; direct olanlar zaten varsayılan olarak geliyor.
-		rows.sort(key=lambda r: (r.get("type") != "broker", str(r.get("carrier") or "")))
+		# Önce işaretlediklerin; sonra broker olanlar — teklif listesinde hiç
+		# görünmeyen ve bu yüzden elle seçilmesi gereken sözleşmeler bunlar.
+		rows.sort(
+			key=lambda r: (
+				not r.get("is_preferred"),
+				r.get("type") != "broker",
+				str(r.get("carrier") or ""),
+			)
+		)
 		return rows
 
 	def get_preferred_codes(self):
@@ -929,6 +1010,24 @@ class SendCloudUtils:
 			for row in (settings.get("preferred_shipping_options") or [])
 			if row.shipping_option_code
 		}
+
+	def get_preferred_contracts(self):
+		"""{shipping_option_code: {contract_id, contract_label}} for starred options.
+
+		A starred option that remembers its contract can be shipped straight from
+		the rate list. Without it the rate list would keep offering only the
+		account default and the contract would have to be picked by hand every
+		time — which is what made a broker contract impractical to use.
+		"""
+		settings = frappe.get_single("SendCloud")
+		out = {}
+		for row in settings.get("preferred_shipping_options") or []:
+			if row.shipping_option_code and row.get("contract_id"):
+				out[row.shipping_option_code] = {
+					"contract_id": row.get("contract_id"),
+					"contract_label": row.get("contract_label") or "",
+				}
+		return out
 
 	def only_show_preferred(self):
 		"""Sadece favori seçenekler gösterilsin mi?"""

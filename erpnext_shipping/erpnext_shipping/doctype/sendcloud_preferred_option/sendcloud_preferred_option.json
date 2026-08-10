@@ -7,7 +7,9 @@
  "field_order": [
   "shipping_option_code",
   "service_label",
-  "carrier"
+  "carrier",
+  "contract_label",
+  "contract_id"
  ],
  "fields": [
   {
@@ -28,6 +30,19 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Carrier"
+  },
+  {
+   "fieldname": "contract_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Contract",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract_id",
+   "fieldtype": "Data",
+   "label": "Contract ID",
+   "description": "Ship this option on a specific contract instead of the account default. Filled from the contract picker when the option is starred; clear it to fall back to the default."
   }
  ],
  "istable": 1,

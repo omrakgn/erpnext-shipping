@@ -13,7 +13,10 @@
   "webhook_secret",
   "preferred_options_section",
   "only_show_preferred",
-  "preferred_shipping_options"
+  "preferred_shipping_options",
+  "contracts_section",
+  "sync_contracts",
+  "contract_options"
  ],
  "fields": [
   {
@@ -68,7 +71,24 @@
    "fieldtype": "Table",
    "label": "Preferred Options",
    "options": "SendCloud Preferred Option",
-   "description": "Frequently used SendCloud shipping options. Add via the star button in the Fetch Shipping Rates dialog, or edit here."
+   "description": "Frequently used SendCloud shipping options. Add via the star button in the Fetch Shipping Rates dialog, or edit here. A row that carries a contract ships on that contract without asking."
+  },
+  {
+   "fieldname": "contracts_section",
+   "fieldtype": "Section Break",
+   "label": "Contracts"
+  },
+  {
+   "fieldname": "sync_contracts",
+   "fieldtype": "Button",
+   "label": "Sync Contracts from SendCloud"
+  },
+  {
+   "fieldname": "contract_options",
+   "fieldtype": "Table",
+   "label": "Contracts",
+   "options": "SendCloud Contract Option",
+   "description": "Press Sync to pull the account's contracts, then give each one a name you recognise. SendCloud returns no name for its own contracts, so a carrier with several of them shows the same label repeatedly and only the id tells them apart."
   }
  ],
  "index_web_pages_for_search": 1,

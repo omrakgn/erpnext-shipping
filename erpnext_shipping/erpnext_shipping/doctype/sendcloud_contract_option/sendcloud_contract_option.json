@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "is_preferred",
+  "own_label",
+  "carrier",
+  "contract_type",
+  "contract_id",
+  "state"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "is_preferred",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Preferred",
+   "description": "Show this contract at the top of the contract picker."
+  },
+  {
+   "fieldname": "own_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Your Name For It",
+   "description": "Replaces SendCloud's label everywhere in ERPNext. SendCloud returns no name for its own contracts, so several contracts of one carrier are otherwise indistinguishable apart from the id."
+  },
+  {
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Carrier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Type",
+   "read_only": 1,
+   "description": "direct = our own contract with the carrier (carrier invoices us, loss claim goes to the carrier). broker = SendCloud's rates (SendCloud invoices us, claim goes to SendCloud)."
+  },
+  {
+   "fieldname": "contract_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Contract ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "label": "State",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "SendCloud Contract Option",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

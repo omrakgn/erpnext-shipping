@@ -89,6 +89,7 @@ def fetch_shipping_rates(
 				sendcloud_prices = [
 					price for price in sendcloud_prices if price.get("service_id") in preferred_codes
 				]
+		apply_preferred_contracts(sendcloud, sendcloud_prices)
 
 		shipment_prices += sendcloud_prices
 
@@ -189,6 +190,26 @@ def create_shipment(
 			update_delivery_note(delivery_notes=delivery_notes, shipment_info=shipment_info)
 
 	return shipment_info
+
+
+def apply_preferred_contracts(sendcloud, prices):
+	"""Overlay the contract saved with a starred option onto its rate row.
+
+	The rate endpoint answers with each carrier's default contract only, so a
+	starred option that is meant to ship on a broker contract comes back pointing
+	at the wrong one. The saved choice wins; rows without one are left alone.
+	"""
+	saved = sendcloud.get_preferred_contracts()
+	if not saved:
+		return
+	for price in prices:
+		pinned = saved.get(price.get("service_id"))
+		if not pinned:
+			continue
+		price.contract_id = pinned["contract_id"]
+		price.contract_name = pinned["contract_label"] or price.get("contract_name")
+		# Sabitlenmiş sözleşme soru sorulmadan kullanılır — favorinin anlamı bu.
+		price.contract_pinned = 1
 
 
 def _build_parcels(shipment_doc):
@@ -426,6 +447,7 @@ def fetch_parcel_rates(shipment, parcel):
 				price.is_preferred = 1
 		if sendcloud.only_show_preferred():
 			prices = [p for p in prices if p.get("service_id") in preferred_codes]
+	apply_preferred_contracts(sendcloud, prices)
 
 	prices = [p for p in prices if "total_price" in p]
 	prices = sorted(prices, key=lambda k: (k.get("total_price") is None, k.get("total_price") or 0))

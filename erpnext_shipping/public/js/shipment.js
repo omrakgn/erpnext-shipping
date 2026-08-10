@@ -635,27 +635,7 @@ function select_from_available_services(frm, available_services) {
 	});
 
 	dialog.$body.on("click", ".fav-btn", function () {
-		const btn = $(this);
-		frappe.call({
-			method: "erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud.toggle_preferred_shipping_option",
-			args: {
-				code: btn.attr("data-code"),
-				service_label: btn.attr("data-label"),
-				carrier: btn.attr("data-carrier"),
-			},
-			callback: function (r) {
-				if (!r.exc) {
-					const pref = r.message && r.message.preferred;
-					btn.text(pref ? "★" : "☆");
-					btn.css("color", pref ? "#f0ad4e" : "#bbb");
-					btn.attr("title", pref ? __("Remove from preferred") : __("Add to preferred"));
-					frappe.show_alert({
-						message: pref ? __("Added to preferred") : __("Removed from preferred"),
-						indicator: "green",
-					});
-				}
-			},
-		});
+		toggle_favourite($(this), arranged_services);
 	});
 
 	frm.select_row = function (service_data) {
@@ -768,10 +748,64 @@ frappe.ui.form.on("Shipment Parcel", {
 	},
 });
 
+// Yıldız butonu: favoriye alırken sözleşmeyi de sorar ve birlikte kaydeder.
+// Çıkarırken sormaz. Sözleşmesiyle kaydedilen bir favori, teklif listesinden
+// tek tıkla o sözleşmeyle gönderilir.
+function toggle_favourite(btn, arranged_services) {
+	const code = btn.attr("data-code");
+	const was_preferred = btn.text().trim() === "★";
+	const all = (arranged_services.preferred_services || []).concat(
+		arranged_services.other_services || []
+	);
+	const sd = all.find((s) => String(s.service_id) === String(code)) || {};
+
+	const save = function (contract_id, contract_label) {
+		frappe.call({
+			method: "erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud.toggle_preferred_shipping_option",
+			args: {
+				code: code,
+				service_label: btn.attr("data-label"),
+				carrier: btn.attr("data-carrier"),
+				contract_id: contract_id || "",
+				contract_label: contract_label || "",
+			},
+			callback: function (r) {
+				if (r.exc) return;
+				const pref = r.message && r.message.preferred;
+				btn.text(pref ? "★" : "☆");
+				btn.css("color", pref ? "#f0ad4e" : "#bbb");
+				btn.attr("title", pref ? __("Remove from preferred") : __("Add to preferred"));
+				frappe.show_alert({
+					message: pref
+						? contract_label
+							? __("Added to preferred on {0}", [contract_label])
+							: __("Added to preferred")
+						: __("Removed from preferred"),
+					indicator: "green",
+				});
+			},
+		});
+	};
+
+	if (was_preferred) {
+		save();
+		return;
+	}
+	pick_contract_then(Object.assign({}, sd, { contract_pinned: 0 }), function (picked) {
+		save(picked.contract_id, picked.contract_name);
+	});
+}
+
 // SendCloud seçeneği seçildikten sonra, o carrier'ın birden fazla kontratı varsa
 // kullanıcıya kontratı seçtirir (panel'deki "Enabled contract" gibi), sonra onDone(sd).
 function pick_contract_then(sd, onDone) {
 	if (sd.service_provider !== "SendCloud") {
+		onDone(sd);
+		return;
+	}
+	// Favoriye alınırken sözleşme kaydedilmişse sormaya gerek yok — favorinin
+	// amacı zaten her seferinde aynı seçimi yapmaktan kurtulmak.
+	if (sd.contract_pinned && sd.contract_id) {
 		onDone(sd);
 		return;
 	}
@@ -865,23 +899,7 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 	});
 
 	dialog.$body.on("click", ".fav-btn", function () {
-		const btn = $(this);
-		frappe.call({
-			method: "erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud.toggle_preferred_shipping_option",
-			args: {
-				code: btn.attr("data-code"),
-				service_label: btn.attr("data-label"),
-				carrier: btn.attr("data-carrier"),
-			},
-			callback: function (r) {
-				if (!r.exc) {
-					const pref = r.message && r.message.preferred;
-					btn.text(pref ? "★" : "☆");
-					btn.css("color", pref ? "#f0ad4e" : "#bbb");
-					btn.attr("title", pref ? __("Remove from preferred") : __("Add to preferred"));
-				}
-			},
-		});
+		toggle_favourite($(this), arranged_services);
 	});
 
 	dialog.show();
