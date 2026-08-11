@@ -23,7 +23,13 @@ def _presumed_lost_names(min_days):
 			"""
 			select name from `tabShipment`
 			where docstatus < 2
-				and ifnull(tracking_status, '') != 'Delivered'
+				-- Returned ve Lost da sonuçtur. Yalnız 'Delivered' dışlanınca, iade
+				-- olarak işaretlediğimiz her gönderi kayıp adayı oluyordu: işaretleme
+				-- tracking_status'ü 'Returned' yapıp custom_delivered_at'i siliyor,
+				-- yani ölçütün aradığı hale getiriyor. Kendi düzeltmemiz kendi
+				-- uyarımızı üretiyordu.
+				and ifnull(tracking_status, '') not in ('Delivered', 'Returned', 'Lost')
+				and ifnull(custom_returned_to_sender, 0) = 0
 				and custom_delivered_at is null
 				and pickup_date is not null
 				and pickup_date <= %s
