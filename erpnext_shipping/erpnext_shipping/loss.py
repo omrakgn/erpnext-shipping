@@ -29,6 +29,10 @@ def _presumed_lost_names(min_days):
 				and pickup_date <= %s
 				and ifnull(status, '') not in ('Cancelled', 'Completed')
 				and ifnull(awb_number, '') != ''
+				-- Takip beslemesi kesilmiş gönderi kayıp değildir. Nisan 2026'da
+				-- 147 gönderinin 147'si bu yüzden kayıp adayı işaretlenmişti ve
+				-- liste hiçbir işe yaramıyordu.
+				and ifnull(custom_tracking_stalled, 0) = 0
 			""",
 			cutoff,
 		)
@@ -344,3 +348,85 @@ def find_returns_without_shipment_flag(limit=200):
 	# En küçük fark önce: dönüş bacağı olma ihtimali en yüksek olanlar başta.
 	out.sort(key=lambda r: (r["gap_days"] is None, r["gap_days"]))
 	return out
+
+
+# Taşıyıcının son bildiriminden sonra bu kadar gün geçtiyse besleme kesilmiş
+# sayılır. DPD'de teslimat birkaç gün sürüyor; üç hafta boyunca tek bir olay
+# gelmemesi paketin hareketsiz olduğu anlamına gelmiyor, haberin kesildiği
+# anlamına geliyor.
+TRACKING_STALE_DAYS = 21
+
+
+@frappe.whitelist()
+def flag_stalled_tracking(older_than_days=TRACKING_STALE_DAYS, limit=500, dry_run=False):
+	"""Mark shipments the carrier stopped reporting on.
+
+	Their last status is not an outcome — "En route to sorting center" is where
+	the feed stopped, not where the parcel is. Treating that as undelivered made
+	every one of them a presumed-loss candidate: in April 2026 the DPD own-contract
+	feed failed and 101 delivered parcels were flagged, which is the same as having
+	no loss detection at all.
+
+	Decided from the carrier's own ladder rather than our record: a parcel with no
+	tracking data at all, or whose last event is older than the threshold, has
+	stopped being reported on.
+
+	Returns {"checked", "flagged", "still_moving", "names"}.
+	"""
+	from erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud import SendCloudUtils
+
+	sc = SendCloudUtils()
+	cutoff = add_days(nowdate(), -abs(cint(older_than_days)))
+	results = {"checked": 0, "flagged": 0, "still_moving": 0, "names": []}
+
+	rows = frappe.get_all(
+		"Shipment",
+		filters={
+			"docstatus": 1,
+			"tracking_status": ["not in", ["Delivered", "Returned", "Lost"]],
+			"custom_tracking_stalled": 0,
+			"custom_label_removed": 0,
+			"awb_number": ["!=", ""],
+			"pickup_date": ["<", cutoff],
+		},
+		fields=["name", "awb_number"],
+		order_by="pickup_date asc",
+		limit=limit,
+	)
+
+	for row in rows:
+		results["checked"] += 1
+		awb = (row.awb_number or "").split(",")[0].strip()
+		history = sc.get_tracking_history(awb)
+
+		last_event = None
+		if history:
+			for s in history["statuses"]:
+				if s["at"]:
+					last_event = s["at"]
+
+		# Takip verisi hiç yoksa da besleme kesilmiş demektir — taşıyıcı kaydı
+		# düşürmüş ve bir daha bilgi gelmeyecek.
+		stale = True
+		if last_event:
+			try:
+				stale = getdate(last_event) < getdate(cutoff)
+			except Exception:
+				stale = True
+
+		if not stale:
+			results["still_moving"] += 1
+			continue
+
+		results["flagged"] += 1
+		results["names"].append(row.name)
+		if not dry_run:
+			frappe.db.set_value(
+				"Shipment", row.name,
+				{"custom_tracking_stalled": 1, "custom_presumed_lost": 0},
+				update_modified=False,
+			)
+
+	if not dry_run:
+		frappe.db.commit()
+	return results

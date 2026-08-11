@@ -344,6 +344,24 @@ def get_custom_fields():
 				"insert_after": "custom_delay_notified",
 			},
 			{
+				# "Takip durdu" ile "paket kayboldu" ayrı şeyler. Nisan 2026'da
+				# kendi DPD sözleşmemizin durum beslemesi çalışmadı: 101 gönderi
+				# "En route to sorting center"da dondu, hepsi teslim edildi, ve
+				# hepsi kayıp adayı olarak işaretlendi. Gerçek bir kayıp o
+				# listenin içinde görünmez hale gelir.
+				"fieldname": "custom_tracking_stalled",
+				"label": _("Tracking Feed Stopped"),
+				"fieldtype": "Check",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"insert_after": "custom_label_removed",
+				"description": _(
+					"The carrier stopped reporting on this parcel; its last status is "
+					"not an outcome. Excluded from presumed-lost and from polling — "
+					"absence of tracking is not evidence of loss."
+				),
+			},
+			{
 				"fieldname": "custom_presumed_lost",
 				"label": _("Presumed Lost"),
 				"fieldtype": "Check",

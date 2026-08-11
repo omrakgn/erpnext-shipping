@@ -231,6 +231,9 @@ def update_tracking_info():
 			"tracking_status": ["not in", ["Delivered", "Lost"]],
 			# SendCloud'dan silindiği tespit edilenleri (etiket yok) tekrar sorgulama.
 			"custom_label_removed": 0,
+			# Taşıyıcı bu paket hakkında bildirim göndermeyi bırakmış; her saat
+			# tekrar sormanın karşılığı yok.
+			"custom_tracking_stalled": 0,
 		},
 	)
 	for shipment in shipments:
