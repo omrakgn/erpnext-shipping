@@ -35,6 +35,20 @@ CREATE_LABEL_SYNC_URL = f"{BASE_URL}/v3/orders/create-label-sync"
 # tek tip ISO ("YYYY-MM-DD HH:MM:SS") string döndürüyoruz.
 _SENDCLOUD_DT_FORMATS = ("%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S")
 
+# Bir daha hareket etmeyecek parça durumları. Etiket taşıyıcıya hiç ulaşmamış ya da
+# geri çekilmiş; teslim edilmesi mümkün değil. Gönderi durumunu hesaplarken sayılmaz,
+# yoksa tek ölü etiket bütün gönderiyi kalıcı olarak "In Progress"te tutar.
+_DEAD_PARCEL_STATUSES = ("announcement failed", "cancelled", "cancellation requested")
+
+
+def _is_dead_parcel(status):
+	"""Bu parça durumundan teslimat çıkabilir mi?"""
+	low = (status or "").strip().lower()
+	for dead in _DEAD_PARCEL_STATUSES:
+		if dead in low:
+			return True
+	return False
+
 
 def parse_sendcloud_datetime(value):
 	"""Parse a SendCloud date string (day-first) into an ISO 'YYYY-MM-DD HH:MM:SS'
@@ -730,8 +744,17 @@ class SendCloudUtils:
 				}
 			)
 
-		# Shipment geneli: tüm parçalar Delivered ise teslim zamanı = en geç parça zamanı
-		all_delivered = bool(parcels) and all(p["status"] == "Delivered" for p in parcels)
+		# Shipment geneli: tüm CANLI parçalar Delivered ise teslim zamanı = en geç
+		# parça zamanı.
+		#
+		# Ölü parçalar hesaba katılmaz. Etiketi taşıyıcıya hiç bildirilememiş bir
+		# parça ("Announcement failed") asla Delivered olmayacak; sayılırsa müşteri
+		# paketini almış olsa bile gönderi sonsuza kadar "In Progress" kalır — ve
+		# hiçbir yerde hata görünmez, çünkü teknik olarak hâlâ bir parça teslim
+		# edilmemiştir. Genelde yeniden oluşturulmuş bir etiketin ölü ilk denemesi
+		# olur ve işi asıl taşıyan ikinci parçadır.
+		live_parcels = [p for p in parcels if not _is_dead_parcel(p["status"])]
+		all_delivered = bool(live_parcels) and all(p["status"] == "Delivered" for p in live_parcels)
 		shipment_delivered_at = max(delivered_times) if (all_delivered and delivered_times) else None
 
 		return {
