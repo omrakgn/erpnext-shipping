@@ -164,3 +164,83 @@ def mark_returned_to_sender(shipment, reason=None, note=None):
 		frappe.get_doc("Shipment", shipment).add_comment("Comment", text=note)
 	frappe.db.commit()
 	return {"shipment": shipment, "status": "Returned", "reason": reason}
+
+
+@frappe.whitelist()
+def backfill_status_history(limit=200, only_missing=True, shipment=None):
+	"""Store each shipment's full carrier ladder from SendCloud.
+
+	The webhook only records what arrives from now on, so every shipment booked
+	before it started has an empty history — including the returns we most need
+	to look at. SendCloud's tracking endpoint serves the whole ladder
+	retroactively, so it is fetched once and kept.
+
+	Beyond readability this makes find_suspect_deliveries() work from local data
+	instead of one API call per shipment.
+
+	Returns {"checked", "stored", "empty", "errors"}.
+	"""
+	import json
+
+	from erpnext_shipping.erpnext_shipping.doctype.sendcloud.sendcloud import SendCloudUtils
+
+	sc = SendCloudUtils()
+	results = {"checked": 0, "stored": 0, "empty": 0, "errors": []}
+
+	filters = {"docstatus": 1, "awb_number": ["!=", ""]}
+	if shipment:
+		# Tek gönderi için form düğmesinden çağrılıyor: kayıtlı geçmiş olsa da
+		# tazelensin, "eksikse getir" kuralı burada uygulanmaz.
+		filters = {"name": shipment}
+	elif only_missing and cint(only_missing):
+		filters["custom_status_history"] = ["is", "not set"]
+
+	rows = frappe.get_all(
+		"Shipment", filters=filters, fields=["name", "awb_number"],
+		order_by="creation desc", limit=limit,
+	)
+
+	for row in rows:
+		results["checked"] += 1
+		entries = []
+		for awb in (row.awb_number or "").split(","):
+			awb = awb.strip()
+			if not awb:
+				continue
+			try:
+				history = sc.get_tracking_history(awb)
+			except Exception as e:
+				results["errors"].append(f"{row.name} ({awb}): {e}")
+				continue
+			if not history:
+				continue
+			# Aynı olay birkaç satırda tekrar ediyor (biri mesajlı, biri boş).
+			# Durum değişmediyse ve mesaj yoksa atla — merdiven okunur kalsın.
+			previous = None
+			for s in history["statuses"]:
+				if not s["message"] and s["parent_status"] == previous:
+					continue
+				previous = s["parent_status"]
+				entries.append({
+					"parcel_id": "",
+					"tracking": awb,
+					"status": s["message"] or s["parent_status"],
+					"parent_status": s["parent_status"],
+					"at": s["at"],
+				})
+
+		if not entries:
+			results["empty"] += 1
+			continue
+
+		entries.sort(key=lambda e: e["at"])
+		frappe.db.set_value(
+			"Shipment", row.name, "custom_status_history",
+			json.dumps(entries[-200:]), update_modified=False,
+		)
+		results["stored"] += 1
+		frappe.db.commit()
+
+	if results["errors"]:
+		frappe.log_error("Shipment status history backfill", "\n".join(results["errors"])[:100000])
+	return results

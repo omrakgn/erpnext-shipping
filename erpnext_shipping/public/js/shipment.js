@@ -58,6 +58,21 @@ frappe.ui.form.on("Shipment", {
 					render_parcel_breakdown(frm, r.message || []);
 				},
 			});
+			render_status_timeline(frm);
+
+			if (frm.doc.awb_number) {
+				frm.add_custom_button(__("Fetch Carrier Timeline"), function () {
+					frappe.call({
+						method: "erpnext_shipping.erpnext_shipping.loss.backfill_status_history",
+						args: { limit: 1, only_missing: 0, shipment: frm.doc.name },
+						freeze: true,
+						freeze_message: __("Fetching carrier steps..."),
+						callback: function () {
+							frm.reload_doc().then(() => render_status_timeline(frm));
+						},
+					});
+				}, __("Tracking"));
+			}
 		}
 		// Description of Content zorunlu bir alan; client mandatory kontrolü sunucu
 		// validate hook'undan önce çalıştığı için doldurmayı burada yapıyoruz.
@@ -545,6 +560,65 @@ function create_loss_claims(frm, tns, claim_type) {
 			}
 		},
 	});
+}
+
+// Taşıyıcının bildirdiği adımlar. Ham JSON alanı gizli; okunması gereken bu.
+// Sıra önemli: taşıyıcı geri dönen paketi de "delivered" diye kapatıyor, ve
+// başarısız denemeler ancak burada görünüyor.
+function render_status_timeline(frm) {
+	const field = frm.get_field("custom_status_timeline");
+	if (!field) return;
+
+	let entries = [];
+	try {
+		entries = JSON.parse(frm.doc.custom_status_history || "[]");
+	} catch (e) {
+		entries = [];
+	}
+
+	if (!entries.length) {
+		field.$wrapper.html(
+			`<div class="text-muted">${__(
+				"No carrier steps recorded yet. Use 'Fetch Carrier Timeline' to pull them."
+			)}</div>`
+		);
+		return;
+	}
+
+	const esc = frappe.utils.escape_html;
+	// Başarısız deneme ve teslim, göz taraması için renklendirilir; arada kalan
+	// depo hareketleri sessiz kalsın.
+	const tone = (p) => {
+		const s = (p || "").toLowerCase();
+		if (s.indexOf("delivery-failed") >= 0) return "orange";
+		if (s.indexOf("delivered") >= 0) return "green";
+		if (s.indexOf("cancel") >= 0 || s.indexOf("no-label") >= 0) return "red";
+		return "";
+	};
+
+	let html = `<table class="table table-bordered" style="margin-top:8px;">
+		<thead><tr>
+			<th style="width:20%;">${__("When")}</th>
+			<th style="width:22%;">${__("Stage")}</th>
+			<th>${__("Carrier Message")}</th>
+			<th style="width:18%;">${__("Tracking")}</th>
+		</tr></thead><tbody>`;
+	entries.forEach((e) => {
+		const colour = tone(e.parent_status);
+		const stage = e.parent_status
+			? colour
+				? `<span class="indicator-pill ${colour}">${esc(e.parent_status)}</span>`
+				: esc(e.parent_status)
+			: "—";
+		html += `<tr>
+			<td>${esc(e.at || "")}</td>
+			<td>${stage}</td>
+			<td>${esc(e.status || "")}</td>
+			<td class="text-muted small">${esc(e.tracking || "")}</td>
+		</tr>`;
+	});
+	html += `</tbody></table>`;
+	field.$wrapper.html(html);
 }
 
 function render_parcel_breakdown(frm, rows) {

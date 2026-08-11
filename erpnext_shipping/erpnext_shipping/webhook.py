@@ -113,6 +113,10 @@ def record_status(shipment, parcel_id, tracking, status):
 		"parcel_id": str(parcel_id or ""),
 		"tracking": tracking or "",
 		"status": status,
+		# Webhook normalize edilmiş durumu vermiyor; geriye dönük indirmede
+		# dolduruluyor. Aynı anahtar seti kullanılıyor ki zaman çizelgesi iki
+		# kaynağı ayırt etmek zorunda kalmasın.
+		"parent_status": "",
 		"at": now_datetime().strftime("%Y-%m-%d %H:%M:%S"),
 	})
 	frappe.db.set_value(

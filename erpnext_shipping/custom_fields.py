@@ -244,11 +244,21 @@ def get_custom_fields():
 				"read_only": 1,
 				"translatable": 0,
 				"insert_after": "custom_tracking_details",
+				"hidden": 1,
 				"description": _(
 					"Every status the carrier reported, in order. A refusal or "
 					"return earlier in the sequence is why a parcel that reads "
 					"'Delivered' can still be a return."
 				),
+			},
+			{
+				# Ham JSON okunamıyor; alanın işe yaraması için okunur biçimde
+				# gösterilmesi gerekiyor. Veri custom_status_history'de, bu yalnız
+				# görünüm.
+				"fieldname": "custom_status_timeline",
+				"label": _("Carrier Timeline"),
+				"fieldtype": "HTML",
+				"insert_after": "custom_status_history",
 			},
 			{
 				# Taşıyıcı geri dönen paketi de "delivered" olarak kapatıyor ve
