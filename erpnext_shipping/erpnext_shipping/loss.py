@@ -254,3 +254,93 @@ def backfill_status_history(limit=200, only_missing=True, shipment=None):
 	if results["errors"]:
 		frappe.log_error("Shipment status history backfill", "\n".join(results["errors"])[:100000])
 	return results
+
+
+@frappe.whitelist()
+def find_returns_without_shipment_flag(limit=200):
+	"""Return Delivery Notes whose shipment still reads Delivered.
+
+	find_suspect_deliveries() starts from the carrier and only sees parcels that
+	recorded a failed attempt. A parcel turned back for a bad address, or refused
+	at the door and sent straight home, leaves no failed attempt at all — the
+	ladder reads like a clean delivery and the scan never looks at it.
+
+	This starts from the warehouse instead: goods came back, a return note was
+	written, yet the shipment was never marked. That evidence is stronger than
+	anything the carrier reports, because it is the parcel physically arriving.
+
+	`gap_days` separates the two cases it finds: a return booked within a day or
+	two of the "delivery" is the parcel coming home, while one booked weeks later
+	is a customer who received the goods and sent them back — a real delivery
+	followed by a real return, and not something to re-label.
+
+	Returns [{shipment, delivered_at, return_note, return_date, gap_days, customer}].
+	"""
+	out = []
+
+	returns = frappe.get_all(
+		"Delivery Note",
+		filters={"is_return": 1, "docstatus": 1},
+		fields=["name", "posting_date", "return_against", "customer"],
+		order_by="posting_date desc",
+		limit=limit,
+	)
+
+	for ret in returns:
+		originals = set()
+		if ret.return_against:
+			originals.add(ret.return_against)
+		else:
+			# return_against boşsa sipariş üzerinden orijinal irsaliyeleri bul.
+			for so in frappe.get_all(
+				"Delivery Note Item", filters={"parent": ret.name},
+				pluck="against_sales_order",
+			):
+				if not so:
+					continue
+				for dn in frappe.get_all(
+					"Delivery Note Item",
+					filters={"against_sales_order": so, "docstatus": 1},
+					pluck="parent",
+				):
+					if dn != ret.name:
+						originals.add(dn)
+
+		if not originals:
+			continue
+
+		for shipment in frappe.get_all(
+			"Shipment Delivery Note",
+			filters={"delivery_note": ["in", list(originals)]},
+			pluck="parent",
+			distinct=True,
+		):
+			sh = frappe.db.get_value(
+				"Shipment", shipment,
+				["name", "tracking_status", "custom_returned_to_sender", "custom_delivered_at", "docstatus"],
+				as_dict=True,
+			)
+			if not sh or sh.docstatus != 1:
+				continue
+			if sh.tracking_status != "Delivered" or sh.custom_returned_to_sender:
+				continue
+
+			gap = None
+			if sh.custom_delivered_at:
+				try:
+					gap = date_diff(getdate(ret.posting_date), getdate(sh.custom_delivered_at))
+				except Exception:
+					gap = None
+
+			out.append({
+				"shipment": sh.name,
+				"delivered_at": str(sh.custom_delivered_at or ""),
+				"return_note": ret.name,
+				"return_date": str(ret.posting_date),
+				"gap_days": gap,
+				"customer": ret.customer,
+			})
+
+	# En küçük fark önce: dönüş bacağı olma ihtimali en yüksek olanlar başta.
+	out.sort(key=lambda r: (r["gap_days"] is None, r["gap_days"]))
+	return out
