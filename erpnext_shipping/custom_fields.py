@@ -251,6 +251,26 @@ def get_custom_fields():
 				),
 			},
 			{
+				# Taşıyıcı geri dönen paketi de "delivered" olarak kapatıyor ve
+				# dönüş bacağı normal teslimattan ayırt edilemiyor: aynı
+				# at-sorting-centre -> driver-on-route -> delivered dizisi, iade
+				# anlamına gelen tek bir durum yok. Sistem bunu bilemez; paketi
+				# rafta gören bilir. Bu kutu işaretlendiğinde takip güncellemesi
+				# artık durumu geri "Delivered" yapamaz.
+				"fieldname": "custom_returned_to_sender",
+				"label": _("Returned to Us"),
+				"fieldtype": "Check",
+				"in_standard_filter": 1,
+				"allow_on_submit": 1,
+				"insert_after": "custom_status_history",
+				"description": _(
+					"Tick when the parcel physically came back — refused, not collected, "
+					"address wrong. Carriers close the return leg as 'delivered' too, so "
+					"tracking alone cannot tell the difference. Once ticked, tracking "
+					"updates stop overriding the status."
+				),
+			},
+			{
 				"fieldname": "custom_label_removed",
 				"label": _("Label Removed"),
 				"fieldtype": "Check",

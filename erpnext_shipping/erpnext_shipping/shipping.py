@@ -1114,7 +1114,12 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	# kapatıyor — aynı kelimeyle. Anlık duruma bakan bir kontrol iki durumu
 	# ayırt edemez; ayıran şey, daha önce gelmiş "Refused"/"Returned" olayıdır.
 	# Bu yüzden geçmiş de okunuyor: son durum artık tek başına yeterli değil.
-	if _has_return_marker(low) or _has_return_marker(_status_history_text(shipment)):
+	# Elle işaretlenmiş iade her şeyi yener ve bir daha ezilmez. Taşıyıcı dönüş
+	# bacağını "delivered" diye kapattığı için, işaretlenmezse bir sonraki takip
+	# güncellemesi durumu sessizce satışa çevirir.
+	if shipment.get("custom_returned_to_sender"):
+		mapped_status = "Returned"
+	elif _has_return_marker(low) or _has_return_marker(_status_history_text(shipment)):
 		mapped_status = "Returned"
 	elif tracking_data.get("delivered_at"):
 		mapped_status = "Delivered"

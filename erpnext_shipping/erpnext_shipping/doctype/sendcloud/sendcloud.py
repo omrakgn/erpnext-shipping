@@ -25,6 +25,9 @@ SHIPMENTS_URL = f"{BASE_URL}/v3/shipments"
 SHIPMENTS_ANNOUNCE_URL = f"{BASE_URL}/v3/shipments/announce"
 LABELS_URL = f"{BASE_URL}/v2/labels"
 PARCELS_URL = f"{BASE_URL}/v2/parcels"
+# Parselin tam durum merdiveni. Parcel nesnesi yalnız o anki durumu taşıyor; bu
+# uç nokta geçmişe dönük çalışıyor ve webhook'a bağlı değil.
+TRACKING_URL = f"{BASE_URL}/v2/tracking"
 CONTRACTS_URL = f"{BASE_URL}/v3/contracts"
 ORDERS_URL = f"{BASE_URL}/v3/orders"
 CREATE_LABEL_SYNC_URL = f"{BASE_URL}/v3/orders/create-label-sync"
@@ -630,6 +633,39 @@ class SendCloudUtils:
 			"awb_number": ", ".join(r["awb_number"] for r in results if r.get("awb_number")),
 			"tracking_url": ", ".join(r["tracking_url"] for r in results if r.get("tracking_url")),
 			"contract_id": ", ".join(contracts),
+		}
+
+	def get_tracking_history(self, tracking_number):
+		"""Full status ladder for a tracking number, or None.
+
+		Returns {"expected": date, "statuses": [{"at", "parent_status", "message"}]}.
+		"""
+		if not tracking_number or not self.api_key:
+			return None
+		try:
+			response = requests.get(
+				f"{TRACKING_URL}/{tracking_number}",
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json"},
+				timeout=30,
+			)
+			if not response.ok:
+				return None
+			data = response.json()
+		except Exception:
+			return None
+
+		statuses = []
+		for s in data.get("statuses") or []:
+			statuses.append({
+				"at": (s.get("carrier_update_timestamp") or "")[:19],
+				"parent_status": s.get("parent_status") or "",
+				"message": s.get("carrier_message") or "",
+			})
+		return {
+			"expected": data.get("expected_delivery_date"),
+			"is_return": data.get("is_return"),
+			"statuses": statuses,
 		}
 
 	def get_label(self, shipment_id):
