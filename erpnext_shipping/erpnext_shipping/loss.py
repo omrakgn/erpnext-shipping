@@ -123,9 +123,31 @@ def find_suspect_deliveries(limit=200, min_gap_days=RETURN_SUSPECT_DAYS):
 	return out
 
 
+RETURN_REASONS = (
+	"Refused by Customer",
+	"Not Collected",
+	"Address Problem",
+	"Carrier Failure",
+	"Other",
+)
+
+
 @frappe.whitelist()
-def mark_returned_to_sender(shipment, note=None):
-	"""Record that a parcel came back to us, and stop tracking overriding it."""
+def mark_returned_to_sender(shipment, reason=None, note=None):
+	"""Record that a parcel came back to us, and stop tracking overriding it.
+
+	`reason` matters beyond bookkeeping: a Carrier Failure can be claimed and a
+	customer refusal cannot, and an Address Problem points at the order data
+	rather than the carrier. Tracking cannot supply it — the carrier's failed
+	attempts carry no reason — so it comes from whoever handled the case.
+	"""
+	if reason and reason not in RETURN_REASONS:
+		frappe.throw(
+			frappe._("Unknown return reason {0}. Expected one of: {1}").format(
+				reason, ", ".join(RETURN_REASONS)
+			)
+		)
+
 	values = {
 		"custom_returned_to_sender": 1,
 		"tracking_status": "Returned",
@@ -134,8 +156,11 @@ def mark_returned_to_sender(shipment, note=None):
 		"custom_delivered_at": None,
 		"custom_transit_days": None,
 	}
+	if reason:
+		values["custom_return_reason"] = reason
+
 	frappe.db.set_value("Shipment", shipment, values, update_modified=False)
 	if note:
 		frappe.get_doc("Shipment", shipment).add_comment("Comment", text=note)
 	frappe.db.commit()
-	return {"shipment": shipment, "status": "Returned"}
+	return {"shipment": shipment, "status": "Returned", "reason": reason}

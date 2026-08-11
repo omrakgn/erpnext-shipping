@@ -271,6 +271,26 @@ def get_custom_fields():
 				),
 			},
 			{
+				# Neden geri geldiği, ne yapılacağını belirliyor: taşıyıcı hatasında
+				# tazminat istenebilir, müşteri reddinde istenemez; adres sorunu ise
+				# kaynak veriye bakılmalı (bkz. olay-yanlis-teslimat-adresi.md).
+				# Takip verisi bunu söylemiyor — "delivery attempt failed" mesajları
+				# gerekçe taşımıyor. Bilgi müşteri/pazaryeri yazışmasından geliyor.
+				"fieldname": "custom_return_reason",
+				"label": _("Return Reason"),
+				"fieldtype": "Select",
+				"options": "\nRefused by Customer\nNot Collected\nAddress Problem\nCarrier Failure\nOther",
+				"translatable": 0,
+				"in_standard_filter": 1,
+				"allow_on_submit": 1,
+				"depends_on": "custom_returned_to_sender",
+				"insert_after": "custom_returned_to_sender",
+				"description": _(
+					"Carrier Failure is the one that can be claimed; a refusal cannot. "
+					"Address Problem means the address data needs checking, not the carrier."
+				),
+			},
+			{
 				"fieldname": "custom_label_removed",
 				"label": _("Label Removed"),
 				"fieldtype": "Check",
