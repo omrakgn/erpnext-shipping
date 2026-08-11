@@ -226,7 +226,9 @@ def update_tracking_info():
 			"docstatus": 1,
 			"status": ["not in", ["Cancelled", "Completed"]],
 			"shipment_id": ["!=", ""],
-			"tracking_status": ["!=", "Delivered"],
+			# Delivered ve Lost bitmiş durumlar. Lost'u elemezsek, tazminatı ödenmiş
+			# ve kapatılmış bir gönderi için taşıyıcıya sonsuza kadar soru sorulur.
+			"tracking_status": ["not in", ["Delivered", "Lost"]],
 			# SendCloud'dan silindiği tespit edilenleri (etiket yok) tekrar sorgulama.
 			"custom_label_removed": 0,
 		},

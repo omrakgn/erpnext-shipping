@@ -41,6 +41,33 @@ class ShipmentLossClaim(Document):
 		self.set_deadline()
 		self.compute_net_loss()
 
+	def on_update(self):
+		self.close_shipment_when_settled()
+
+	# Talebin bittiği ve paketin gitmiş sayıldığı durumlar. "Recovered" burada yok:
+	# paket bulunmuş demektir, gönderi teslim ya da iade olarak devam eder.
+	SETTLED_AS_LOST = ("Paid", "Written Off", "Rejected")
+
+	def close_shipment_when_settled(self):
+		"""Mark the shipment Lost once the claim is settled.
+
+		Nothing ever closed a lost shipment. The claim could be paid and written
+		off, and the shipment stayed "In Progress" with the hourly job still
+		asking the carrier about a parcel everyone had agreed was gone — for as
+		long as the record existed.
+
+		Rejected and Written Off count as lost too: the claim failed, the parcel
+		is still missing. Only Recovered means it turned up.
+		"""
+		if self.status not in self.SETTLED_AS_LOST or not self.shipment:
+			return
+		current = frappe.db.get_value("Shipment", self.shipment, "tracking_status")
+		# Teslim edilmiş bir gönderiyi kayıp yapma: talep yanlış gönderiye açılmış
+		# ya da paket sonradan çıkmış olabilir; belge durumu bunu ezmemeli.
+		if current in ("Delivered", "Lost"):
+			return
+		frappe.db.set_value("Shipment", self.shipment, "tracking_status", "Lost")
+
 	def autofill_from_shipment(self):
 		"""Pull the shipment / delivery details onto the claim when they are empty, so
 		the claim (and the DPD form) is self-contained."""
