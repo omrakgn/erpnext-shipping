@@ -95,12 +95,20 @@ def find_suspect_deliveries(limit=200, min_gap_days=RETURN_SUSPECT_DAYS):
 		last_failed = None
 		attempts = 0
 		delivered_at = None
+		previous = None
 		for s in history["statuses"]:
-			if s["parent_status"] == "delivery-failed":
-				attempts += 1
+			stage = s["parent_status"]
+			if stage == "delivery-failed":
+				# Taşıyıcı aynı denemeyi iki-üç kez bildiriyor. Her satırı saymak
+				# "4 deneme" gibi görünüp aslında 2 olan bir tabloya yol açıyordu —
+				# ve deneme sayısı, iade olup olmadığına karar verirken bakılan
+				# şeylerden biri.
+				if previous != "delivery-failed":
+					attempts += 1
 				last_failed = s["at"] or last_failed
-			elif s["parent_status"] == "delivered" and not delivered_at:
+			elif stage == "delivered" and not delivered_at:
 				delivered_at = s["at"]
+			previous = stage
 
 		if not (last_failed and delivered_at):
 			continue
