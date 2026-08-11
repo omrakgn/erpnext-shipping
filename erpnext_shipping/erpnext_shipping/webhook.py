@@ -17,6 +17,7 @@ import json
 import logging
 
 import frappe
+from frappe.utils import now_datetime
 
 
 @frappe.whitelist(allow_guest=True)
@@ -68,6 +69,12 @@ def sendcloud_webhook():
 		)
 		return {"ok": True, "deferred": "shipment not found yet", "parcel_id": parcel_id}
 
+	# Durumu kaydet, sonra tazele. Bu satır olmadan webhook yalnız "bir şey
+	# değişti" diyordu ve kod gidip O ANKİ durumu okuyordu — sıra kayboluyordu.
+	# Taşıyıcı bize geri dönen paketi de "Delivered" diye kapattığı için, iadeyi
+	# satıştan ayıran tek şey daha önce gelmiş "Refused" olayı.
+	record_status(shipment, parcel_id, tracking, status)
+
 	# Ağır işi arka plana at; webhook'a hemen 200 dön.
 	frappe.enqueue(
 		"erpnext_shipping.erpnext_shipping.webhook.refresh_shipment_tracking",
@@ -76,6 +83,43 @@ def sendcloud_webhook():
 		enqueue_after_commit=True,
 	)
 	return {"ok": True, "shipment": shipment}
+
+
+# Kayıt sınırı: bir gönderi normalde 5-15 olay üretir. Üst sınır, döngüye giren
+# bir taşıyıcı bildiriminin alanı şişirmesini engeller.
+MAX_STATUS_HISTORY = 60
+
+
+def record_status(shipment, parcel_id, tracking, status):
+	"""Append one carrier status to the shipment's history.
+
+	Kept as raw text: the point is to preserve what the carrier actually said,
+	including wording we do not map today.
+	"""
+	if not status:
+		return
+	try:
+		raw = frappe.db.get_value("Shipment", shipment, "custom_status_history")
+		history = json.loads(raw) if raw else []
+	except Exception:
+		history = []
+
+	# Aynı durum art arda tekrar ederse yazma; taşıyıcılar aynı olayı birkaç kez
+	# gönderebiliyor ve tekrarlar sırayı okunmaz hale getiriyor.
+	if history and history[-1].get("status") == status and str(history[-1].get("parcel_id")) == str(parcel_id):
+		return
+
+	history.append({
+		"parcel_id": str(parcel_id or ""),
+		"tracking": tracking or "",
+		"status": status,
+		"at": now_datetime().strftime("%Y-%m-%d %H:%M:%S"),
+	})
+	frappe.db.set_value(
+		"Shipment", shipment, "custom_status_history",
+		json.dumps(history[-MAX_STATUS_HISTORY:]),
+		update_modified=False,
+	)
 
 
 def _log(msg):

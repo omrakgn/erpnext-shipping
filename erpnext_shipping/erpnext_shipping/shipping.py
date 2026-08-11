@@ -1110,10 +1110,14 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	# buraya yazılamaz — izin verilen değere eşle; ham detayı tracking_status_info'da tut.
 	raw_status = (tracking_data.get("tracking_status") or "").strip()
 	low = raw_status.lower()
-	if tracking_data.get("delivered_at"):
-		mapped_status = "Delivered"
-	elif "return" in low:
+	# İade, teslimi yener. Taşıyıcı bize geri dönen paketi de "Delivered" diye
+	# kapatıyor — aynı kelimeyle. Anlık duruma bakan bir kontrol iki durumu
+	# ayırt edemez; ayıran şey, daha önce gelmiş "Refused"/"Returned" olayıdır.
+	# Bu yüzden geçmiş de okunuyor: son durum artık tek başına yeterli değil.
+	if _has_return_marker(low) or _has_return_marker(_status_history_text(shipment)):
 		mapped_status = "Returned"
+	elif tracking_data.get("delivered_at"):
+		mapped_status = "Delivered"
 	elif "lost" in low:
 		mapped_status = "Lost"
 	elif raw_status:
@@ -1133,7 +1137,10 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 	# SendCloud'un delivered_at'i parcel'ın date_updated'ı; teslimden SONRA kayıt
 	# güncellenirse ileri kayar. Bu yüzden yalnızca İLK kez yaz (üzerine yazma) —
 	# böylece gerçek teslim anına en yakın değer sabit kalır.
-	if delivered_at and not shipment.get("custom_delivered_at"):
+	# Teslim zamanını yalnız gerçekten müşteriye teslim edildiyse yaz. İade
+	# edilmiş bir pakette bu tarih, paketin BİZE dönüş zamanıdır; kaydedilirse
+	# "3 günde teslim edildi" gibi okunur ve SLA ile transit süresi bozulur.
+	if mapped_status == "Delivered" and delivered_at and not shipment.get("custom_delivered_at"):
 		dt = get_datetime(delivered_at)
 		updates["custom_delivered_at"] = dt
 		# Kurye transit süresi: pickup_date -> teslim (gün). 0-90 gün dışı = bozuk
@@ -1143,6 +1150,40 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 			if transit is not None and 0 <= transit <= 90:
 				updates["custom_transit_days"] = transit
 	shipment.db_set(updates)
+
+
+# Paketin müşteriye ulaşmadığını söyleyen ifadeler (NL/EN/DE). "Delivery attempt
+# failed" BİLEREK yok: başarısız bir deneme normal, ertesi gün teslim edilebilir.
+# Buradakiler geri dönüşü kesinleştiren olaylar.
+_RETURN_MARKERS = (
+	"refused",
+	"geweigerd",
+	"verweigert",
+	"returned to sender",
+	"return to sender",
+	"retour afzender",
+	"shipment returned",
+	"returned to shipper",
+)
+
+
+def _has_return_marker(text):
+	low = (text or "").lower()
+	for marker in _RETURN_MARKERS:
+		if marker in low:
+			return True
+	return False
+
+
+def _status_history_text(shipment):
+	"""Shipment'ın kayıtlı durum geçmişi, tek metin olarak (arama için)."""
+	raw = shipment.get("custom_status_history")
+	if not raw:
+		return ""
+	try:
+		return " | ".join(str(e.get("status") or "") for e in json.loads(raw))
+	except Exception:
+		return str(raw)
 
 
 def update_delivery_note(delivery_notes, shipment_info=None, tracking_info=None):

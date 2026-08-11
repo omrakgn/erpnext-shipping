@@ -234,6 +234,23 @@ def get_custom_fields():
 				"insert_after": "custom_transit_days",
 			},
 			{
+				# Carriers close a parcel that came back to us as "Delivered" — the
+				# same word they use when the customer receives it. The single
+				# current status therefore cannot tell a sale from a refusal; only
+				# the sequence can, and the webhook already carries it.
+				"fieldname": "custom_status_history",
+				"label": _("Status History (JSON)"),
+				"fieldtype": "Long Text",
+				"read_only": 1,
+				"translatable": 0,
+				"insert_after": "custom_tracking_details",
+				"description": _(
+					"Every status the carrier reported, in order. A refusal or "
+					"return earlier in the sequence is why a parcel that reads "
+					"'Delivered' can still be a return."
+				),
+			},
+			{
 				"fieldname": "custom_label_removed",
 				"label": _("Label Removed"),
 				"fieldtype": "Check",
