@@ -161,8 +161,10 @@ def mark_returned_to_sender(shipment, reason=None, note=None):
 		"tracking_status": "Returned",
 		# Teslim zamanı ve transit süresi paketin BİZE dönüşünü ölçüyordu; SLA ve
 		# kargo performansı raporlarını bozmasınlar diye temizleniyor.
+		# transit_days Float: sütun NOT NULL, None yazılamıyor — 0 kullanılıyor.
+		# Alan zaten custom_delivered_at'e bağlı görünüyor, o boşken gizli kalır.
 		"custom_delivered_at": None,
-		"custom_transit_days": None,
+		"custom_transit_days": 0,
 	}
 	if reason:
 		values["custom_return_reason"] = reason
