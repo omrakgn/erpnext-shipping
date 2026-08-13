@@ -53,6 +53,23 @@ def _is_dead_parcel(status):
 	return False
 
 
+def format_sendcloud_errors(errors):
+	"""Readable text from SendCloud's error list, with the field that failed.
+
+	SendCloud puts the offending field in `source.pointer`; without it the
+	message is "This field cannot be blank." and gives no way to act on it.
+	"""
+	parts = []
+	for err in errors or []:
+		if not isinstance(err, dict):
+			parts.append(str(err))
+			continue
+		pointer = (err.get("source") or {}).get("pointer") or ""
+		detail = err.get("detail") or err.get("code") or str(err)
+		parts.append(f"{pointer}: {detail}" if pointer else str(detail))
+	return "\n".join(parts)
+
+
 def parse_sendcloud_datetime(value):
 	"""Parse a SendCloud date string (day-first) into an ISO 'YYYY-MM-DD HH:MM:SS'
 	string. Returns None for empty; leaves already-ISO / unknown values as-is."""
@@ -365,16 +382,9 @@ class SendCloudUtils:
 						message=json.dumps(response_data, indent=2, default=str),
 						title="SendCloud Shipment Error (multicollo)",
 					)
-					error_details = [
-						f"Code: {err.get('code', 'N/A')}, Detail: {err.get('detail', 'N/A')}"
-						for err in response_data["errors"]
-					]
-					error_message = "\n".join(error_details)
 					frappe.msgprint(
-						_("Error occurred while creating shipment for parcel {0}:").format(
-							parcel.get("order_number")
-						)
-						+ f"\n{error_message}",
+						_("SendCloud rejected shipment {0}:").format(api_order_number)
+						+ f"\n{format_sendcloud_errors(response_data['errors'])}",
 						indicator="red",
 						alert=True,
 					)
@@ -416,16 +426,15 @@ class SendCloudUtils:
 							message=json.dumps(response_data, indent=2, default=str),
 							title="SendCloud Shipment Error (non-multicollo)",
 						)
-						error_details = [
-							f"Code: {err.get('code', 'N/A')}, Detail: {err.get('detail', 'N/A')}"
-							for err in response_data["errors"]
-						]
-						error_message = "\n".join(error_details)
+						# Koli numarasıyla söyle. Eskiden parcel.get("order_number")
+						# yazılıyordu; parça sözlüğünde o anahtar yok, mesaj hep
+						# "for parcel None" diyordu ve hangi kolinin reddedildiği
+						# belli olmuyordu.
 						frappe.msgprint(
-							_("Error occurred while creating shipment for parcel {0}:").format(
-								parcel.get("order_number")
+							_("SendCloud rejected parcel {0} of {1}:").format(
+								parcels.index(parcel) + 1, api_order_number
 							)
-							+ f"\n{error_message}",
+							+ f"\n{format_sendcloud_errors(response_data['errors'])}",
 							indicator="red",
 							alert=True,
 						)
@@ -487,6 +496,20 @@ class SendCloudUtils:
 		}
 		if delivery_house_number:
 			to_address["house_number"] = delivery_house_number
+		else:
+			# Numara bulunamazsa alan hiç gönderilmiyordu ve SendCloud "This field
+			# cannot be blank" diyordu — hangi alan, hangi adres, belli değil. Hata
+			# aynı hata, ama artık düzeltilecek yeri söylüyor.
+			frappe.throw(
+				_(
+					"No house number could be read from the delivery address {0}: "
+					"'{1}'. SendCloud requires it. Put the number in Address Line 1 "
+					"separated by a space, e.g. 'Musterstraße 12'."
+				).format(
+					delivery_address.get("name") or "",
+					delivery_address.address_line1 or "",
+				)
+			)
 		if company_name:
 			to_address["company_name"] = company_name
 		if delivery_contact.phone:
