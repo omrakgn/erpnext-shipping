@@ -1404,12 +1404,15 @@ class SendCloudUtils:
 		# sebebi yoktu.
 		#
 		# Dahili `id` kullanılmıyor: create-label onunla 404 veriyor.
-		if order.get("order_id"):
-			order_ref = {"order_id": str(order.get("order_id"))}
-		elif order_number:
-			order_ref = {"order_number": str(order_number)}
+		# Sıra tekillikten belirsizliğe: siparişin kendi kimliği, sonra SendCloud'un
+		# dahili id'si, en son numara. order_number en sonda çünkü tekil DEĞİL —
+		# bir sipariş birkaç gönderiye bölündüğünde aynı numarayla birden çok kayıt
+		# oluyor ve SendCloud "hangisi?" deyip etiketi hiç basmıyor.
+		reference = order.get("order_id") or order.get("id") or order_id
+		if reference:
+			order_ref = {"order_id": str(reference)}
 		else:
-			order_ref = {"order_id": str(order_id)}
+			order_ref = {"order_number": str(order_number)}
 		payload = {
 			"integration_id": int(integration_id),
 			"order": order_ref,
