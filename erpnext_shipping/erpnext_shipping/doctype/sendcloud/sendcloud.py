@@ -1396,46 +1396,58 @@ class SendCloudUtils:
 		# NOT: ship_with, Shipments API ile aynı yapıda olmalı: {type, properties}.
 		# contract, properties içinde "contract_id" anahtarıyla (integer) gönderilir.
 		# Bu endpoint top-level "label" kabul etmiyor (varsayılan PDF döner).
-		# Order referansı: önce `order_id` (siparişin kendi harici kimliği).
-		# order_number tekil değil — aynı numaraya sahip birden fazla sipariş
-		# olduğunda SendCloud etiketi hiç basmıyor ve "Multiple orders found for
-		# 'order_number'. Use 'order_id' instead." diyor. Siparişi zaten bulmuş
-		# olduğumuz için elimizde tekil kimlik var; belirsiz olanı tercih etmenin
-		# sebebi yoktu.
 		#
-		# Dahili `id` kullanılmıyor: create-label onunla 404 veriyor.
-		# Sıra tekillikten belirsizliğe: siparişin kendi kimliği, sonra SendCloud'un
-		# dahili id'si, en son numara. order_number en sonda çünkü tekil DEĞİL —
-		# bir sipariş birkaç gönderiye bölündüğünde aynı numarayla birden çok kayıt
-		# oluyor ve SendCloud "hangisi?" deyip etiketi hiç basmıyor.
-		reference = order.get("order_id") or order.get("id") or order_id
-		if reference:
-			order_ref = {"order_id": str(reference)}
-		else:
-			order_ref = {"order_number": str(order_number)}
-		payload = {
-			"integration_id": int(integration_id),
-			"order": order_ref,
-		}
+		# Sipariş referansı: `order_id` anahtarı kullanılıyor ama HANGİ değerin
+		# geçtiği belirsiz. Siparişte iki kimlik var — SendCloud'un kendi `id`'si
+		# ve pazaryerinin verdiği `order_id` (Shopify'da "gid://shopify/Order/...").
+		# İkincisini gönderdiğimizde SendCloud onu tanımayıp numaraya düşüyor ve
+		# bir sipariş birkaç gönderiye bölündüğünde "Multiple orders found" diyor.
+		# Eskiden dahili `id` denenmiş ve 404 alınmış diye not düşülmüş.
+		#
+		# İkisi de tek başına güvenilir değil, o yüzden tahmin etmek yerine sırayla
+		# deneniyor: biri "bulunamadı" derse diğeriyle bir kez daha. order_number
+		# hiç kullanılmıyor — tekil olmadığı kesin.
+		candidates = []
+		for value in (order.get("id"), order_id, order.get("order_id")):
+			if value and str(value) not in candidates:
+				candidates.append(str(value))
+		if not candidates:
+			frappe.throw(_("The SendCloud order carries no id to reference it by."))
+
+		base_payload = {"integration_id": int(integration_id)}
 		if shipping_option_code:
 			properties = {"shipping_option_code": shipping_option_code}
 			contract_id = self._contract_property(properties, contract_id)
-			payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
+			base_payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
 		brand_id = self.get_brand_id()
 		if brand_id:
-			payload["brand_id"] = brand_id
+			base_payload["brand_id"] = brand_id
 
-		try:
-			response = requests.post(
-				CREATE_LABEL_SYNC_URL,
-				json=payload,
-				auth=(self.api_key, self.api_secret),
-				headers={"Accept": "application/json", "Content-Type": "application/json"},
+		payload, response, response_data = None, None, None
+		for attempt, reference in enumerate(candidates, start=1):
+			payload = dict(base_payload)
+			payload["order"] = {"order_id": reference}
+			try:
+				response = requests.post(
+					CREATE_LABEL_SYNC_URL,
+					json=payload,
+					auth=(self.api_key, self.api_secret),
+					headers={"Accept": "application/json", "Content-Type": "application/json"},
+				)
+				response_data = response.json()
+			except Exception:
+				show_error_alert("shipping SendCloud order")
+				return None
+
+			# Referans tutmadıysa sıradakini dene; başka bir hata ise durup söyle,
+			# çünkü tekrar denemek onu düzeltmez.
+			text = json.dumps(response_data, default=str).lower()
+			unknown_reference = response.status_code >= 400 and (
+				"multiple_orders_found" in text or "not found" in text
 			)
-			response_data = response.json()
-		except Exception:
-			show_error_alert("shipping SendCloud order")
-			return None
+			if unknown_reference and attempt < len(candidates):
+				continue
+			break
 
 		if response.status_code >= 400 or (isinstance(response_data, dict) and response_data.get("errors")):
 			frappe.log_error(
