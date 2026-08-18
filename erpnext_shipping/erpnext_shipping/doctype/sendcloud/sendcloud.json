@@ -9,6 +9,7 @@
   "api_key",
   "api_secret",
   "brand_id",
+  "return_sender_address",
   "webhook_section",
   "webhook_secret",
   "preferred_options_section",
@@ -42,6 +43,12 @@
    "fieldtype": "Data",
    "label": "Brand ID",
    "description": "(Optional) SendCloud Brand ID used on the shipping label."
+  },
+  {
+   "fieldname": "return_sender_address",
+   "fieldtype": "Data",
+   "label": "Return Sender Address ID",
+   "description": "Numeric id of the SendCloud sender address returns should arrive at. Without it no return label can be bought — there is more than one address on the account and picking one here is a decision, not a default."
   },
   {
    "fieldname": "webhook_section",

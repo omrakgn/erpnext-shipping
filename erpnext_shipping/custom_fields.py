@@ -275,6 +275,18 @@ def get_custom_fields():
 				"insert_after": "custom_status_history",
 			},
 			{
+				"fieldname": "custom_is_return",
+				"label": _("Is a Return"),
+				"fieldtype": "Check",
+				"in_standard_filter": 1,
+				"insert_after": "custom_status_history",
+				"description": _(
+					"This shipment collects from the customer and delivers to us. Rates come "
+					"from the carriers' return products, which are priced and routed "
+					"differently from ordinary ones."
+				),
+			},
+			{
 				# Taşıyıcı geri dönen paketi de "delivered" olarak kapatıyor ve
 				# dönüş bacağı normal teslimattan ayırt edilemiyor: aynı
 				# at-sorting-centre -> driver-on-route -> delivered dizisi, iade

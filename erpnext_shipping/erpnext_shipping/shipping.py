@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import date_diff, flt, get_datetime
+from frappe.utils import cint, date_diff, flt, get_datetime
 from erpnext.stock.doctype.shipment.shipment import get_company_contact
 
 from erpnext_shipping.erpnext_shipping.doctype.letmeship.letmeship import (
@@ -31,6 +31,7 @@ def fetch_shipping_rates(
 	value_of_goods,
 	pickup_contact_name=None,
 	delivery_contact_name=None,
+	is_return=0,
 ):
 	# Return Shipping Rates for the various Shipping Providers
 	shipment_prices = []
@@ -68,6 +69,22 @@ def fetch_shipping_rates(
 		)
 		letmeship_prices = match_parcel_service_type_carrier(letmeship_prices, "carrier", "service_name")
 		shipment_prices += letmeship_prices
+
+	if sendcloud_enabled and cint(is_return):
+		# İade ürünleri v2'de ve sayısal id ile çalışıyor; günlük teklif akışı
+		# v3'te ve metin kod kullanıyor. İkisi birbirinin yerine geçmediği için
+		# iade kendi yolundan gidiyor ve v3 tarafına hiç uğramıyor.
+		sendcloud = SendCloudUtils()
+		return_prices = sendcloud.get_return_services(pickup_address=pickup_address, parcels=parcels)
+		if not return_prices:
+			frappe.msgprint(
+				_("No return product covers a parcel of this weight leaving {0}. Carriers band return prices by weight, and the bands have gaps.").format(
+					pickup_address.get("country") or pickup_address.get("country_code")
+				),
+				title=_("No return options"),
+				indicator="orange",
+			)
+		return return_prices
 
 	if sendcloud_enabled:
 		sendcloud = SendCloudUtils()
@@ -161,15 +178,24 @@ def create_shipment(
 
 	if service_info["service_provider"] == SENDCLOUD_PROVIDER:
 		sendcloud = SendCloudUtils()
-		shipment_info = sendcloud.create_shipment(
-			shipment=shipment,
-			delivery_address=delivery_address,
-			pickup_address=pickup_address,
-			pickup_contact=pickup_contact,
-			shipment_parcel=shipment_parcel,
-			delivery_contact=delivery_contact,
-			service_info=service_info,
-		)
+		if service_info.get("is_return"):
+			shipment_info = sendcloud.create_return_shipment(
+				shipment=shipment,
+				pickup_address=pickup_address,
+				pickup_contact=pickup_contact,
+				service_info=service_info,
+				shipment_parcel=shipment_parcel,
+			)
+		else:
+			shipment_info = sendcloud.create_shipment(
+				shipment=shipment,
+				delivery_address=delivery_address,
+				pickup_address=pickup_address,
+				pickup_contact=pickup_contact,
+				shipment_parcel=shipment_parcel,
+				delivery_contact=delivery_contact,
+				service_info=service_info,
+			)
 
 	if shipment_info:
 		shipment = frappe.get_doc("Shipment", shipment)

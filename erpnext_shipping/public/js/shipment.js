@@ -345,6 +345,9 @@ frappe.ui.form.on("Shipment", {
 							: frm.doc.pickup_contact_name,
 					delivery_contact_name: frm.doc.delivery_contact_name,
 					value_of_goods: frm.doc.value_of_goods,
+					// İade gönderisi taşıyıcıların iade ürünlerinden fiyatlanır;
+					// normal ürünler ters yönde ne fiyat ne rota olarak geçerli.
+					is_return: frm.doc.custom_is_return ? 1 : 0,
 				},
 				callback: function (r) {
 					if (r.message && r.message.length) {

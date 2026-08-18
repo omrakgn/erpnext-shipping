@@ -31,6 +31,8 @@ TRACKING_URL = f"{BASE_URL}/v2/tracking"
 CONTRACTS_URL = f"{BASE_URL}/v3/contracts"
 ORDERS_URL = f"{BASE_URL}/v3/orders"
 CREATE_LABEL_SYNC_URL = f"{BASE_URL}/v3/orders/create-label-sync"
+# İade ürünleri yalnız v2'de listeleniyor ve sayısal id ile çalışıyor.
+SHIPPING_METHODS_URL = f"{BASE_URL}/v2/shipping_methods"
 
 # SendCloud, tarihleri GÜN-AY-YIL ("21-07-2026 14:46:45") verir. frappe.get_datetime
 # bunu belirsiz olduğunda AY-GÜN sanıp (gün<=12) yanlış tarihe çeviriyor -> teslim
@@ -51,6 +53,11 @@ def _is_dead_parcel(status):
 		if dead in low:
 			return True
 	return False
+
+
+def _service_price(service):
+	"""Sort key: cheapest first. Nameless price means last, not free."""
+	return flt(service.get("total_price")) or float("inf")
 
 
 def format_sendcloud_errors(errors):
@@ -657,6 +664,204 @@ class SendCloudUtils:
 			"tracking_url": ", ".join(r["tracking_url"] for r in results if r.get("tracking_url")),
 			"contract_id": ", ".join(contracts),
 		}
+
+	# ------------------------------------------------------------------
+	# İade etiketleri — ayrı bir API dünyası
+	# ------------------------------------------------------------------
+	#
+	# İade ürünleri v2'de yaşıyor ve sayısal `id` ile çalışıyor; günlük teklif
+	# akışı ise v3'te ve metin `code` kullanıyor. İkisi birbirinin yerine
+	# geçmediği için iade kendi yolundan gidiyor — v3 tarafına dokunulmuyor.
+
+	def get_return_services(self, pickup_address, parcels: list[dict]):
+		"""Return products that can collect from this address, heaviest parcel first.
+
+		SendCloud lists a return method against the countries it can be **sent
+		from**, not sent to: `DPD Return 10-20kg` carries only Germany while our
+		own addresses are Belgian. So the filter is the customer's country.
+
+		Price does not come from the `price` field, which reads 0. The real amount
+		is the sum of `price_breakdown` for that country — label plus fuel
+		surcharges — and a quote that showed 0 would be a quote nobody could
+		check against an invoice.
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return []
+
+		origin = (pickup_address.get("country_code") or "").upper()
+		if not origin:
+			return []
+
+		weight = 0
+		count = 0
+		for parcel in parcels:
+			weight = max(weight, flt(parcel.get("weight", 0)))
+			count += int(parcel.get("count", 1) or 1)
+
+		try:
+			response = requests.get(
+				SHIPPING_METHODS_URL,
+				params={"is_return": "true"},
+				auth=(self.api_key, self.api_secret),
+				timeout=30,
+			)
+			methods = (response.json() or {}).get("shipping_methods", [])
+		except Exception:
+			frappe.log_error(
+				message=frappe.get_traceback(), title="SendCloud return methods could not be read"
+			)
+			return []
+
+		services = []
+		for method in methods:
+			# Servis noktası isteyen ürünler burada seçilemez: hangi noktaya
+			# bırakılacağını müşteri seçer, biz bilmiyoruz.
+			if (method.get("service_point_input") or "none") != "none":
+				continue
+
+			low = flt(method.get("min_weight") or 0)
+			high = flt(method.get("max_weight") or 0)
+			if weight and high and not (low <= weight <= high):
+				continue
+
+			country = None
+			for entry in method.get("countries") or []:
+				if (entry.get("iso_2") or "").upper() == origin:
+					country = entry
+					break
+			if not country:
+				continue
+
+			price = 0
+			for part in country.get("price_breakdown") or []:
+				price += flt(part.get("value"))
+
+			service = frappe._dict()
+			service.service_provider = SENDCLOUD_PROVIDER
+			service.carrier = (method.get("carrier") or "").upper()
+			service.carrier_code = method.get("carrier")
+			service.service_name = method.get("name")
+			service.service_id = str(method.get("id"))
+			service.is_return = True
+			service.total_price = price * (count or 1)
+			service.currency = "EUR"
+			service.weight_range = f"{low:g}-{high:g} kg"
+			services.append(service)
+
+		services.sort(key=_service_price)
+		return services
+
+	def create_return_shipment(
+		self,
+		shipment,
+		pickup_address,
+		pickup_contact,
+		service_info,
+		shipment_parcel,
+	):
+		"""Buy a return label: the customer sends, we receive.
+
+		Made in two steps on purpose. The parcel is created **without** a label
+		first and its addresses are read back; only if SendCloud agrees the parcel
+		leaves the customer is the label bought. Returns invert sender and
+		recipient, and a label with those the wrong way round is a parcel posted
+		to the customer at our expense, discovered when it arrives back at them.
+		"""
+		sender_id = self.get_return_sender_address()
+		if not sender_id:
+			frappe.throw(
+				_("SendCloud Settings has no return sender address. Set the id of the address returns should arrive at."),
+				title=_("No return sender address"),
+			)
+
+		house_number, street = self.extract_house_number(pickup_address.address_line1)
+		if not house_number:
+			frappe.throw(
+				_("No house number could be read from {0}. A return label needs one.").format(
+					pickup_address.address_line1
+				)
+			)
+
+		parcels = json.loads(shipment_parcel) if isinstance(shipment_parcel, str) else shipment_parcel
+		weight = 0
+		for parcel in parcels or []:
+			weight = max(weight, flt(parcel.get("weight", 0)))
+
+		body = {
+			"name": f"{pickup_contact.first_name} {pickup_contact.last_name}".strip()
+			or pickup_address.get("address_title")
+			or shipment,
+			"address": street or pickup_address.address_line1,
+			"house_number": house_number,
+			"city": pickup_address.city,
+			"postal_code": pickup_address.pincode,
+			"country": (pickup_address.country_code or "").upper(),
+			"order_number": shipment,
+			"weight": f"{weight or 1:.3f}",
+			"is_return": True,
+			"request_label": False,
+			"shipment": {"id": int(service_info["service_id"])},
+			"sender_address": int(sender_id),
+		}
+		if pickup_contact.get("email_id"):
+			body["email"] = pickup_contact.email_id
+		if pickup_contact.get("phone"):
+			body["telephone"] = pickup_contact.phone
+
+		created = self._post_parcel({"parcel": body})
+		parcel_id = created.get("id")
+
+		# Doğrulama: paket müşterinin ülkesinden çıkmalı. Ters kurulmuş bir iade
+		# burada yakalanır ve hiçbir etiket satın alınmamış olur.
+		reported = ((created.get("country") or {}).get("iso_2") or "").upper()
+		if reported and reported != body["country"]:
+			frappe.throw(
+				_("SendCloud built the return leaving from {0}, not {1}. No label was bought. Parcel {2} can be cancelled in SendCloud.").format(
+					reported, body["country"], parcel_id
+				),
+				title=_("Return built the wrong way round"),
+			)
+
+		labelled = self._put_parcel({"parcel": {"id": parcel_id, "request_label": True}})
+
+		return {
+			"service_provider": SENDCLOUD_PROVIDER,
+			"carrier": service_info.get("carrier"),
+			"carrier_service": service_info.get("service_name"),
+			"shipment_id": str(parcel_id),
+			"awb_number": labelled.get("tracking_number") or created.get("tracking_number"),
+			"tracking_url": labelled.get("tracking_url") or created.get("tracking_url"),
+			"shipment_amount": service_info.get("total_price"),
+		}
+
+	def get_return_sender_address(self):
+		settings = frappe.get_single("SendCloud")
+		value = settings.get("return_sender_address")
+		return int(value) if value else None
+
+	def _post_parcel(self, payload):
+		response = requests.post(
+			PARCELS_URL, json=payload, auth=(self.api_key, self.api_secret), timeout=60
+		)
+		return self._parcel_or_throw(response)
+
+	def _put_parcel(self, payload):
+		response = requests.put(
+			PARCELS_URL, json=payload, auth=(self.api_key, self.api_secret), timeout=60
+		)
+		return self._parcel_or_throw(response)
+
+	def _parcel_or_throw(self, response):
+		try:
+			data = response.json()
+		except ValueError:
+			frappe.throw(_("SendCloud returned {0}: {1}").format(response.status_code, response.text[:300]))
+
+		if response.status_code >= 400 or data.get("error"):
+			message = (data.get("error") or {}).get("message") or response.text[:300]
+			frappe.throw(_("SendCloud: {0}").format(message), title=_("Return label failed"))
+
+		return data.get("parcel") or {}
 
 	def get_tracking_history(self, tracking_number):
 		"""Full status ladder for a tracking number, or None.
