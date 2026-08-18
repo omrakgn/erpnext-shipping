@@ -183,6 +183,8 @@ def create_shipment(
 				shipment=shipment,
 				pickup_address=pickup_address,
 				pickup_contact=pickup_contact,
+				delivery_address=delivery_address,
+				delivery_contact=delivery_contact,
 				service_info=service_info,
 				shipment_parcel=shipment_parcel,
 			)

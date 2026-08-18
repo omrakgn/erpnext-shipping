@@ -756,29 +756,36 @@ class SendCloudUtils:
 		shipment,
 		pickup_address,
 		pickup_contact,
+		delivery_address,
+		delivery_contact,
 		service_info,
 		shipment_parcel,
 	):
 		"""Buy a return label: the customer sends, we receive.
 
-		Made in two steps on purpose. The parcel is created **without** a label
-		first and its addresses are read back; only if SendCloud agrees the parcel
-		leaves the customer is the label bought. Returns invert sender and
-		recipient, and a label with those the wrong way round is a parcel posted
-		to the customer at our expense, discovered when it arrives back at them.
-		"""
-		sender_id = self.get_return_sender_address()
-		if not sender_id:
-			frappe.throw(
-				_("SendCloud Settings has no return sender address. Set the id of the address returns should arrive at."),
-				title=_("No return sender address"),
-			)
+		On a return parcel the plain address fields are the **recipient** — us —
+		and the customer goes in the `from_*` fields. That is the opposite of an
+		ordinary parcel and SendCloud enforces it: without `from_*` it refuses the
+		call outright.
 
-		house_number, street = self.extract_house_number(pickup_address.address_line1)
-		if not house_number:
+		Made in two steps anyway. The parcel is created **without** a label and
+		its addresses are read back; the label is bought only once SendCloud
+		agrees the parcel leaves the customer and arrives at us. A return built
+		the wrong way round is a parcel posted to the customer at our expense,
+		and nobody finds out until it turns up on their doorstep.
+		"""
+		our_number, our_street = self.extract_house_number(delivery_address.address_line1)
+		their_number, their_street = self.extract_house_number(pickup_address.address_line1)
+		if not their_number:
 			frappe.throw(
-				_("No house number could be read from {0}. A return label needs one.").format(
+				_("No house number could be read from the customer address {0}. A return label needs one.").format(
 					pickup_address.address_line1
+				)
+			)
+		if not our_number:
+			frappe.throw(
+				_("No house number could be read from the return address {0}.").format(
+					delivery_address.address_line1
 				)
 			)
 
@@ -787,37 +794,58 @@ class SendCloudUtils:
 		for parcel in parcels or []:
 			weight = max(weight, flt(parcel.get("weight", 0)))
 
+		their_name = f"{pickup_contact.first_name or ''} {pickup_contact.last_name or ''}".strip()
+		our_name = frappe.defaults.get_global_default("company") or delivery_address.get("address_title")
+
 		body = {
-			"name": f"{pickup_contact.first_name} {pickup_contact.last_name}".strip()
-			or pickup_address.get("address_title")
-			or shipment,
-			"address": street or pickup_address.address_line1,
-			"house_number": house_number,
-			"city": pickup_address.city,
-			"postal_code": pickup_address.pincode,
-			"country": (pickup_address.country_code or "").upper(),
+			# Alıcı: biz.
+			"name": our_name,
+			"company_name": our_name,
+			"address": our_street or delivery_address.address_line1,
+			"house_number": our_number,
+			"city": delivery_address.city,
+			"postal_code": delivery_address.pincode,
+			"country": (delivery_address.country_code or "").upper(),
+			# Gönderen: müşteri.
+			"from_name": their_name or pickup_address.get("address_title") or shipment,
+			"from_address_1": their_street or pickup_address.address_line1,
+			"from_house_number": their_number,
+			"from_city": pickup_address.city,
+			"from_postal_code": pickup_address.pincode,
+			"from_country": (pickup_address.country_code or "").upper(),
 			"order_number": shipment,
 			"weight": f"{weight or 1:.3f}",
 			"is_return": True,
 			"request_label": False,
 			"shipment": {"id": int(service_info["service_id"])},
-			"sender_address": int(sender_id),
 		}
 		if pickup_contact.get("email_id"):
-			body["email"] = pickup_contact.email_id
+			body["from_email"] = pickup_contact.email_id
 		if pickup_contact.get("phone"):
-			body["telephone"] = pickup_contact.phone
+			body["from_telephone"] = pickup_contact.phone
+		if delivery_contact and delivery_contact.get("email_id"):
+			body["email"] = delivery_contact.email_id
+		if delivery_contact and delivery_contact.get("phone"):
+			body["telephone"] = delivery_contact.phone
 
 		created = self._post_parcel({"parcel": body})
 		parcel_id = created.get("id")
 
-		# Doğrulama: paket müşterinin ülkesinden çıkmalı. Ters kurulmuş bir iade
+		# Doğrulama: paket müşteriden çıkıp bize varmalı. Ters kurulmuş bir iade
 		# burada yakalanır ve hiçbir etiket satın alınmamış olur.
-		reported = ((created.get("country") or {}).get("iso_2") or "").upper()
-		if reported and reported != body["country"]:
+		arrives = ((created.get("country") or {}).get("iso_2") or "").upper()
+		leaves = (created.get("from_country") or "").upper()
+		if arrives and arrives != body["country"]:
 			frappe.throw(
-				_("SendCloud built the return leaving from {0}, not {1}. No label was bought. Parcel {2} can be cancelled in SendCloud.").format(
-					reported, body["country"], parcel_id
+				_("SendCloud built the return arriving in {0}, not {1}. No label was bought; parcel {2} can be cancelled in SendCloud.").format(
+					arrives, body["country"], parcel_id
+				),
+				title=_("Return built the wrong way round"),
+			)
+		if leaves and leaves != body["from_country"]:
+			frappe.throw(
+				_("SendCloud built the return leaving from {0}, not {1}. No label was bought; parcel {2} can be cancelled in SendCloud.").format(
+					leaves, body["from_country"], parcel_id
 				),
 				title=_("Return built the wrong way round"),
 			)
@@ -833,11 +861,6 @@ class SendCloudUtils:
 			"tracking_url": labelled.get("tracking_url") or created.get("tracking_url"),
 			"shipment_amount": service_info.get("total_price"),
 		}
-
-	def get_return_sender_address(self):
-		settings = frappe.get_single("SendCloud")
-		value = settings.get("return_sender_address")
-		return int(value) if value else None
 
 	def _post_parcel(self, payload):
 		response = requests.post(
