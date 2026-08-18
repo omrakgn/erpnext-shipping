@@ -1397,57 +1397,57 @@ class SendCloudUtils:
 		# contract, properties içinde "contract_id" anahtarıyla (integer) gönderilir.
 		# Bu endpoint top-level "label" kabul etmiyor (varsayılan PDF döner).
 		#
-		# Sipariş referansı: `order_id` anahtarı kullanılıyor ama HANGİ değerin
-		# geçtiği belirsiz. Siparişte iki kimlik var — SendCloud'un kendi `id`'si
-		# ve pazaryerinin verdiği `order_id` (Shopify'da "gid://shopify/Order/...").
-		# İkincisini gönderdiğimizde SendCloud onu tanımayıp numaraya düşüyor ve
-		# bir sipariş birkaç gönderiye bölündüğünde "Multiple orders found" diyor.
-		# Eskiden dahili `id` denenmiş ve 404 alınmış diye not düşülmüş.
-		#
-		# İkisi de tek başına güvenilir değil, o yüzden tahmin etmek yerine sırayla
-		# deneniyor: biri "bulunamadı" derse diğeriyle bir kez daha. order_number
-		# hiç kullanılmıyor — tekil olmadığı kesin.
-		candidates = []
-		for value in (order.get("id"), order_id, order.get("order_id")):
-			if value and str(value) not in candidates:
-				candidates.append(str(value))
-		if not candidates:
-			frappe.throw(_("The SendCloud order carries no id to reference it by."))
+		# Sipariş referansı `order_id` — belgeye göre "an external order ID assigned
+		# by the shop system", yani pazaryerinin kimliği (Shopify'da
+		# "gid://shopify/Order/..."). SendCloud'un kendi `id`'si BURAYA GİRMEZ:
+		# denendi, 404 döndü.
+		reference = order.get("order_id")
+		if not reference:
+			frappe.throw(
+				_("The SendCloud order has no external order id, so the label cannot be requested for it.")
+			)
 
-		base_payload = {"integration_id": int(integration_id)}
+		payload = {
+			"integration_id": int(integration_id),
+			"order": {"order_id": str(reference)},
+		}
 		if shipping_option_code:
 			properties = {"shipping_option_code": shipping_option_code}
 			contract_id = self._contract_property(properties, contract_id)
-			base_payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
+			payload["ship_with"] = {"type": "shipping_option_code", "properties": properties}
 		brand_id = self.get_brand_id()
 		if brand_id:
-			base_payload["brand_id"] = brand_id
+			payload["brand_id"] = brand_id
 
-		payload, response, response_data = None, None, None
-		for attempt, reference in enumerate(candidates, start=1):
-			payload = dict(base_payload)
-			payload["order"] = {"order_id": reference}
-			try:
-				response = requests.post(
-					CREATE_LABEL_SYNC_URL,
-					json=payload,
-					auth=(self.api_key, self.api_secret),
-					headers={"Accept": "application/json", "Content-Type": "application/json"},
-				)
-				response_data = response.json()
-			except Exception:
-				show_error_alert("shipping SendCloud order")
-				return None
-
-			# Referans tutmadıysa sıradakini dene; başka bir hata ise durup söyle,
-			# çünkü tekrar denemek onu düzeltmez.
-			text = json.dumps(response_data, default=str).lower()
-			unknown_reference = response.status_code >= 400 and (
-				"multiple_orders_found" in text or "not found" in text
+		try:
+			response = requests.post(
+				CREATE_LABEL_SYNC_URL,
+				json=payload,
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json", "Content-Type": "application/json"},
 			)
-			if unknown_reference and attempt < len(candidates):
-				continue
-			break
+			response_data = response.json()
+		except Exception:
+			show_error_alert("shipping SendCloud order")
+			return None
+
+		# Sipariş SendCloud'da birkaç gönderiye bölünmüşse ("1 of 2", "2 of 2"),
+		# parçaların hepsi aynı order_number'ı VE aynı harici order_id'yi taşıyor.
+		# Ship an Order yalnız bu ikisiyle seçim yapabiliyor, dolayısıyla tek bir
+		# parçayı hedeflemenin yolu yok — kodla çözülebilecek bir şey değil.
+		# Kullanıcı bunu "multiple_orders_found" diye görmemeli; ne yapacağını
+		# görmeli.
+		if "multiple_orders_found" in json.dumps(response_data, default=str):
+			frappe.throw(
+				_(
+					"Order {0} is split into several shipments in SendCloud, and its parts all "
+					"carry the same order number and order id — the Ship an Order API cannot "
+					"pick one of them.<br><br>"
+					"Either print the labels in SendCloud and press <b>Sync SendCloud Label</b>, "
+					"or build them here with <b>Fetch Shipping Rates</b>."
+				).format(frappe.bold(order.get("order_number") or reference)),
+				title=_("Split order"),
+			)
 
 		if response.status_code >= 400 or (isinstance(response_data, dict) and response_data.get("errors")):
 			frappe.log_error(
