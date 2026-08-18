@@ -1153,10 +1153,26 @@ class SendCloudUtils:
 			show_error_alert("finding SendCloud order")
 			return None
 
-		# order_number tam eşleşeni öncele; bulunamazsa ilk sonucu döndür
+		# Tam eşleşenleri ayır. Birden fazla varsa hangisinin sevk edileceği
+		# rastgele olur — arama sırasına bağlı. Sessizce ilkini almak, yanlış
+		# siparişin etiketini basmak demek; bu yüzden söyleyip yine de devam
+		# ediyoruz, çünkü çoğu durumda kopyalar aynı siparişin tekrarı.
+		exact = []
 		for order in data:
 			if str(order.get("order_number")) == str(order_number):
-				return order
+				exact.append(order)
+
+		if len(exact) > 1:
+			frappe.msgprint(
+				_("SendCloud has {0} orders numbered {1}. Using the first; check it is the right one.").format(
+					len(exact), frappe.bold(order_number)
+				),
+				indicator="orange",
+				alert=True,
+			)
+
+		if exact:
+			return exact[0]
 		return data[0] if data else None
 
 	def find_parcel_by_order_number(self, order_number):
@@ -1347,13 +1363,18 @@ class SendCloudUtils:
 		# NOT: ship_with, Shipments API ile aynı yapıda olmalı: {type, properties}.
 		# contract, properties içinde "contract_id" anahtarıyla (integer) gönderilir.
 		# Bu endpoint top-level "label" kabul etmiyor (varsayılan PDF döner).
-		# Order referansı: order_number kullan (dahili `id` create-label'da 404 verir).
-		# Order'ı zaten order_number=po_no ile bulduğumuz için bu güvenilir; yoksa
-		# order'ın kendi `order_id` (harici/pazaryeri) alanına düş.
-		if order_number:
-			order_ref = {"order_number": str(order_number)}
-		elif order.get("order_id"):
+		# Order referansı: önce `order_id` (siparişin kendi harici kimliği).
+		# order_number tekil değil — aynı numaraya sahip birden fazla sipariş
+		# olduğunda SendCloud etiketi hiç basmıyor ve "Multiple orders found for
+		# 'order_number'. Use 'order_id' instead." diyor. Siparişi zaten bulmuş
+		# olduğumuz için elimizde tekil kimlik var; belirsiz olanı tercih etmenin
+		# sebebi yoktu.
+		#
+		# Dahili `id` kullanılmıyor: create-label onunla 404 veriyor.
+		if order.get("order_id"):
 			order_ref = {"order_id": str(order.get("order_id"))}
+		elif order_number:
+			order_ref = {"order_number": str(order_number)}
 		else:
 			order_ref = {"order_id": str(order_id)}
 		payload = {
