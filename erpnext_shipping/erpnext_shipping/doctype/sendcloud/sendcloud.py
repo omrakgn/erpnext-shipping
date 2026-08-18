@@ -1153,27 +1153,60 @@ class SendCloudUtils:
 			show_error_alert("finding SendCloud order")
 			return None
 
-		# Tam eşleşenleri ayır. Birden fazla varsa hangisinin sevk edileceği
-		# rastgele olur — arama sırasına bağlı. Sessizce ilkini almak, yanlış
-		# siparişin etiketini basmak demek; bu yüzden söyleyip yine de devam
-		# ediyoruz, çünkü çoğu durumda kopyalar aynı siparişin tekrarı.
-		exact = []
-		for order in data:
-			if str(order.get("order_number")) == str(order_number):
-				exact.append(order)
-
-		if len(exact) > 1:
-			frappe.msgprint(
-				_("SendCloud has {0} orders numbered {1}. Using the first; check it is the right one.").format(
-					len(exact), frappe.bold(order_number)
-				),
-				indicator="orange",
-				alert=True,
-			)
-
+		exact = self._exact_matches(data, order_number)
 		if exact:
 			return exact[0]
 		return data[0] if data else None
+
+	def find_orders_by_number(self, order_number):
+		"""Aynı numaraya sahip TÜM siparişleri döndür.
+
+		Bir sipariş ebat/ağırlık nedeniyle birkaç gönderiye bölündüğünde SendCloud'da
+		aynı numarayla birden çok sipariş kaydı oluşuyor. Bu bir veri hatası değil,
+		çalışma biçimi — dolayısıyla "ilkini al" yanlış cevap verir ve uyarı vermek de
+		her sevkiyatta gürültü olur. Hangisinin sevk edileceğini soran taraf seçer.
+		"""
+		if not self.enabled or not self.api_key or not self.api_secret:
+			return []
+		try:
+			response = requests.get(
+				ORDERS_URL,
+				params={"order_number": order_number},
+				auth=(self.api_key, self.api_secret),
+				headers={"Accept": "application/json"},
+			)
+			response.raise_for_status()
+			data = response.json().get("data", [])
+		except Exception:
+			show_error_alert("finding SendCloud orders")
+			return []
+		return self._exact_matches(data, order_number) or data
+
+	def _exact_matches(self, data, order_number):
+		out = []
+		for order in data or []:
+			if str(order.get("order_number")) == str(order_number):
+				out.append(order)
+		return out
+
+	def describe_order(self, order):
+		"""Seçim listesinde gösterilecek özet: kimlik, durum, ürünler."""
+		details = order.get("order_details") or {}
+		integration = details.get("integration") or {}
+		lines = []
+		for it in (details.get("order_items") or order.get("order_items") or []):
+			name = it.get("name") or it.get("description") or it.get("sku") or ""
+			qty = it.get("quantity") or it.get("qty") or 1
+			if name:
+				lines.append(f"{qty}x {name}")
+		return {
+			"order_id": order.get("order_id") or order.get("id"),
+			"status": (order.get("status") or {}).get("message")
+			if isinstance(order.get("status"), dict)
+			else order.get("status"),
+			"integration": integration.get("name") or integration.get("id"),
+			"items": ", ".join(lines)[:160],
+		}
 
 	def find_parcel_by_order_number(self, order_number):
 		"""order_number ile eşleşen, İPTAL EDİLMEMİŞ en güncel parcel'ı (label) bul.

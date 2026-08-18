@@ -412,15 +412,44 @@ frappe.ui.form.on("Shipment", {
 	},
 
 	fulfill_sendcloud_order: function (frm) {
+		// Bir sipariş ebat/ağırlık yüzünden birkaç gönderiye bölündüğünde SendCloud'da
+		// aynı numarayla birden çok sipariş oluyor. Hangisinin bu gönderiye ait olduğunu
+		// yalnız paketleyen bilir — o yüzden bir tanesinden fazlaysa soruluyor.
 		frappe.call({
-			method: "erpnext_shipping.erpnext_shipping.shipping.fulfill_sendcloud_order",
-			freeze: true,
-			freeze_message: __("Fulfilling SendCloud Order"),
+			method: "erpnext_shipping.erpnext_shipping.shipping.get_sendcloud_orders_for_shipment",
 			args: { shipment: frm.doc.name },
+			freeze: true,
+			freeze_message: __("Looking up the SendCloud order..."),
 			callback: function (r) {
-				if (!r.exc && r.message) {
-					frm.reload_doc();
+				if (r.exc) return;
+				const orders = r.message || [];
+				if (orders.length <= 1) {
+					do_fulfill(frm, null);
+					return;
 				}
+				const labels = orders.map(
+					(o) =>
+						`${o.order_id} — ${o.status || __("no status")}` +
+						(o.items ? ` — ${o.items}` : "")
+				);
+				frappe.prompt(
+					[
+						{
+							fieldtype: "Select",
+							fieldname: "order",
+							label: __("Which SendCloud order does this shipment fulfil?"),
+							options: labels,
+							default: labels[0],
+							reqd: 1,
+						},
+					],
+					function (values) {
+						const picked = orders[labels.indexOf(values.order)];
+						do_fulfill(frm, picked && picked.order_id);
+					},
+					__("{0} orders share this number", [orders.length]),
+					__("Create Label")
+				);
 			},
 		});
 	},
@@ -991,4 +1020,22 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 	});
 
 	dialog.show();
+}
+
+
+// Etiketi asil basan cagri. Secim yapildiysa hangi SendCloud siparisi oldugu da
+// gonderilir ve Shipment'a yazilir; sonradan hangisinin sevk edildigi baska hicbir
+// yerden cikarilamaz.
+function do_fulfill(frm, sendcloud_order_id) {
+	frappe.call({
+		method: "erpnext_shipping.erpnext_shipping.shipping.fulfill_sendcloud_order",
+		freeze: true,
+		freeze_message: __("Fulfilling SendCloud Order"),
+		args: { shipment: frm.doc.name, sendcloud_order_id: sendcloud_order_id || null },
+		callback: function (r) {
+			if (!r.exc && r.message) {
+				frm.reload_doc();
+			}
+		},
+	});
 }

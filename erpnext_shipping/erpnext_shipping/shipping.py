@@ -795,7 +795,7 @@ def get_shipment_po_no(shipment_doc):
 
 
 @frappe.whitelist()
-def fulfill_sendcloud_order(shipment):
+def fulfill_sendcloud_order(shipment, sendcloud_order_id=None):
 	"""Shipment'ın po_no'su ile eşleşen SendCloud incoming order'ı bul, ERPNext
 	bilgileriyle (ağırlık/ölçü/kargo/sözleşme) güncelle ve label oluştur.
 
@@ -811,11 +811,39 @@ def fulfill_sendcloud_order(shipment):
 		)
 
 	sendcloud = SendCloudUtils()
-	order = sendcloud.find_order_by_number(po_no)
-	if not order:
+	orders = sendcloud.find_orders_by_number(po_no)
+	if not orders:
 		frappe.throw(
 			_("No SendCloud order found with order number {0}.").format(frappe.bold(po_no))
 		)
+
+	# Bir sipariş birkaç gönderiye bölündüğünde SendCloud'da aynı numarayla birden
+	# çok kayıt olur ve hangisinin sevk edileceğini yalnız hazırlayan bilir. Seçim
+	# yapılmadıysa sormak gerekir — ilkini almak, yanlış gönderinin etiketini basmak.
+	order = None
+	if sendcloud_order_id:
+		for candidate in orders:
+			if str(candidate.get("order_id") or candidate.get("id")) == str(sendcloud_order_id):
+				order = candidate
+				break
+		if not order:
+			frappe.throw(
+				_("SendCloud order {0} is no longer among the orders numbered {1}.").format(
+					frappe.bold(sendcloud_order_id), frappe.bold(po_no)
+				)
+			)
+	elif len(orders) == 1:
+		order = orders[0]
+	else:
+		frappe.throw(
+			_("{0} SendCloud orders carry number {1}. Choose which one this shipment fulfils.").format(
+				len(orders), frappe.bold(po_no)
+			)
+		)
+
+	shipment_doc.db_set(
+		"custom_sendcloud_order_id", str(order.get("order_id") or order.get("id") or "")
+	)
 
 	# ERPNext'ten: ilk koliden ağırlık/ölçü (= parcel weight); kargo seçimi olan ilk
 	# koliden method/sözleşme
@@ -1204,3 +1232,23 @@ def update_delivery_note(delivery_notes, shipment_info=None, tracking_info=None)
 			dl_doc.db_set("parcel_service_type", shipment_info.get("carrier_service"))
 		# Tracking artık DN'de düz alanlarda tutulmuyor; canlı tablo (custom_shipment_tracking)
 		# bağlı Shipment'ın custom_tracking_details JSON'ından çiziliyor.
+
+
+@frappe.whitelist()
+def get_sendcloud_orders_for_shipment(shipment):
+	"""Candidate SendCloud orders for this shipment's PO number.
+
+	One order split across several consignments leaves several SendCloud orders
+	under the same number. Only the person who packed them knows which is which,
+	so the choice is offered rather than guessed.
+	"""
+	shipment_doc = frappe.get_doc("Shipment", shipment)
+	po_no = get_shipment_po_no(shipment_doc)
+	if not po_no:
+		return []
+
+	sendcloud = SendCloudUtils()
+	out = []
+	for order in sendcloud.find_orders_by_number(po_no):
+		out.append(sendcloud.describe_order(order))
+	return out

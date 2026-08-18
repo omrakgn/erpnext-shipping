@@ -187,6 +187,20 @@ def get_custom_fields():
 				"allow_on_submit": 1,
 			},
 			{
+				# Hangi SendCloud siparişinin sevk edildiği. Bir sipariş ebat ya da
+				# ağırlık yüzünden birkaç gönderiye bölündüğünde SendCloud'da aynı
+				# numarayla birden çok kayıt oluyor; hangisinin bu gönderiye ait
+				# olduğu yalnız paketleyenin bildiği bir şey. Yazılmazsa sonradan
+				# hiçbir yerden çıkarılamaz.
+				"fieldname": "custom_sendcloud_order_id",
+				"label": _("SendCloud Order ID"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"translatable": 0,
+				"allow_on_submit": 1,
+				"insert_after": "custom_sendcloud_contract_id",
+			},
+			{
 				"fieldname": "custom_parcel_items",
 				"label": _("Parcel Items"),
 				"fieldtype": "Table",
