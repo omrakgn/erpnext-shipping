@@ -849,6 +849,24 @@ def fulfill_sendcloud_order(shipment, sendcloud_order_id=None):
 	# koliden method/sözleşme
 	# Ağırlık = TÜM kolilerin toplamı (ilk koli değil); ölçü = ilk dolu koli.
 	# Kargo/sözleşme = ilk seçimi olan koliden.
+	# Ship an Order tek etiket üretir: ağırlıklar toplanır, ölçü ilk koliden alınır.
+	# Birden çok koli varsa sonuç fiziksel olarak yanlış bir etikettir — iki kutu,
+	# tek barkod, ve ölçüsü yalnız birine ait. Hata da vermez, basar. Bölme
+	# gerektiren gönderiler koli bazlı yoldan geçmeli.
+	parcel_count = 0
+	for row in shipment_doc.get("shipment_parcel") or []:
+		parcel_count += int(row.count or 1)
+	if parcel_count > 1:
+		frappe.throw(
+			_(
+				"This shipment has {0} parcels. Ship an Order can only produce a single "
+				"label — it would add the weights together and take the dimensions of the "
+				"first box alone.<br><br>"
+				"Use <b>Fetch Shipping Rates</b> to create a label per parcel instead."
+			).format(parcel_count),
+			title=_("More than one parcel"),
+		)
+
 	total_weight = 0.0
 	dimensions = None
 	shipping_option_code, contract_id = None, None
