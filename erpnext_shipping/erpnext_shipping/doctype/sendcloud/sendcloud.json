@@ -16,7 +16,10 @@
   "preferred_shipping_options",
   "contracts_section",
   "sync_contracts",
-  "contract_options"
+  "contract_options",
+  "return_section",
+  "sync_return_methods",
+  "return_options"
  ],
  "fields": [
   {
@@ -89,6 +92,23 @@
    "label": "Contracts",
    "options": "SendCloud Contract Option",
    "description": "Press Sync to pull the account's contracts, then give each one a name you recognise. SendCloud returns no name for its own contracts, so a carrier with several of them shows the same label repeatedly and only the id tells them apart."
+  },
+  {
+   "fieldname": "return_section",
+   "fieldtype": "Section Break",
+   "label": "Return Products"
+  },
+  {
+   "fieldname": "sync_return_methods",
+   "fieldtype": "Button",
+   "label": "Sync Return Products from SendCloud"
+  },
+  {
+   "fieldname": "return_options",
+   "fieldtype": "Table",
+   "label": "Return Products",
+   "options": "SendCloud Return Option",
+   "description": "Tick the return products you actually use. SendCloud lists price bands next to real products and refuses the bands when a label is bought, and nothing in the data tells them apart — so which ones are offered is recorded here rather than guessed at. Only ticked products appear when fetching rates for a return."
   }
  ],
  "index_web_pages_for_search": 1,

@@ -164,6 +164,61 @@ def toggle_preferred_shipping_option(
 
 
 @frappe.whitelist()
+def sync_sendcloud_return_methods():
+	"""Pull the account's return products in, leaving the choice to a person.
+
+	SendCloud lists contract **price bands** — `DPD Return 6-8kg`, `DPD Classic
+	10-20kg` — beside real products, and nothing in the data separates them: they
+	carry the same fields and the same country lists. Buying a label against a
+	band is refused with `Invalid shipment.id`, and the only way to find out is
+	to try.
+
+	So the list is fetched and nothing is inferred from it. Which products get
+	offered is ticked here, the same way contracts are named here — a decision
+	somebody made, written down where it can be read, rather than a rule guessed
+	from the shape of a product name.
+	"""
+	utils = SendCloudUtils()
+	response = requests.get(
+		SHIPPING_METHODS_URL,
+		params={"is_return": "true"},
+		auth=(utils.api_key, utils.api_secret),
+		timeout=30,
+	)
+	response.raise_for_status()
+	methods = (response.json() or {}).get("shipping_methods", [])
+
+	settings = frappe.get_doc("SendCloud", "SendCloud")
+	existing = {}
+	for row in settings.return_options or []:
+		if row.method_id:
+			existing[str(row.method_id)] = row
+
+	seen = set()
+	added = 0
+	for method in methods:
+		key = str(method.get("id"))
+		seen.add(key)
+		row = existing.get(key)
+		if not row:
+			row = settings.append("return_options", {"method_id": key})
+			added += 1
+		row.carrier = method.get("carrier") or ""
+		row.method_name = method.get("name") or ""
+		row.weight_range = f"{flt(method.get('min_weight')):g}-{flt(method.get('max_weight')):g} kg"
+
+	# Hesaptan kalkan ürünler silinmiyor: işaretlenmiş bir ürün geçmiş bir
+	# gönderide kullanılmış olabilir ve satırın kaybolması onu da götürür.
+	stale = []
+	for row in settings.return_options or []:
+		if str(row.method_id) not in seen:
+			stale.append(str(row.method_id))
+
+	settings.save(ignore_permissions=True)
+	return {"total": len(seen), "added": added, "stale": stale}
+
+
+@frappe.whitelist()
 def sync_sendcloud_contracts():
 	"""Pull the account's contracts into SendCloud settings, keeping own names.
 
@@ -689,14 +744,21 @@ class SendCloudUtils:
 			return []
 
 		origin = (pickup_address.get("country_code") or "").upper()
-		if not origin:
-			return []
 
 		weight = 0
 		count = 0
 		for parcel in parcels:
 			weight = max(weight, flt(parcel.get("weight", 0)))
 			count += int(parcel.get("count", 1) or 1)
+
+		chosen = self.get_return_options()
+		if not chosen:
+			frappe.msgprint(
+				_("No return products are ticked in SendCloud Settings, so there is nothing to offer. Press <b>Sync Return Products</b> there and tick the ones you use."),
+				title=_("No return products chosen"),
+				indicator="orange",
+			)
+			return []
 
 		try:
 			response = requests.get(
@@ -714,6 +776,9 @@ class SendCloudUtils:
 
 		services = []
 		for method in methods:
+			if str(method.get("id")) not in chosen:
+				continue
+
 			# Servis noktası isteyen ürünler burada seçilemez: hangi noktaya
 			# bırakılacağını müşteri seçer, biz bilmiyoruz.
 			if (method.get("service_point_input") or "none") != "none":
@@ -724,32 +789,42 @@ class SendCloudUtils:
 			if weight and high and not (low <= weight <= high):
 				continue
 
-			country = None
+			# Fiyat müşterinin ülkesinin satırından okunuyor; o satır yoksa fiyat
+			# **boş** bırakılıyor. `countries` alanının neyi anlattığı belirsiz —
+			# BE listeleyen bir ürün reddedilirken BE listeleyen bir başkası kabul
+			# edildi — ve belirsiz bir alandan türetilmiş bir tutar, faturayla
+			# karşılaştırıldığında tutmayan bir tutardır.
+			price = None
 			for entry in method.get("countries") or []:
-				if (entry.get("iso_2") or "").upper() == origin:
-					country = entry
-					break
-			if not country:
-				continue
-
-			price = 0
-			for part in country.get("price_breakdown") or []:
-				price += flt(part.get("value"))
+				if (entry.get("iso_2") or "").upper() != origin:
+					continue
+				price = 0
+				for part in entry.get("price_breakdown") or []:
+					price += flt(part.get("value"))
+				break
 
 			service = frappe._dict()
 			service.service_provider = SENDCLOUD_PROVIDER
 			service.carrier = (method.get("carrier") or "").upper()
 			service.carrier_code = method.get("carrier")
-			service.service_name = method.get("name")
+			service.service_name = f"{method.get('name')} ({low:g}-{high:g} kg)"
 			service.service_id = str(method.get("id"))
 			service.is_return = True
-			service.total_price = price * (count or 1)
+			service.total_price = None if price is None else price * (count or 1)
 			service.currency = "EUR"
-			service.weight_range = f"{low:g}-{high:g} kg"
 			services.append(service)
 
 		services.sort(key=_service_price)
 		return services
+
+	def get_return_options(self):
+		"""Ids of the return products somebody ticked, as strings."""
+		chosen = set()
+		settings = frappe.get_single("SendCloud")
+		for row in settings.get("return_options") or []:
+			if row.enabled and row.method_id:
+				chosen.add(str(row.method_id))
+		return chosen
 
 	def create_return_shipment(
 		self,
