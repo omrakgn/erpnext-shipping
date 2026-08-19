@@ -19,6 +19,29 @@ from erpnext_shipping.erpnext_shipping.utils import (
 )
 
 
+def announce_label(shipment):
+	"""Tell whoever is listening that this shipment now has a tracking number.
+
+	`awb_number` is written with `db_set`, which fires no document events, and it
+	is written **after** the shipment is submitted — so nothing bound to submit or
+	to a field change can see it. Other apps need a moment they can hook onto,
+	and this is it.
+
+	A named hook rather than a direct call: this app must not know which apps care
+	about a label. A listener that fails is logged and ignored, because a parcel
+	whose label exists has already left as far as the carrier is concerned, and
+	somebody else's integration is not a reason to fail it.
+	"""
+	for method in frappe.get_hooks("shipment_label_created") or []:
+		try:
+			frappe.call(method, shipment=shipment)
+		except Exception:
+			frappe.log_error(
+				message=frappe.get_traceback(),
+				title=f"shipment_label_created listener failed: {method}",
+			)
+
+
 @frappe.whitelist()
 def fetch_shipping_rates(
 	pickup_from_type,
@@ -213,6 +236,7 @@ def create_shipment(
 		if service_info["service_provider"] == SENDCLOUD_PROVIDER:
 			values.update(sendcloud.contract_fields(shipment_info.get("contract_id")))
 		shipment.db_set(values)
+		announce_label(shipment.name)
 
 		if delivery_notes:
 			update_delivery_note(delivery_notes=delivery_notes, shipment_info=shipment_info)
@@ -545,6 +569,7 @@ def create_shipment_per_parcel(shipment):
 		}
 		values.update(sendcloud.contract_fields(shipment_info.get("contract_id")))
 		shipment_doc.db_set(values)
+		announce_label(shipment_doc.name)
 		delivery_notes = list(
 			{d.delivery_note for d in (shipment_doc.get("shipment_delivery_note") or []) if d.delivery_note}
 		)
@@ -1000,6 +1025,7 @@ def fulfill_sendcloud_order(shipment, sendcloud_order_id=None):
 	}
 	values.update(sendcloud.contract_fields(shipment_info.get("contract_id")))
 	shipment_doc.db_set(values)
+	announce_label(shipment_doc.name)
 
 	# Takip bilgilerini çek + sakla (parça-bazlı tablo bundan beslenir)
 	if shipment_info.get("shipment_id"):
@@ -1067,6 +1093,7 @@ def sync_sendcloud_label(shipment):
 			"status": "Booked",
 		}
 	)
+	announce_label(shipment_doc.name)
 
 	# Tam tracking detayını çek (parça-bazlı JSON, delivered_at, durum eşlemesi).
 	# get_tracking_data virgülle ayrılmış shipment_id'yi tüm parçalar için işler.
