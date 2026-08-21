@@ -585,6 +585,35 @@ def get_custom_fields():
 				),
 			},
 		],
+		"Stock Entry": [
+			{
+				# Bir teslimat başarısız olup paket geri döndüğünde, kutusu hasarlı
+				# birim ayrılıp yerine sağlamı gönderiliyor. Stok tarafı tek bir
+				# `Material Transfer` ile çözülüyor: satılabilir depodan bir birim
+				# çıkıyor, kutu değişimi deposuna bir birim giriyor.
+				#
+				# Bu alan o hareketi hangi gönderinin doğurduğunu tutuyor ve tek
+				# işi **aynı paket için ikinci kez yapılmasını engellemek.** Bağ
+				# olmadan "bu paket için transfer zaten var mı" sorusunun güvenilir
+				# cevabı yoktu: `remarks` içinde metin aramak kırılgan, ayrı bir
+				# durum alanı ise senkron tutulmak zorunda.
+				#
+				# Alan burada çünkü gönderi bu app'in konusu; `multichannel_core`
+				# standart DocType'a custom field eklemiyor.
+				# Bkz. docs/plans/basarisiz-teslimat.md §7.2
+				"fieldname": "custom_source_shipment",
+				"label": _("Source Shipment"),
+				"fieldtype": "Link",
+				"options": "Shipment",
+				"read_only": 1,
+				"no_copy": 1,
+				"insert_after": "remarks",
+				"description": _(
+					"The returned parcel this movement was made for. Set automatically; "
+					"one transfer per parcel."
+				),
+			},
+		],
 		"Delivery Note": [
 			{
 				"fieldname": "shipping_sec_break",
