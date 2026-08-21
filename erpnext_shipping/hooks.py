@@ -179,7 +179,12 @@ doc_events = {
 			"erpnext_shipping.erpnext_shipping.shipping.set_parcel_values",
 			# SLA Date + Status'ı güncel tut (taahhüt tarihi ya da pickup + carrier SLA).
 			"erpnext_shipping.erpnext_shipping.sla.set_sla_fields",
-		]
+			# "Returned to Us" işaretlendiği anı damgala.
+			"erpnext_shipping.erpnext_shipping.loss.stamp_returned_on",
+		],
+		# Bayrak `allow_on_submit`: kutu çoğu zaman onaylanmış belgede
+		# işaretleniyor ve o yolda `validate` hiç çalışmıyor.
+		"on_update_after_submit": "erpnext_shipping.erpnext_shipping.loss.stamp_returned_on",
 	},
 	"Delivery Note": {
 		# Yalnızca Shipment Settings'te kargo geliri hesabı tanımlıysa çalışır (aksi

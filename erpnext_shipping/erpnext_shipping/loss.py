@@ -7,7 +7,7 @@ undelivered beyond a (configurable) threshold as PRESUMED LOST — surfaced in a
 report/card for a human to decide whether to open a Shipment Loss Claim.
 """
 import frappe
-from frappe.utils import add_days, cint, date_diff, getdate, nowdate
+from frappe.utils import add_days, cint, date_diff, getdate, now_datetime, nowdate
 
 DEFAULT_PRESUMED_LOST_DAYS = 20
 
@@ -150,6 +150,37 @@ RETURN_REASONS = (
 )
 
 
+def stamp_returned_on(doc, method=None):
+	"""Remember when a parcel was marked as returned.
+
+	The flag is a checkbox somebody ticks when they see the box on the shelf, and
+	a checkbox carries no time. Without this, nothing can say how long a returned
+	parcel has been waiting for a decision — and waiting unnoticed is exactly what
+	goes wrong with them.
+
+	The delivery note's date does not answer it either: a parcel can come back
+	weeks after it left.
+
+	Cleared when the mark is removed, so a mistaken tick does not leave a date
+	behind claiming something happened.
+	"""
+	flagged = bool(doc.get("custom_returned_to_sender"))
+	stamped = doc.get("custom_returned_on")
+
+	if flagged and not stamped:
+		value = now_datetime()
+	elif not flagged and stamped:
+		value = None
+	else:
+		return
+
+	if doc.docstatus == 1:
+		# Alan `allow_on_submit`; onaylanmış belgede tek yazma yolu bu.
+		doc.db_set("custom_returned_on", value, update_modified=False)
+	else:
+		doc.custom_returned_on = value
+
+
 @frappe.whitelist()
 def mark_returned_to_sender(shipment, reason=None, note=None):
 	"""Record that a parcel came back to us, and stop tracking overriding it.
@@ -169,6 +200,9 @@ def mark_returned_to_sender(shipment, reason=None, note=None):
 	values = {
 		"custom_returned_to_sender": 1,
 		"tracking_status": "Returned",
+		# Buradan yazmak zorunda: aşağıdaki `db.set_value` hiçbir belge olayı
+		# tetiklemiyor, dolayısıyla `stamp_returned_on` kancası bu yolda çalışmaz.
+		"custom_returned_on": now_datetime(),
 		# Teslim zamanı ve transit süresi paketin BİZE dönüşünü ölçüyordu; SLA ve
 		# kargo performansı raporlarını bozmasınlar diye temizleniyor.
 		# transit_days Float: sütun NOT NULL, None yazılamıyor — 0 kullanılıyor.

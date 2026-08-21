@@ -327,6 +327,25 @@ def get_custom_fields():
 				),
 			},
 			{
+				# Bayrak bir onay kutusu ve onay kutusu zaman taşımıyor. Damga
+				# olmadan "bu paket kaç gündür karar bekliyor" sorusunun cevabı
+				# yok — ve bekleyip unutulmak, dönen pakette yanlış giden şeyin
+				# ta kendisi. İrsaliyenin tarihi bu soruya cevap vermiyor: paket
+				# haftalar sonra da dönebiliyor.
+				# Bkz. docs/plans/basarisiz-teslimat.md
+				"fieldname": "custom_returned_on",
+				"label": _("Returned On"),
+				"fieldtype": "Datetime",
+				"read_only": 1,
+				"allow_on_submit": 1,
+				"depends_on": "custom_returned_to_sender",
+				"insert_after": "custom_return_reason",
+				"description": _(
+					"Set automatically when the parcel is marked as returned. Cleared if "
+					"the mark is removed."
+				),
+			},
+			{
 				"fieldname": "custom_label_removed",
 				"label": _("Label Removed"),
 				"fieldtype": "Check",
