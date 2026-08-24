@@ -84,6 +84,30 @@ def validate_parcel_items(doc, method=None):
 	# Her koli satırının (Shipment Parcel) count çarpanı: idx -> count
 	parcel_counts = {p.idx: (p.count or 1) for p in doc.get("shipment_parcel", [])}
 
+	# İki tablo elle tutulan bir NUMARAYLA bağlı ve o numara kayabiliyor: bir koli
+	# satırı silindiğinde kalanların idx'i kayar, ama içerik satırlarındaki
+	# `parcel_no` olduğu yerde kalır. Bağ kopar ve hiçbir yerde hata çıkmaz —
+	# aşağıdaki count araması olmayan numarada sessizce 1'e düşüyordu.
+	#
+	# Bedeli görünmez değil: o kolinin SKU'su taşıyıcıya hiç gitmiyor, takip
+	# kaydında boş kalıyor ve irsaliyenin Shipping Details sekmesinde görünmüyor.
+	# SHIPMENT-01009'da tam bu oldu (2026-08-24): iki yastık kutusu tek kutuda
+	# birleştirilmiş, matrasın içerik satırı hâlâ 3 numaralı koliyi gösteriyordu.
+	kopuk = []
+	for row in parcel_items:
+		if row.parcel_no and int(row.parcel_no) not in parcel_counts:
+			kopuk.append("%s -> koli %s" % (row.item_code or "?", row.parcel_no))
+	if kopuk:
+		frappe.throw(
+			_(
+				"Parcel Items point at parcels that do not exist: {0}. "
+				"This happens when a parcel row is deleted after the items were assigned — "
+				"the numbers do not renumber themselves. Fix the Parcel No column; "
+				"otherwise those items reach neither the carrier nor the delivery note."
+			).format(", ".join(kopuk)),
+			title=_("Parcel Items Out of Step"),
+		)
+
 	# Kolilere atanan toplam adet (count çarpanı ile) - item_code bazında
 	assigned = {}
 	for row in parcel_items:
