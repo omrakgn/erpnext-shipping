@@ -287,6 +287,34 @@ def get_custom_fields():
 				),
 			},
 			{
+				# Iade paketi, hangi paketin geri geldigini soylemedigi surece
+				# ekranda oksuz duruyor: kutu olculeri var, icerik metni var, ama
+				# tiklanacak hicbir sey yok.
+				#
+				# Bag NEDEN standart `Shipment Delivery Note` tablosuyla degil de
+				# buradan kuruluyor: o tabloyu okuyan dort yer, bir irsaliyenin
+				# gonderisini "musteriye giden paket" sayiyor. Iade paketi de
+				# oraya yazilsaydi (1) iade suresi, paketin bize donus tarihinden
+				# sayilmaya baslardi, (2) Bol'a musterinin takip numarasi diye
+				# iade etiketinin numarasi gidebilirdi, (3) kargo maliyeti
+				# eslestirmesi "iki gonderi var" deyip o siparis icin sessizce
+				# calismayi birakirdi. Ucu de sessiz.
+				#
+				# Bkz. docs/plans/iade-sistemi.md
+				"fieldname": "custom_source_shipment",
+				"label": _("Outbound Shipment"),
+				"fieldtype": "Link",
+				"options": "Shipment",
+				"read_only": 1,
+				"no_copy": 1,
+				"depends_on": "custom_is_return",
+				"insert_after": "custom_is_return",
+				"description": _(
+					"The parcel these goods went out on. Set automatically when the return "
+					"shipment is built from a return case."
+				),
+			},
+			{
 				# Taşıyıcı geri dönen paketi de "delivered" olarak kapatıyor ve
 				# dönüş bacağı normal teslimattan ayırt edilemiyor: aynı
 				# at-sorting-centre -> driver-on-route -> delivered dizisi, iade
