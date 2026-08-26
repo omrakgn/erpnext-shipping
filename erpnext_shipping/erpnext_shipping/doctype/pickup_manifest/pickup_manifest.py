@@ -1,12 +1,12 @@
 # Copyright (c) 2026, Frappe and contributors
 # For license information, please see license.txt
 
-import json
-
 import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
+
+from erpnext_shipping.erpnext_shipping.shipping import parcel_details
 
 # Carrier adlarını tek biçime indir (dpd/DPD -> DPD, fedex/FedEx -> FedEx) ki
 # büyük/küçük harf farkı yüzünden ayrı manifestolar oluşmasın.
@@ -184,12 +184,29 @@ def generate_pickup_manifests(pickup_date, company=None):
 	if not shipments:
 		frappe.throw(_("No shipments with a carrier found for the selected pickup date."))
 
-	already = {
-		r.shipment
-		for r in frappe.get_all(
-			"Pickup Manifest Item", filters={"shipment": ["is", "set"]}, fields=["shipment"]
-		)
-	}
+	# Daha önce hangi (gönderi, takip numarası) çifti bir manifestoya girmiş.
+	#
+	# Anahtar gönderi DEĞİL paket. Bir gönderiye sonradan ikinci bir koli
+	# eklenebiliyor: yatak DPD ile çıkar, yastığın FedEx etiketi ertesi gün
+	# basılır. Gönderi bazında elenirse o ikinci koli artık hiçbir manifestoya
+	# giremez ve şoför, listede olmayan bir paket alır. Sessizdir: gönderi
+	# "manifestoda var" görünür, çünkü diğer kolisi var.
+	#
+	# İptal edilmiş manifestonun satırları elemez. Belge iptal edilse de çocuk
+	# satırları veritabanında duruyor ve gönderiyi sonsuza kadar engelliyordu.
+	iptal = set()
+	for m in frappe.get_all("Pickup Manifest", filters={"docstatus": 2}, fields=["name"]):
+		iptal.add(m.name)
+
+	already = set()
+	for r in frappe.get_all(
+		"Pickup Manifest Item",
+		filters={"shipment": ["is", "set"]},
+		fields=["parent", "shipment", "tracking_number"],
+	):
+		if r.parent in iptal:
+			continue
+		already.add((r.shipment, (r.tracking_number or "").strip()))
 
 	fallback_company = (
 		company
@@ -201,29 +218,36 @@ def generate_pickup_manifests(pickup_date, company=None):
 
 	# carrier -> [paket, ...]; her paket = {shipment, tracking, contact, company, items}
 	carrier_packages = {}
+	# Carrier'i cozulemeyen koliler. Uydurma bir manifesto acmaktansa isimleriyle
+	# bildiriliyor: iki tasiyiciya da yanlis liste vermek, eksik listeden kotu.
+	belirsiz = []
 	for sh_row in shipments:
-		if sh_row.name in already:
-			continue
 		sh = frappe.get_doc("Shipment", sh_row.name)
 		contact = _clean_contact(sh.get("delivery_contact_name"))
 		trackings = [t for t in (sh.awb_number or "").split(", ") if t]
 		# tracking no -> gerçek carrier (SendCloud tracking detayından). Panel'de
 		# oluşturulup sync edilen çok-carrier gönderilerde parça satırlarında carrier
 		# yok; bu harita her parçayı DOĞRU carrier manifestosuna koymayı sağlar.
+		# Kayitta yoksa SendCloud'dan bir kez cekilir: gonderinin `carrier` alani
+		# bolunmus gonderide "dpd, fedex" gibi birlesik yaziliyor ve hangi
+		# kolinin hangisiyle gittigini soyleyemiyor.
 		track_carrier = {}
-		try:
-			for p in json.loads(sh.get("custom_tracking_details") or "[]"):
-				if p.get("tracking_number") and p.get("carrier"):
-					track_carrier[p["tracking_number"]] = p["carrier"]
-		except Exception:
-			pass
+		for p in parcel_details(sh):
+			if p.get("tracking_number") and p.get("carrier"):
+				track_carrier[p["tracking_number"]] = p["carrier"]
 		pmap = _parcel_item_map(sh)
 		parcels = sh.get("shipment_parcel") or []
 		all_items = _shipment_items(sh)
 		pickup_company = sh.get("pickup_company") or fallback_company
 
 		def _add_pkg(pcarrier, tracking, items):
+			tracking = (tracking or "").strip()
+			if (sh.name, tracking) in already:
+				return
 			pcarrier = _canon_carrier(pcarrier or sh.carrier)
+			if "," in pcarrier:
+				belirsiz.append((sh.name, tracking, pcarrier))
+				return
 			carrier_packages.setdefault(pcarrier, []).append(
 				{
 					"shipment": sh.name,
@@ -257,8 +281,25 @@ def generate_pickup_manifests(pickup_date, company=None):
 		else:
 			_add_pkg(sh.carrier, sh.awb_number or "", [dict(it) for it in all_items])
 
+	belirsiz_mesaj = ""
+	if belirsiz:
+		satirlar = []
+		for name, tracking, carrier in belirsiz:
+			satirlar.append("%s / %s (%s)" % (name, tracking or "?", carrier))
+		belirsiz_mesaj = _(
+			"Left off every manifest, because it is not known which carrier took the parcel. "
+			"The shipment names more than one and the parcel itself does not say which: "
+			"{0}<br><br>Refresh the shipment's tracking, or set the carrier on the parcel row, "
+			"then generate again."
+		).format("<br>".join(satirlar))
+
 	if not carrier_packages:
-		frappe.throw(_("All shipments for this date are already in a pickup manifest."))
+		if belirsiz_mesaj:
+			frappe.throw(belirsiz_mesaj, title=_("Carrier not resolved"))
+		frappe.throw(_("Every parcel for this date is already on a pickup manifest."))
+
+	if belirsiz_mesaj:
+		frappe.msgprint(belirsiz_mesaj, title=_("Carrier not resolved"), indicator="red")
 
 	created = []
 	for carrier, packages in carrier_packages.items():

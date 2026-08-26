@@ -604,6 +604,46 @@ def create_shipment_per_parcel(shipment):
 	return shipment_info
 
 
+def parcel_details(sh):
+	"""Per-parcel rows for a Shipment: tracking number, carrier, sku, status.
+
+	Read from the stored JSON, and fetched once from SendCloud when that is
+	empty. This JSON is the only place a parcel's own carrier is written down. A
+	shipment split between two carriers joins both names into the single
+	`carrier` field, and `"dpd, fedex"` cannot say which box went with whom, so
+	anything that has to route a parcel by its carrier has to come through here.
+
+	A failed fetch returns what we have rather than raising: the caller is
+	usually building a document, and a carrier being unreachable is not a reason
+	to refuse it.
+	"""
+	parcels = []
+	details = sh.get("custom_tracking_details")
+	if details:
+		try:
+			parcels = json.loads(details)
+		except Exception:
+			parcels = []
+	if parcels:
+		return parcels
+
+	if sh.get("service_provider") != SENDCLOUD_PROVIDER or not sh.get("shipment_id"):
+		return []
+
+	try:
+		data = SendCloudUtils().get_tracking_data(sh.shipment_id) or {}
+	except Exception:
+		frappe.log_error(title="Parcel details fetch failed", message=sh.name)
+		return []
+
+	parcels = data.get("parcels") or []
+	if parcels:
+		sh.db_set("custom_tracking_details", json.dumps(parcels))
+		if data.get("delivered_at") and not sh.get("custom_delivered_at"):
+			sh.db_set("custom_delivered_at", get_datetime(data["delivered_at"]))
+	return parcels
+
+
 @frappe.whitelist()
 def get_delivery_note_shipment_tracking(delivery_note):
 	"""Bu Delivery Note'a bağlı Shipment'ların parça-bazlı takip satırlarını döndür.
@@ -624,22 +664,7 @@ def get_delivery_note_shipment_tracking(delivery_note):
 		if sh.docstatus == 2:
 			continue
 
-		parcels = []
-		details = sh.get("custom_tracking_details")
-		if details:
-			try:
-				parcels = json.loads(details)
-			except Exception:
-				parcels = []
-
-		# JSON yoksa ve SendCloud ise canlı çek + sakla
-		if not parcels and sh.service_provider == SENDCLOUD_PROVIDER and sh.shipment_id:
-			data = SendCloudUtils().get_tracking_data(sh.shipment_id) or {}
-			parcels = data.get("parcels") or []
-			if parcels:
-				sh.db_set("custom_tracking_details", json.dumps(parcels))
-				if data.get("delivered_at"):
-					sh.db_set("custom_delivered_at", get_datetime(data["delivered_at"]))
+		parcels = parcel_details(sh)
 
 		costs, currency = _shipment_parcel_costs(name)
 		for p in parcels:
