@@ -42,6 +42,31 @@ def announce_label(shipment):
 			)
 
 
+def announce_delivered(shipment):
+	"""Tell other apps this shipment reached the customer.
+
+	The twin of `announce_label`, and needed for the same reason: the delivery is
+	written with `db_set`, which fires no document event, so an app that cares
+	has no way to notice on its own.
+
+	It matters because a tracking number is only half the story. Shopify shows
+	"Delivered" from fulfillment events, not from the tracking number — a
+	fulfillment we created ourselves stays silent forever unless somebody says
+	the parcel arrived, and the customer sees a shipment that never completes.
+
+	Fired once, on the transition. A listener that fails is logged and ignored:
+	the parcel is delivered whatever another app's integration does about it.
+	"""
+	for method in frappe.get_hooks("shipment_delivered") or []:
+		try:
+			frappe.call(method, shipment=shipment)
+		except Exception:
+			frappe.log_error(
+				message=frappe.get_traceback(),
+				title=f"shipment_delivered listener failed: {method}",
+			)
+
+
 @frappe.whitelist()
 def fetch_shipping_rates(
 	pickup_from_type,
@@ -1255,7 +1280,14 @@ def update_tracking(shipment, service_provider, shipment_id, delivery_notes=None
 			transit = date_diff(dt.date(), shipment.pickup_date)
 			if transit is not None and 0 <= transit <= 90:
 				updates["custom_transit_days"] = transit
+	onceki_durum = shipment.get("tracking_status")
 	shipment.db_set(updates)
+
+	# Teslim ANINDA duyur, her turda değil. Bir kez Delivered olan gönderi zaten
+	# `update_tracking_info` taramasından düşüyor, ama elle tetiklenen bir
+	# güncelleme aynı gönderiyi yeniden işleyebilir.
+	if mapped_status == "Delivered" and onceki_durum != "Delivered":
+		announce_delivered(shipment.name)
 
 
 # Paketin müşteriye ulaşmadığını söyleyen ifadeler (NL/EN/DE). "Delivery attempt
