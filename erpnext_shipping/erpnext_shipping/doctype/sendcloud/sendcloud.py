@@ -164,6 +164,29 @@ def toggle_preferred_shipping_option(
 
 
 @frappe.whitelist()
+def sender_company_name(shipment=None):
+	"""Kargo etiketine basilacak gonderici firma adi.
+
+	Adres basligi bir cadde adi gibi gorunuyorsa firma adi oradan okunamiyor ve
+	baska bir kaynak gerekiyor. Sira: gonderinin KENDI sirketi, sonra sitenin
+	varsayilan sirketi, sonra tek sirket kaydi.
+
+	Hicbiri yoksa **bos donuyor**. Eskiden burada sabit bir firma adi vardi ve o
+	ad, baska bir kurulumda baskasinin kargo etiketine basilirdi. Eksik bir isim
+	yanlis bir isimden iyidir: eksik olan fark edilir, yanlis olan edilmez.
+	"""
+	if shipment:
+		company = frappe.db.get_value("Shipment", shipment, "pickup_company")
+		if company:
+			return company
+
+	return (
+		frappe.defaults.get_global_default("company")
+		or frappe.db.get_value("Company", {}, "name", order_by="creation")
+		or ""
+	)
+
+
 def sync_sendcloud_return_methods():
 	"""Pull the account's return products in, leaving the choice to a person.
 
@@ -389,7 +412,7 @@ class SendCloudUtils:
 			from_address["company_name"] = from_company
 		else:
 			# Address title adres içeriyorsa, Company'den şirket adını al
-			from_address["company_name"] = frappe.defaults.get_global_default("company") or "Scarnatti"
+			from_address["company_name"] = sender_company_name(shipment)
 		
 		if pickup_contact.phone:
 			from_address["phone_number"] = pickup_contact.phone
@@ -594,7 +617,7 @@ class SendCloudUtils:
 		):
 			from_address["company_name"] = from_company
 		else:
-			from_address["company_name"] = frappe.defaults.get_global_default("company") or "Scarnatti"
+			from_address["company_name"] = sender_company_name(shipment)
 		if pickup_contact.phone:
 			from_address["phone_number"] = pickup_contact.phone
 		if pickup_contact.email_id:
