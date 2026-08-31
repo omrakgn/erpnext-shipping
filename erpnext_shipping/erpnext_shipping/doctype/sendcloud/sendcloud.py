@@ -874,18 +874,30 @@ class SendCloudUtils:
 			return []
 
 		services = []
+		# İşaretlenmiş bir ürün listede çıkmadığında sebebi görünmüyordu: ağırlık
+		# mı tutmadı, servis noktası mı istiyor, bilinmiyordu. Boş bir liste her
+		# şeyi aynı sessizlikle anlatıyor. Sebepler toplanıp aşağıda söyleniyor.
+		elenen = []
 		for method in methods:
 			if str(method.get("id")) not in chosen:
 				continue
 
+			ad = method.get("name") or method.get("id")
+
 			# Servis noktası isteyen ürünler burada seçilemez: hangi noktaya
 			# bırakılacağını müşteri seçer, biz bilmiyoruz.
 			if (method.get("service_point_input") or "none") != "none":
+				elenen.append(_("{0}: the customer picks a drop-off point, which this screen cannot do").format(ad))
 				continue
 
 			low = flt(method.get("min_weight") or 0)
 			high = flt(method.get("max_weight") or 0)
 			if weight and high and not (low <= weight <= high):
+				elenen.append(
+					_("{0}: takes {1}-{2} kg, this parcel is {3} kg").format(
+						ad, f"{low:g}", f"{high:g}", f"{weight:g}"
+					)
+				)
 				continue
 
 			# Fiyat müşterinin ülkesinin satırından okunuyor; o satır yoksa fiyat
@@ -913,6 +925,13 @@ class SendCloudUtils:
 			service.total_price = None if price is None else price * (count or 1)
 			service.currency = "EUR"
 			services.append(service)
+
+		if elenen:
+			frappe.msgprint(
+				_("Ticked return products that were left out:<br><br>{0}").format("<br>".join(elenen)),
+				title=_("Some return products do not fit"),
+				indicator="orange" if not services else "blue",
+			)
 
 		services.sort(key=_service_price)
 		return services
