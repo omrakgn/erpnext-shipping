@@ -245,6 +245,10 @@ def fetch_return_methods(api_key, api_secret):
 			for method in (response.json() or {}).get("shipping_methods", []):
 				mid = str(method.get("id"))
 				if mid and mid not in yontemler:
+					# Hangi sözleşmeden geldiği burada biliniyor ve etiket
+					# alınırken gerekiyor. Kaybedilirse sonradan hesaplanamaz:
+					# ürünün üzerinde sözleşmesini söyleyen bir alan yok.
+					method["_contract_id"] = params.get("contract")
 					yontemler[mid] = method
 		except Exception as e:
 			hatalar.append(f'{params.get("contract") or "-"}: {str(e)[:200]}')
@@ -905,6 +909,7 @@ class SendCloudUtils:
 			service.service_name = f"{method.get('name')} ({low:g}-{high:g} kg)"
 			service.service_id = str(method.get("id"))
 			service.is_return = True
+			service.contract_id = method.get("_contract_id")
 			service.total_price = None if price is None else price * (count or 1)
 			service.currency = "EUR"
 			services.append(service)
@@ -989,6 +994,23 @@ class SendCloudUtils:
 			"request_label": False,
 			"shipment": {"id": int(service_info["service_id"])},
 		}
+
+		# Sözleşme. Bir taşıyıcı için birden çok etkin sözleşme varsa SendCloud
+		# hangisinin kullanılacağını söylemeden etiket kesmiyor ve hatayı
+		# `contract` alanı üzerinden veriyor. Sıra: gönderide elle seçilmiş
+		# sözleşme, sonra teklifin geldiği sözleşme.
+		contract_id = (
+			frappe.db.get_value("Shipment", shipment, "custom_sendcloud_contract_id")
+			or service_info.get("contract_id")
+		)
+		if contract_id:
+			try:
+				body["contract"] = int(contract_id)
+			except (TypeError, ValueError):
+				frappe.log_error(
+					title="SendCloud return: contract id not a number",
+					message=f"Shipment {shipment}, contract {contract_id!r}",
+				)
 		if pickup_contact.get("email_id"):
 			body["from_email"] = pickup_contact.email_id
 		if pickup_contact.get("phone"):
