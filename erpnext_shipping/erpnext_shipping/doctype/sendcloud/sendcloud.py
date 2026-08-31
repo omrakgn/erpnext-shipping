@@ -163,7 +163,6 @@ def toggle_preferred_shipping_option(
 	return {"preferred": preferred}
 
 
-@frappe.whitelist()
 def sender_company_name(shipment=None):
 	"""Kargo etiketine basilacak gonderici firma adi.
 
@@ -253,6 +252,7 @@ def fetch_return_methods(api_key, api_secret):
 	return list(yontemler.values()), hatalar
 
 
+@frappe.whitelist()
 def sync_sendcloud_return_methods():
 	"""Pull the account's return products in, leaving the choice to a person.
 
