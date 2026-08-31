@@ -55,6 +55,31 @@ def _is_dead_parcel(status):
 	return False
 
 
+_BAND_IN_NAME = re.compile(r"(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)\s*kg", re.I)
+
+
+def _looks_like_price_band(name, low, high):
+	"""Adı kendi ağırlık aralığını tekrarlıyorsa fiyat bandıdır.
+
+	Sezgisel, ve öyle olduğu biliniyor. Ama tek alternatif denemek: SendCloud
+	bandı üründen ayıran bir alan vermiyor ve ikisi de aynı yapıda geliyor.
+	Bandın adındaki aralık `min_weight`/`max_weight` ile birebir tutuyor;
+	gerçek bir ürünün adında bu tekrar yok.
+	"""
+	if not name:
+		return False
+	m = _BAND_IN_NAME.search(name)
+	if not m:
+		return False
+	try:
+		ad_low = float(m.group(1).replace(",", "."))
+		ad_high = float(m.group(2).replace(",", "."))
+	except ValueError:
+		return False
+	# Sınırlar 0.001 kayıklıkla geliyor (30.001-35.001 için ad "30-35kg").
+	return abs(ad_low - flt(low)) <= 1 and abs(ad_high - flt(high)) <= 1
+
+
 def _service_price(service):
 	"""Sort key: cheapest first. Nameless price means last, not free."""
 	return flt(service.get("total_price")) or float("inf")
@@ -898,6 +923,31 @@ class SendCloudUtils:
 						ad, f"{low:g}", f"{high:g}", f"{weight:g}"
 					)
 				)
+				continue
+
+			# Ülke. `countries` ÇIKIŞ ülkesini anlatıyor, yani paketin alınacağı
+			# yeri. Listede yoksa SendCloud etiketi kesmiyor ve cevabı en son
+			# adımda `Invalid shipment.id` oluyor: kullanıcı ürünü seçtikten,
+			# fiyatı gördükten ve düğmeye bastıktan sonra. Teklif listesinin işi
+			# satın alınabilecek olanı göstermek.
+			kodlar = []
+			for entry in method.get("countries") or []:
+				kod = (entry.get("iso_2") or "").upper()
+				if kod:
+					kodlar.append(kod)
+			if origin and kodlar and origin not in kodlar:
+				elenen.append(
+					_("{0}: not offered from {1} (only {2})").format(ad, origin, ", ".join(sorted(kodlar)))
+				)
+				continue
+
+			# Fiyat bandı. Adında kendi ağırlık aralığını taşıyan ürünler
+			# ("... 30-35kg") satın alınamıyor; SendCloud onları da `Invalid
+			# shipment.id` ile reddediyor. Ürünü bandından ayıran ayrı bir alan
+			# yok, ama adın içindeki aralığın min/max ile birebir tutması yeterince
+			# güçlü bir işaret. Yanılırsa görünür: sebebi aşağıda yazılıyor.
+			if _looks_like_price_band(method.get("name"), low, high):
+				elenen.append(_("{0}: this is a contract price band, not a product that can be bought").format(ad))
 				continue
 
 			# Fiyat müşterinin ülkesinin satırından okunuyor; o satır yoksa fiyat
