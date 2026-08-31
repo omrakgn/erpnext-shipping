@@ -9,7 +9,7 @@ import frappe
 import requests
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import cint, flt
 from frappe.utils.data import get_link_to_form
 from requests.exceptions import HTTPError
 
@@ -187,6 +187,72 @@ def sender_company_name(shipment=None):
 	)
 
 
+def return_contract_ids():
+	"""İade ürünleri hangi sözleşmeler için sorulacak.
+
+	Tercihli işaretlenmiş sözleşmeler varsa yalnız onlar, yoksa hepsi. Ayarda
+	hiç sözleşme yoksa boş liste döner ve çağrı eskisi gibi sözleşmesiz yapılır;
+	tek sözleşmeli hesaplarda o çalışıyor.
+	"""
+	settings = frappe.get_cached_doc("SendCloud", "SendCloud")
+	tercihli = []
+	tumu = []
+	for row in settings.get("contract_options") or []:
+		if not row.contract_id:
+			continue
+		cid = str(row.contract_id)
+		if cid not in tumu:
+			tumu.append(cid)
+		if cint(row.is_preferred) and cid not in tercihli:
+			tercihli.append(cid)
+	return tercihli or tumu
+
+
+def fetch_return_methods(api_key, api_secret):
+	"""(yöntemler, hatalar) — iade ürünleri listesi.
+
+	SendCloud bir taşıyıcı için birden çok etkin sözleşme varken sözleşmesiz
+	sorguyu reddediyor:
+
+	    "You have multiple active contracts for that carrier.
+	     Please specify the contract in the query parameters."
+
+	Tek çağrıyla hepsini almanın yolu yok; sözleşme başına bir çağrı yapılıp
+	sonuçlar `id` üzerinden birleştiriliyor. Bir sözleşme düşerse diğerleri
+	devam ediyor ve düşen ayrıca bildiriliyor: eksik bir liste, sessizce eksik
+	kalmamalı.
+	"""
+	sozlesmeler = return_contract_ids()
+	istekler = []
+	if sozlesmeler:
+		for cid in sozlesmeler:
+			istekler.append({"is_return": "true", "contract": cid})
+	else:
+		istekler.append({"is_return": "true"})
+
+	yontemler = {}
+	hatalar = []
+	for params in istekler:
+		try:
+			response = requests.get(
+				SHIPPING_METHODS_URL,
+				params=params,
+				auth=(api_key, api_secret),
+				timeout=30,
+			)
+			if response.status_code >= 400:
+				hatalar.append(f'{params.get("contract") or "-"}: {response.text[:200]}')
+				continue
+			for method in (response.json() or {}).get("shipping_methods", []):
+				mid = str(method.get("id"))
+				if mid and mid not in yontemler:
+					yontemler[mid] = method
+		except Exception as e:
+			hatalar.append(f'{params.get("contract") or "-"}: {str(e)[:200]}')
+
+	return list(yontemler.values()), hatalar
+
+
 def sync_sendcloud_return_methods():
 	"""Pull the account's return products in, leaving the choice to a person.
 
@@ -202,14 +268,20 @@ def sync_sendcloud_return_methods():
 	from the shape of a product name.
 	"""
 	utils = SendCloudUtils()
-	response = requests.get(
-		SHIPPING_METHODS_URL,
-		params={"is_return": "true"},
-		auth=(utils.api_key, utils.api_secret),
-		timeout=30,
-	)
-	response.raise_for_status()
-	methods = (response.json() or {}).get("shipping_methods", [])
+	methods, hatalar = fetch_return_methods(utils.api_key, utils.api_secret)
+	if hatalar:
+		frappe.msgprint(
+			_("Some contracts could not be read, so the list may be short:<br><br>{0}").format(
+				"<br>".join(hatalar)
+			),
+			title=_("Return products partly read"),
+			indicator="orange",
+		)
+	if not methods:
+		frappe.throw(
+			_("SendCloud returned no return products. If the message mentions several active contracts, tick the one you use in <b>Contracts</b> below and try again."),
+			title=_("No return products"),
+		)
 
 	settings = frappe.get_doc("SendCloud", "SendCloud")
 	existing = {}
@@ -783,18 +855,18 @@ class SendCloudUtils:
 			)
 			return []
 
-		try:
-			response = requests.get(
-				SHIPPING_METHODS_URL,
-				params={"is_return": "true"},
-				auth=(self.api_key, self.api_secret),
-				timeout=30,
+		methods, hatalar = fetch_return_methods(self.api_key, self.api_secret)
+		if hatalar:
+			# Sessizce boş dönmek, "iade ürünü yok" gibi okunuyordu ve sebebi
+			# yalnızca hata kaydına bakan biri görebiliyordu.
+			frappe.msgprint(
+				_("SendCloud could not be read for some contracts:<br><br>{0}").format(
+					"<br>".join(hatalar)
+				),
+				title=_("Return options may be incomplete"),
+				indicator="orange",
 			)
-			methods = (response.json() or {}).get("shipping_methods", [])
-		except Exception:
-			frappe.log_error(
-				message=frappe.get_traceback(), title="SendCloud return methods could not be read"
-			)
+		if not methods:
 			return []
 
 		services = []
