@@ -185,6 +185,10 @@ doc_events = {
 		# Bayrak `allow_on_submit`: kutu çoğu zaman onaylanmış belgede
 		# işaretleniyor ve o yolda `validate` hiç çalışmıyor.
 		"on_update_after_submit": "erpnext_shipping.erpnext_shipping.loss.stamp_returned_on",
+		# İptalde de `validate` çalışmıyor. Bu olmadan iptal edilen gönderi son
+		# SLA damgasıyla kalıyor ve günlük iş iptalleri atladığı için o damgayı
+		# bir daha kimse düzeltmiyor.
+		"on_cancel": "erpnext_shipping.erpnext_shipping.sla.clear_sla_on_cancel",
 	},
 	"Delivery Note": {
 		# Yalnızca Shipment Settings'te kargo geliri hesabı tanımlıysa çalışır (aksi

@@ -1033,94 +1033,148 @@ class SendCloudUtils:
 				)
 			)
 
-		parcels = json.loads(shipment_parcel) if isinstance(shipment_parcel, str) else shipment_parcel
-		weight = 0
-		for parcel in parcels or []:
-			weight = max(weight, flt(parcel.get("weight", 0)))
+		rows = json.loads(shipment_parcel) if isinstance(shipment_parcel, str) else shipment_parcel
+
+		# Bir satır birden çok özdeş koli anlatabiliyor (`count`). Giden tarafta
+		# bu zaten açılıyor; iade tarafında açılmıyordu ve iki kolilik bir iade
+		# için tek etiket kesiliyordu. İkinci koli müşterinin elinde kalıyor.
+		boxes = []
+		for row in rows or []:
+			# Sayaç adı `_` OLAMAZ: bu metotta `_` frappe'nin çeviri
+			# fonksiyonu ve bir döngü değişkeni onu metodun tamamı boyunca
+			# yerel bir int'e çevirir. Her `_("...")` çağrısı patlar.
+			for kopya in range(max(1, cint(row.get("count", 1)))):
+				boxes.append(row)
+		if not boxes:
+			boxes = [{}]
 
 		their_name = f"{pickup_contact.first_name or ''} {pickup_contact.last_name or ''}".strip()
 		our_name = frappe.defaults.get_global_default("company") or delivery_address.get("address_title")
 
-		body = {
-			# Alıcı: biz.
-			"name": our_name,
-			"company_name": our_name,
-			"address": our_street or delivery_address.address_line1,
-			"house_number": our_number,
-			"city": delivery_address.city,
-			"postal_code": delivery_address.pincode,
-			"country": (delivery_address.country_code or "").upper(),
-			# Gönderen: müşteri.
-			"from_name": their_name or pickup_address.get("address_title") or shipment,
-			"from_address_1": their_street or pickup_address.address_line1,
-			"from_house_number": their_number,
-			"from_city": pickup_address.city,
-			"from_postal_code": pickup_address.pincode,
-			"from_country": (pickup_address.country_code or "").upper(),
-			"order_number": shipment,
-			"weight": f"{weight or 1:.3f}",
-			"is_return": True,
-			"request_label": False,
-			"shipment": {"id": int(service_info["service_id"])},
-		}
+		def _body(box, index):
+			body = {
+				# Alıcı: biz.
+				"name": our_name,
+				"company_name": our_name,
+				"address": our_street or delivery_address.address_line1,
+				"house_number": our_number,
+				"city": delivery_address.city,
+				"postal_code": delivery_address.pincode,
+				"country": (delivery_address.country_code or "").upper(),
+				# Gönderen: müşteri.
+				"from_name": their_name or pickup_address.get("address_title") or shipment,
+				"from_address_1": their_street or pickup_address.address_line1,
+				"from_house_number": their_number,
+				"from_city": pickup_address.city,
+				"from_postal_code": pickup_address.pincode,
+				"from_country": (pickup_address.country_code or "").upper(),
+				# Giden taraftaki biçimin aynısı. Aynı numarayla iki koli
+				# açılırsa SendCloud'da hangisinin hangisi olduğu okunmuyor.
+				"order_number": f"{shipment}-{index}",
+				# Kolinin KENDİ ağırlığı. Eskiden en ağır kolininki alınıp tek
+				# koli açılıyordu; iki koli varsa hafif olanın ağırlığı hiç
+				# kullanılmıyordu.
+				"weight": f"{flt(box.get('weight', 0)) or 1:.3f}",
+				"is_return": True,
+				"request_label": False,
+				"shipment": {"id": int(service_info["service_id"])},
+			}
+			if contract_id:
+				body["contract"] = contract_id
+			if pickup_contact.get("email_id"):
+				body["from_email"] = pickup_contact.email_id
+			if pickup_contact.get("phone"):
+				body["from_telephone"] = pickup_contact.phone
+			if delivery_contact and delivery_contact.get("email_id"):
+				body["email"] = delivery_contact.email_id
+			if delivery_contact and delivery_contact.get("phone"):
+				body["telephone"] = delivery_contact.phone
+			return body
 
 		# Sözleşme. Bir taşıyıcı için birden çok etkin sözleşme varsa SendCloud
 		# hangisinin kullanılacağını söylemeden etiket kesmiyor ve hatayı
 		# `contract` alanı üzerinden veriyor. Sıra: gönderide elle seçilmiş
 		# sözleşme, sonra teklifin geldiği sözleşme.
-		contract_id = (
+		raw_contract = (
 			frappe.db.get_value("Shipment", shipment, "custom_sendcloud_contract_id")
 			or service_info.get("contract_id")
 		)
-		if contract_id:
+		contract_id = None
+		if raw_contract:
 			try:
-				body["contract"] = int(contract_id)
+				contract_id = int(raw_contract)
 			except (TypeError, ValueError):
 				frappe.log_error(
 					title="SendCloud return: contract id not a number",
-					message=f"Shipment {shipment}, contract {contract_id!r}",
+					message=f"Shipment {shipment}, contract {raw_contract!r}",
 				)
-		if pickup_contact.get("email_id"):
-			body["from_email"] = pickup_contact.email_id
-		if pickup_contact.get("phone"):
-			body["from_telephone"] = pickup_contact.phone
-		if delivery_contact and delivery_contact.get("email_id"):
-			body["email"] = delivery_contact.email_id
-		if delivery_contact and delivery_contact.get("phone"):
-			body["telephone"] = delivery_contact.phone
 
-		created = self._post_parcel({"parcel": body})
-		parcel_id = created.get("id")
+		# --- 1. aşama: koliler etiketsiz açılıyor ve yönleri doğrulanıyor ----
+		#
+		# Hepsi önce açılıyor, etiket sonra alınıyor. Ters kurulmuş bir iade,
+		# bizim paramızla müşteriye geri postalanan bir kolidir ve kimse
+		# kapısına gelene kadar öğrenmez. İki kolide bunu koli koli yapsaydık,
+		# ikinci koli reddedildiğinde birincinin etiketi çoktan satın alınmış
+		# olurdu.
+		created_list = []
+		for i, box in enumerate(boxes, start=1):
+			created = self._post_parcel({"parcel": _body(box, i)})
+			created_list.append(created)
 
-		# Doğrulama: paket müşteriden çıkıp bize varmalı. Ters kurulmuş bir iade
-		# burada yakalanır ve hiçbir etiket satın alınmamış olur.
-		arrives = ((created.get("country") or {}).get("iso_2") or "").upper()
-		leaves = (created.get("from_country") or "").upper()
-		if arrives and arrives != body["country"]:
-			frappe.throw(
-				_("SendCloud built the return arriving in {0}, not {1}. No label was bought; parcel {2} can be cancelled in SendCloud.").format(
-					arrives, body["country"], parcel_id
-				),
-				title=_("Return built the wrong way round"),
+			arrives = ((created.get("country") or {}).get("iso_2") or "").upper()
+			leaves = (created.get("from_country") or "").upper()
+			wrong = None
+			if arrives and arrives != (delivery_address.country_code or "").upper():
+				wrong = _("arriving in {0}, not {1}").format(
+					arrives, (delivery_address.country_code or "").upper()
+				)
+			elif leaves and leaves != (pickup_address.country_code or "").upper():
+				wrong = _("leaving from {0}, not {1}").format(
+					leaves, (pickup_address.country_code or "").upper()
+				)
+			if wrong:
+				ids = ", ".join(str(c.get("id")) for c in created_list if c.get("id"))
+				frappe.throw(
+					_("SendCloud built the return {0}. No label was bought; parcel(s) {1} can be cancelled in SendCloud.").format(
+						wrong, ids
+					),
+					title=_("Return built the wrong way round"),
+				)
+
+		# --- 2. aşama: etiketler alınıyor -----------------------------------
+		results = []
+		for index, created in enumerate(created_list, start=1):
+			parcel_id = created.get("id")
+			try:
+				labelled = self._put_parcel({"parcel": {"id": parcel_id, "request_label": True}})
+			except Exception:
+				# Önceki koliler için etiket alınmışsa onlar duruyor. Hangileri
+				# olduğu söylenmezse depo elinde kaç etiket olduğunu bilemez.
+				bought = ", ".join(r["awb_number"] for r in results if r.get("awb_number"))
+				frappe.throw(
+					_("Label for parcel {0} of {1} failed. Labels already bought: {2}. Parcel {3} is open in SendCloud and can be cancelled.").format(
+						index, len(created_list), bought or _("none"), parcel_id
+					),
+					title=_("Return label incomplete"),
+				)
+			results.append(
+				{
+					"shipment_id": str(parcel_id),
+					"awb_number": labelled.get("tracking_number") or created.get("tracking_number") or "",
+					"tracking_url": labelled.get("tracking_url") or created.get("tracking_url") or "",
+				}
 			)
-		if leaves and leaves != body["from_country"]:
-			frappe.throw(
-				_("SendCloud built the return leaving from {0}, not {1}. No label was bought; parcel {2} can be cancelled in SendCloud.").format(
-					leaves, body["from_country"], parcel_id
-				),
-				title=_("Return built the wrong way round"),
-			)
 
-		labelled = self._put_parcel({"parcel": {"id": parcel_id, "request_label": True}})
-
+		# Giden taraftaki çok kolili birleştirmenin aynısı: `Shipment` tek bir
+		# takip numarası alanı taşıyor, koliler virgülle yan yana yazılıyor.
 		return {
 			"service_provider": SENDCLOUD_PROVIDER,
 			"carrier": service_info.get("carrier"),
 			"carrier_service": service_info.get("service_name"),
-			"shipment_id": str(parcel_id),
-			"awb_number": labelled.get("tracking_number") or created.get("tracking_number"),
-			"tracking_url": labelled.get("tracking_url") or created.get("tracking_url"),
-			"shipment_amount": service_info.get("total_price"),
+			"shipment_id": ", ".join(r["shipment_id"] for r in results if r.get("shipment_id")),
+			"awb_number": ", ".join(r["awb_number"] for r in results if r.get("awb_number")),
+			"tracking_url": ", ".join(r["tracking_url"] for r in results if r.get("tracking_url")),
+			"shipment_amount": flt(service_info.get("total_price")) * len(results),
 		}
 
 	def _post_parcel(self, payload):

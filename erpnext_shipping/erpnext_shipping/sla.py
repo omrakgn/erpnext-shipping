@@ -179,6 +179,32 @@ def rebuild_carrier_sla_lanes():
 	frappe.db.commit()
 
 
+def sla_applies(doc):
+	"""Whether this shipment carries a delivery promise at all.
+
+	Two kinds do not, and both were showing stale At Risk badges:
+
+	**Returns.** An SLA is a commitment made to the customer or the marketplace:
+	the parcel will be there by this date. On a return we promise nobody
+	anything. The parcel leaves when the customer hands it over, which can be a
+	fortnight after the label is printed, and carriers move return flows behind
+	their outbound ones. Measuring that against outbound transit lanes produces
+	an alarm no one can act on.
+
+	**Cancelled shipments.** The promise was withdrawn with the shipment.
+
+	Kept as one function because the daily sweep and the validate hook must
+	agree; when they drift, one writes a status the other never clears.
+	"""
+	if doc.get("custom_is_return"):
+		return False
+	if (doc.get("status") or "") == "Cancelled":
+		return False
+	if doc.get("docstatus") == 2:
+		return False
+	return True
+
+
 def _status(sla_date, delivered_on, today, risk_days):
 	if not sla_date:
 		return ""
@@ -193,6 +219,10 @@ def _status(sla_date, delivered_on, today, risk_days):
 
 def set_sla_fields(doc, method=None):
 	"""Shipment validate hook: keep SLA Date and Status current on the document."""
+	if not sla_applies(doc):
+		doc.custom_sla_date = None
+		doc.custom_sla_status = ""
+		return
 	sla_date = compute_sla_date(doc)
 	doc.custom_sla_date = sla_date
 	risk_days = cint(_setting("sla_risk_days", 1))
@@ -200,26 +230,75 @@ def set_sla_fields(doc, method=None):
 	doc.custom_sla_status = _status(sla_date, delivered_on, getdate(nowdate()), risk_days)
 
 
+def clear_sla_on_cancel(doc, method=None):
+	"""Shipment on_cancel hook: drop the SLA stamp with the promise it recorded.
+
+	`validate` does not run on cancel, so without this the last status before
+	cancellation stays on the record forever. It cannot be corrected later
+	either: the daily sweep skips cancelled shipments by design, so nothing ever
+	looks at the row again. That is how five cancelled shipments sat in the
+	At Risk list.
+	"""
+	if not (doc.get("custom_sla_date") or doc.get("custom_sla_status")):
+		return
+	frappe.db.set_value(
+		doc.doctype,
+		doc.name,
+		{"custom_sla_date": None, "custom_sla_status": ""},
+		update_modified=False,
+	)
+
+
 def _active_shipments():
 	"""Submitted, dispatched shipments within a bounded window (undelivered, or
 	delivered within 90 days so their Met/Missed status stays fresh)."""
-	return frappe.get_all(
-		"Shipment",
-		filters=[
-			["docstatus", "=", 1],
-			["awb_number", "is", "set"],
-			["pickup_date", "is", "set"],
-			["status", "not in", ["Cancelled", "Completed"]],
-			["pickup_date", ">=", add_days(nowdate(), -120)],
-		],
-		fields=["name"],
-		pluck="name",
+	filters = [
+		["docstatus", "=", 1],
+		["awb_number", "is", "set"],
+		["pickup_date", "is", "set"],
+		["status", "not in", ["Cancelled", "Completed"]],
+		["pickup_date", ">=", add_days(nowdate(), -120)],
+	]
+	if frappe.db.has_column("Shipment", "custom_is_return"):
+		filters.append(["custom_is_return", "=", 0])
+	return frappe.get_all("Shipment", filters=filters, fields=["name"], pluck="name")
+
+
+def clear_stale_sla():
+	"""Blank SLA stamps on shipments the SLA no longer applies to.
+
+	The daily refresh deliberately looks at a narrow set. Anything that leaves
+	that set keeps whatever status it had on the way out, and nothing ever
+	revisits it. So the sweep runs the other way round: find rows that still
+	carry a status but should not, and clear them.
+
+	Written as a sweep rather than a one-off patch on purpose. A patch would fix
+	today's five and leave the next one to be found by eye.
+	"""
+	filters = [["custom_sla_status", "!=", ""]]
+	or_filters = [["status", "=", "Cancelled"], ["docstatus", "=", 2]]
+	if frappe.db.has_column("Shipment", "custom_is_return"):
+		or_filters.append(["custom_is_return", "=", 1])
+
+	names = frappe.get_all(
+		"Shipment", filters=filters, or_filters=or_filters, fields=["name"], pluck="name"
 	)
+	for name in names:
+		frappe.db.set_value(
+			"Shipment",
+			name,
+			{"custom_sla_date": None, "custom_sla_status": ""},
+			update_modified=False,
+		)
+	if names:
+		frappe.db.commit()
+	return len(names)
 
 
 def flag_and_notify_sla():
 	"""Daily job: refresh SLA status for active shipments and email the internal
 	recipient when one goes At Risk or Breaches (once each)."""
+	clear_stale_sla()
 	today = getdate(nowdate())
 	risk_days = cint(_setting("sla_risk_days", 1))
 	max_overdue = cint(_setting("sla_notify_max_overdue_days", 14))
