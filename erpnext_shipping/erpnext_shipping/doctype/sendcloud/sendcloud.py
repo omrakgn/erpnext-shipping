@@ -952,14 +952,24 @@ class SendCloudUtils:
 				)
 				continue
 
-			# Fiyat bandı. Adında kendi ağırlık aralığını taşıyan ürünler
-			# ("... 30-35kg") satın alınamıyor; SendCloud onları da `Invalid
-			# shipment.id` ile reddediyor. Ürünü bandından ayıran ayrı bir alan
-			# yok, ama adın içindeki aralığın min/max ile birebir tutması yeterince
-			# güçlü bir işaret. Yanılırsa görünür: sebebi aşağıda yazılıyor.
-			if _looks_like_price_band(method.get("name"), low, high):
-				elenen.append(_("{0}: this is a contract price band, not a product that can be bought").format(ad))
-				continue
+			# Fiyat bandı ŞÜPHESİ. Adında kendi ağırlık aralığını taşıyan
+			# ürünler ("... 30-35kg") bir sözleşme fiyat kademesi olabilir.
+			#
+			# **Bu artık dışlamıyor, yalnız işaretliyor.** Dışladığı sürüm
+			# hesaptaki 57 iade ürününün 46'sını düşürüyordu: DPD'nin Almanya'ya
+			# hizmet eden bütün iade ürünleri ve FedEx Regional Economy'nin
+			# tamamı. DPD iadeyi ağırlık kademeleriyle satıyor; kademe zaten
+			# ürünün kendisi. Bir taşıyıcının ürün yapısı kusur sanılmıştı.
+			#
+			# Sezginin dayandığı kanıt da zayıftı: `Invalid shipment.id` hatası,
+			# aynı anda düzeltilen ülke uyumsuzluğuyla çok daha iyi açıklanıyor
+			# (28479 Almanya'ya hizmet etmiyor).
+			#
+			# Teklif listesinin işi satın alınabilecek olanı göstermek; bir
+			# tahmin, seçeneklerin beşte dördünü sessizce yok edemez. Etiket
+			# alma iki aşamalı: SendCloud reddederse hiçbir şey satın alınmadan
+			# öğreniliyor.
+			band_suphesi = _looks_like_price_band(method.get("name"), low, high)
 
 			# Fiyat müşterinin ülkesinin satırından okunuyor; o satır yoksa fiyat
 			# **boş** bırakılıyor. `countries` alanının neyi anlattığı belirsiz —
@@ -983,6 +993,10 @@ class SendCloudUtils:
 			service.service_id = str(method.get("id"))
 			service.is_return = True
 			service.contract_id = method.get("_contract_id")
+			if band_suphesi:
+				# Depocu neyi seçtiğini bilsin. Reddedilirse sebebi burada
+				# yazıyordu ve şaşırtıcı olmuyor.
+				service.note = _("name repeats its own weight range; SendCloud may refuse it as a contract price band")
 			service.total_price = None if price is None else price * (count or 1)
 			service.currency = "EUR"
 			services.append(service)
