@@ -55,31 +55,6 @@ def _is_dead_parcel(status):
 	return False
 
 
-_BAND_IN_NAME = re.compile(r"(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)\s*kg", re.I)
-
-
-def _looks_like_price_band(name, low, high):
-	"""Adı kendi ağırlık aralığını tekrarlıyorsa fiyat bandıdır.
-
-	Sezgisel, ve öyle olduğu biliniyor. Ama tek alternatif denemek: SendCloud
-	bandı üründen ayıran bir alan vermiyor ve ikisi de aynı yapıda geliyor.
-	Bandın adındaki aralık `min_weight`/`max_weight` ile birebir tutuyor;
-	gerçek bir ürünün adında bu tekrar yok.
-	"""
-	if not name:
-		return False
-	m = _BAND_IN_NAME.search(name)
-	if not m:
-		return False
-	try:
-		ad_low = float(m.group(1).replace(",", "."))
-		ad_high = float(m.group(2).replace(",", "."))
-	except ValueError:
-		return False
-	# Sınırlar 0.001 kayıklıkla geliyor (30.001-35.001 için ad "30-35kg").
-	return abs(ad_low - flt(low)) <= 1 and abs(ad_high - flt(high)) <= 1
-
-
 def _service_price(service):
 	"""Sort key: cheapest first. Nameless price means last, not free."""
 	return flt(service.get("total_price")) or float("inf")
@@ -952,27 +927,15 @@ class SendCloudUtils:
 				)
 				continue
 
-			# Fiyat bandı ŞÜPHESİ. Adında kendi ağırlık aralığını taşıyan
-			# ürünler ("... 30-35kg") bir sözleşme fiyat kademesi olabilir.
-			#
-			# **Bu artık dışlamıyor, yalnız işaretliyor.** Dışladığı sürüm
-			# hesaptaki 57 iade ürününün 46'sını düşürüyordu: DPD'nin Almanya'ya
-			# hizmet eden bütün iade ürünleri ve FedEx Regional Economy'nin
-			# tamamı. DPD iadeyi ağırlık kademeleriyle satıyor; kademe zaten
-			# ürünün kendisi. Bir taşıyıcının ürün yapısı kusur sanılmıştı.
-			#
-			# Sezginin dayandığı kanıt da zayıftı: `Invalid shipment.id` hatası,
-			# aynı anda düzeltilen ülke uyumsuzluğuyla çok daha iyi açıklanıyor
-			# (28479 Almanya'ya hizmet etmiyor).
-			#
-			# Teklif listesinin işi satın alınabilecek olanı göstermek; bir
-			# tahmin, seçeneklerin beşte dördünü sessizce yok edemez. Etiket
-			# alma iki aşamalı: SendCloud reddederse hiçbir şey satın alınmadan
-			# öğreniliyor.
-			band_suphesi = _looks_like_price_band(method.get("name"), low, high)
-
 			# Fiyat müşterinin ülkesinin satırından okunuyor; o satır yoksa fiyat
-			# **boş** bırakılıyor. `countries` alanının neyi anlattığı belirsiz —
+			# **boş** bırakılıyor.
+			#
+			# Bu satır aynı zamanda ürünün gerçek olduğunun işareti. Bir süre
+			# "adında ağırlık aralığı geçen ürün satın alınamaz" diye bir sezgi
+			# vardı ve hesaptaki 57 iade ürününün 46'sını düşürüyordu. Yanlıştı:
+			# `DPD Return 10-20kg` Almanya için kalem kalem fiyat taşıyor
+			# (16,92 etiket + 0,44 + 5,25 yakıt = 22,61) ve etiket kesiliyor.
+			# Bir sözleşme kademesi böyle bir döküm taşımaz. `countries` alanının neyi anlattığı belirsiz —
 			# BE listeleyen bir ürün reddedilirken BE listeleyen bir başkası kabul
 			# edildi — ve belirsiz bir alandan türetilmiş bir tutar, faturayla
 			# karşılaştırıldığında tutmayan bir tutardır.
@@ -993,10 +956,6 @@ class SendCloudUtils:
 			service.service_id = str(method.get("id"))
 			service.is_return = True
 			service.contract_id = method.get("_contract_id")
-			if band_suphesi:
-				# Depocu neyi seçtiğini bilsin. Reddedilirse sebebi burada
-				# yazıyordu ve şaşırtıcı olmuyor.
-				service.note = _("name repeats its own weight range; SendCloud may refuse it as a contract price band")
 			service.total_price = None if price is None else price * (count or 1)
 			service.currency = "EUR"
 			services.append(service)
