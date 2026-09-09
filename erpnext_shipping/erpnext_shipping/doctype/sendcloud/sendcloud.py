@@ -207,6 +207,66 @@ def return_contract_ids():
 	return tercihli or tumu
 
 
+def _carrier_key(ad):
+	"""Karşılaştırma için taşıyıcı adı: yalnız küçük harfler.
+
+	Sözleşme tablosunda `DPD`, `FedEx`, `GLS` yazıyor; ürünlerde `dpd`,
+	`fedex`, `gls_eu`. Aynı taşıyıcı, üç farklı yazım.
+	"""
+	return "".join(ch for ch in str(ad or "").lower() if ch.isalpha())
+
+
+def contract_for_carrier(carrier):
+	"""(sözleşme_id, sebep) — bu taşıyıcının iade sözleşmesi.
+
+	Sözleşme, ürünün taşıyıcısından bulunuyor; ürünü hangi isteğin döndürdüğünden
+	değil. SendCloud sözleşme parametresine bakmadan bütün iade ürünlerini
+	döndürüyor, dolayısıyla "isteğin sözleşmesi" ürün hakkında hiçbir şey
+	söylemiyor.
+
+	Bir taşıyıcı için birden çok sözleşme varsa tercihli olan kazanıyor. Tercihli
+	yoksa ve birden çoksa **seçim yapılmıyor**: sözleşme boş gidiyor ve SendCloud
+	kendi hata mesajıyla ("multiple active contracts") hangi kararın verilmesi
+	gerektiğini söylüyor. Rastgele birini seçmek, yanlış sözleşmeye fatura
+	kesilmesi demek olurdu ve bu, hatadan daha kötü.
+	"""
+	anahtar = _carrier_key(carrier)
+	if not anahtar:
+		return None, None
+
+	settings = frappe.get_cached_doc("SendCloud", "SendCloud")
+	tercihli = []
+	tumu = []
+	for row in settings.get("contract_options") or []:
+		if not row.contract_id:
+			continue
+		satir_anahtar = _carrier_key(row.carrier)
+		if not satir_anahtar:
+			continue
+		# `gls_eu` ile `GLS` aynı taşıyıcı; biri diğeriyle başlıyorsa eşleşiyor.
+		if not (anahtar.startswith(satir_anahtar) or satir_anahtar.startswith(anahtar)):
+			continue
+		cid = str(row.contract_id)
+		if cid not in tumu:
+			tumu.append(cid)
+		if cint(row.is_preferred) and cid not in tercihli:
+			tercihli.append(cid)
+
+	if len(tercihli) == 1:
+		return tercihli[0], None
+	if len(tercihli) > 1:
+		return None, _("{0}: {1} contracts are marked preferred, so none was chosen").format(
+			carrier, len(tercihli)
+		)
+	if len(tumu) == 1:
+		return tumu[0], None
+	if len(tumu) > 1:
+		return None, _(
+			"{0}: {1} contracts on the account and none marked preferred, so none was sent"
+		).format(carrier, len(tumu))
+	return None, None
+
+
 def fetch_return_methods(api_key, api_secret):
 	"""(yöntemler, hatalar) — iade ürünleri listesi.
 
@@ -245,10 +305,15 @@ def fetch_return_methods(api_key, api_secret):
 			for method in (response.json() or {}).get("shipping_methods", []):
 				mid = str(method.get("id"))
 				if mid and mid not in yontemler:
-					# Hangi sözleşmeden geldiği burada biliniyor ve etiket
-					# alınırken gerekiyor. Kaybedilirse sonradan hesaplanamaz:
-					# ürünün üzerinde sözleşmesini söyleyen bir alan yok.
-					method["_contract_id"] = params.get("contract")
+					# Sözleşme BURADA belirlenmiyor. Eskiden isteğin sözleşmesi
+					# ürüne yazılıyordu ("hangi sözleşmeden geldiği biliniyor")
+					# ama bilinmiyordu: SendCloud sözleşme parametresine bakmadan
+					# bütün iade ürünlerini döndürüyor ve ilk gören istek hepsini
+					# etiketliyordu. Sonuç: 57 ürünün 57'si de tablodaki ilk
+					# sözleşmeye, bir FedEx sözleşmesine bağlanmıştı, DPD ve GLS
+					# ürünleri dahil.
+					#
+					# Doğru eşleştirme taşıyıcıdan yapılıyor: `contract_for_carrier`.
 					yontemler[mid] = method
 		except Exception as e:
 			hatalar.append(f'{params.get("contract") or "-"}: {str(e)[:200]}')
@@ -955,7 +1020,13 @@ class SendCloudUtils:
 			service.service_name = f"{method.get('name')} ({low:g}-{high:g} kg)"
 			service.service_id = str(method.get("id"))
 			service.is_return = True
-			service.contract_id = method.get("_contract_id")
+			# Sözleşme ürünün taşıyıcısından çözülüyor. Eskiden ürünü hangi
+			# isteğin döndürdüğü yazılıyordu ve o, DPD ürününe FedEx sözleşmesi
+			# bağlıyordu.
+			sozlesme, sozlesme_sebep = contract_for_carrier(method.get("carrier"))
+			service.contract_id = sozlesme
+			if sozlesme_sebep:
+				elenen.append(_("{0}: {1}").format(ad, sozlesme_sebep))
 			service.total_price = None if price is None else price * (count or 1)
 			service.currency = "EUR"
 			services.append(service)
