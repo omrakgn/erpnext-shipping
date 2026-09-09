@@ -224,11 +224,15 @@ def contract_for_carrier(carrier):
 	döndürüyor, dolayısıyla "isteğin sözleşmesi" ürün hakkında hiçbir şey
 	söylemiyor.
 
-	Bir taşıyıcı için birden çok sözleşme varsa tercihli olan kazanıyor. Tercihli
-	yoksa ve birden çoksa **seçim yapılmıyor**: sözleşme boş gidiyor ve SendCloud
-	kendi hata mesajıyla ("multiple active contracts") hangi kararın verilmesi
-	gerektiğini söylüyor. Rastgele birini seçmek, yanlış sözleşmeye fatura
-	kesilmesi demek olurdu ve bu, hatadan daha kötü.
+	Önce **kullanılamaz olanlar** eleniyor: `validating` ya da `inactive` bir
+	sözleşmeyle etiket kesilemiyor, dolayısıyla tercihli işaretlenmiş olsa bile
+	aday değil.
+
+	Kalanlar arasında tercihli olan kazanıyor. Tercihli yoksa ve birden çoksa
+	**seçim yapılmıyor**: sözleşme boş gidiyor ve SendCloud kendi hata mesajıyla
+	("multiple active contracts") hangi kararın verilmesi gerektiğini söylüyor.
+	Rastgele birini seçmek, yanlış sözleşmeye fatura kesilmesi demek olurdu ve
+	bu, hatadan daha kötü: hata görünür, yanlış fatura görünmez.
 	"""
 	anahtar = _carrier_key(carrier)
 	if not anahtar:
@@ -237,6 +241,7 @@ def contract_for_carrier(carrier):
 	settings = frappe.get_cached_doc("SendCloud", "SendCloud")
 	tercihli = []
 	tumu = []
+	elenen_durum = 0
 	for row in settings.get("contract_options") or []:
 		if not row.contract_id:
 			continue
@@ -246,6 +251,20 @@ def contract_for_carrier(carrier):
 		# `gls_eu` ile `GLS` aynı taşıyıcı; biri diğeriyle başlıyorsa eşleşiyor.
 		if not (anahtar.startswith(satir_anahtar) or satir_anahtar.startswith(anahtar)):
 			continue
+
+		# `validating` ya da `inactive` bir sözleşmeyle etiket kesilemiyor.
+		# Bunlar aday bile değil ve tercihli işaretlenmiş olmaları bir şeyi
+		# değiştirmiyor: hesapta yedi DPD sözleşmesinden altısı `validating`
+		# durumundaydı ve biri tercihli işaretliydi. O işaret bir seçim değil,
+		# bir yanlışlık.
+		#
+		# Durum boşsa eleme yapılmıyor: alanı doldurmayan bir hesapta bütün
+		# sözleşmeleri elemek, hiç sözleşme bulunamaması demek olurdu.
+		durum = (row.state or "").strip().lower()
+		if durum and durum != "active":
+			elenen_durum += 1
+			continue
+
 		cid = str(row.contract_id)
 		if cid not in tumu:
 			tumu.append(cid)
@@ -262,8 +281,12 @@ def contract_for_carrier(carrier):
 		return tumu[0], None
 	if len(tumu) > 1:
 		return None, _(
-			"{0}: {1} contracts on the account and none marked preferred, so none was sent"
+			"{0}: {1} active contracts and none marked preferred, so none was sent"
 		).format(carrier, len(tumu))
+	if elenen_durum:
+		return None, _(
+			"{0}: {1} contract(s) found but none is active yet"
+		).format(carrier, elenen_durum)
 	return None, None
 
 
