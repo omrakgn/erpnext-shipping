@@ -55,6 +55,48 @@ def _is_dead_parcel(status):
 	return False
 
 
+_BAND_IN_NAME = re.compile(r"(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)\s*kg", re.IGNORECASE)
+
+
+def _looks_like_price_band(name, low, high):
+	"""Adı kendi ağırlık aralığını tekrarlıyorsa sözleşme fiyat kademesidir.
+
+	**Canlıda doğrulandı (2026-09-09).** Üç veri noktası ve desen üçünü de
+	doğru ayırıyor:
+
+	| Ürün | Adında aralık | Etiket |
+	|---|---|---|
+	| `355` DPD Shop Return | yok | kesildi |
+	| `4606` FedEx Intl Economy Returns | yok | kesildi |
+	| `2567` DPD Return 10-20kg | **var** | `Invalid shipment.id` |
+
+	Bir ara bu süzgeç kaldırıldı, gerekçesi şuydu: "bir sözleşme kademesi
+	kalem kalem fiyat dökümü taşımaz, `2567` taşıyor, demek ki gerçek ürün."
+	**Gerekçe tersinden okunmuştu.** Bir fiyat kademesinin taşıdığı tek şey
+	zaten fiyat dökümüdür; döküm, kademe olmanın kanıtı, aksinin değil.
+	Kaldırıldıktan sonra ilk denemede `Invalid shipment.id` alındı.
+
+	SendCloud bandı üründen ayıran bir alan vermiyor: ikisi de aynı alanlarla,
+	aynı ülke listeleriyle, aynı fiyat dökümüyle geliyor. `contract` parametresi
+	de yardımcı olmuyor, çünkü SendCloud onu yok sayıyor (otuz sözleşmenin
+	hepsi aynı 57 ürünü döndürüyor). Geriye ad kalıyor.
+
+	Elenenler sessizce düşmüyor: sebebi teklif listesinde yazılıyor.
+	"""
+	if not name:
+		return False
+	m = _BAND_IN_NAME.search(name)
+	if not m:
+		return False
+	try:
+		ad_low = float(m.group(1).replace(",", "."))
+		ad_high = float(m.group(2).replace(",", "."))
+	except ValueError:
+		return False
+	# Sınırlar 0.001 kayıklıkla geliyor (30.001-35.001 için ad "30-35kg").
+	return abs(ad_low - flt(low)) <= 1 and abs(ad_high - flt(high)) <= 1
+
+
 def _service_price(service):
 	"""Sort key: cheapest first. Nameless price means last, not free."""
 	return flt(service.get("total_price")) or float("inf")
@@ -291,55 +333,63 @@ def contract_for_carrier(carrier):
 
 
 def fetch_return_methods(api_key, api_secret):
-	"""(yöntemler, hatalar) — iade ürünleri listesi.
+	"""(yöntemler, hatalar) — hesabın iade ürünleri.
 
-	SendCloud bir taşıyıcı için birden çok etkin sözleşme varken sözleşmesiz
-	sorguyu reddediyor:
+	**Tek çağrı.** Eskiden sözleşme başına bir çağrı yapılıyordu, gerekçesi
+	SendCloud'un bir taşıyıcı için birden çok etkin sözleşme varken sözleşmesiz
+	sorguyu reddettiğiydi:
 
 	    "You have multiple active contracts for that carrier.
 	     Please specify the contract in the query parameters."
 
-	Tek çağrıyla hepsini almanın yolu yok; sözleşme başına bir çağrı yapılıp
-	sonuçlar `id` üzerinden birleştiriliyor. Bir sözleşme düşerse diğerleri
-	devam ediyor ve düşen ayrıca bildiriliyor: eksik bir liste, sessizce eksik
-	kalmamalı.
-	"""
-	sozlesmeler = return_contract_ids()
-	istekler = []
-	if sozlesmeler:
-		for cid in sozlesmeler:
-			istekler.append({"is_return": "true", "contract": cid})
-	else:
-		istekler.append({"is_return": "true"})
+	Ölçüldü (2026-09-09) ve bu endpoint için doğru değil: otuz sözleşmenin her
+	biri **aynı 57 ürünü** döndürüyor, sözleşmesiz sorgu da aynısını. SendCloud
+	`contract` parametresini burada yok sayıyor. Otuz çağrının yirmi dokuzu
+	aynı yanıtı tekrar getiriyordu.
 
+	Yine de sözleşmesiz sorgu bir gün reddedilirse akış durmasın: reddedilirse
+	sözleşme başına sorulan eski yola düşülüyor.
+
+	Ürünün sözleşmesi buradan çıkarılmıyor. Yanıt sözleşme hakkında hiçbir şey
+	söylemediği için çıkarılamaz; doğru eşleştirme taşıyıcıdan yapılıyor,
+	`contract_for_carrier`.
+	"""
 	yontemler = {}
 	hatalar = []
-	for params in istekler:
+
+	def _oku(params):
+		response = requests.get(
+			SHIPPING_METHODS_URL, params=params, auth=(api_key, api_secret), timeout=30
+		)
+		if response.status_code >= 400:
+			return response.text[:200]
+		for method in (response.json() or {}).get("shipping_methods", []):
+			mid = str(method.get("id"))
+			if mid and mid not in yontemler:
+				yontemler[mid] = method
+		return None
+
+	try:
+		hata = _oku({"is_return": "true"})
+	except Exception as e:
+		hata = str(e)[:200]
+
+	if not hata:
+		return list(yontemler.values()), hatalar
+
+	# Sözleşmesiz sorgu reddedildi. Eski yol: sözleşme başına bir çağrı. Bir
+	# sözleşme düşerse diğerleri devam ediyor ve düşen ayrıca bildiriliyor;
+	# eksik bir liste sessizce eksik kalmamalı.
+	for cid in return_contract_ids():
 		try:
-			response = requests.get(
-				SHIPPING_METHODS_URL,
-				params=params,
-				auth=(api_key, api_secret),
-				timeout=30,
-			)
-			if response.status_code >= 400:
-				hatalar.append(f'{params.get("contract") or "-"}: {response.text[:200]}')
-				continue
-			for method in (response.json() or {}).get("shipping_methods", []):
-				mid = str(method.get("id"))
-				if mid and mid not in yontemler:
-					# Sözleşme BURADA belirlenmiyor. Eskiden isteğin sözleşmesi
-					# ürüne yazılıyordu ("hangi sözleşmeden geldiği biliniyor")
-					# ama bilinmiyordu: SendCloud sözleşme parametresine bakmadan
-					# bütün iade ürünlerini döndürüyor ve ilk gören istek hepsini
-					# etiketliyordu. Sonuç: 57 ürünün 57'si de tablodaki ilk
-					# sözleşmeye, bir FedEx sözleşmesine bağlanmıştı, DPD ve GLS
-					# ürünleri dahil.
-					#
-					# Doğru eşleştirme taşıyıcıdan yapılıyor: `contract_for_carrier`.
-					yontemler[mid] = method
+			alt_hata = _oku({"is_return": "true", "contract": cid})
 		except Exception as e:
-			hatalar.append(f'{params.get("contract") or "-"}: {str(e)[:200]}')
+			alt_hata = str(e)[:200]
+		if alt_hata:
+			hatalar.append(f"{cid}: {alt_hata}")
+
+	if not yontemler and not hatalar:
+		hatalar.append(f"-: {hata}")
 
 	return list(yontemler.values()), hatalar
 
@@ -1015,15 +1065,21 @@ class SendCloudUtils:
 				)
 				continue
 
+			# Sözleşme fiyat kademesi. Satın alınamıyor: SendCloud etiket
+			# isteğini `Invalid shipment.id` ile reddediyor ve bunu ancak
+			# denerken söylüyor. Teklif listesinin işi satın alınabilecek olanı
+			# göstermek.
+			if _looks_like_price_band(method.get("name"), low, high):
+				elenen.append(
+					_("{0}: this is a contract price band, not a product that can be bought").format(ad)
+				)
+				continue
+
 			# Fiyat müşterinin ülkesinin satırından okunuyor; o satır yoksa fiyat
-			# **boş** bırakılıyor.
-			#
-			# Bu satır aynı zamanda ürünün gerçek olduğunun işareti. Bir süre
-			# "adında ağırlık aralığı geçen ürün satın alınamaz" diye bir sezgi
-			# vardı ve hesaptaki 57 iade ürününün 46'sını düşürüyordu. Yanlıştı:
-			# `DPD Return 10-20kg` Almanya için kalem kalem fiyat taşıyor
-			# (16,92 etiket + 0,44 + 5,25 yakıt = 22,61) ve etiket kesiliyor.
-			# Bir sözleşme kademesi böyle bir döküm taşımaz. `countries` alanının neyi anlattığı belirsiz —
+			# **boş** bırakılıyor. Fiyatın var olması ürünün satın alınabilir
+			# olduğunu GÖSTERMİYOR: kademeler de tam fiyat dökümü taşıyor ve
+			# bir kez o dökümü kanıt sanıp süzgeci kaldırmak, ilk denemede
+			# `Invalid shipment.id` ile döndü. `countries` alanının neyi anlattığı belirsiz —
 			# BE listeleyen bir ürün reddedilirken BE listeleyen bir başkası kabul
 			# edildi — ve belirsiz bir alandan türetilmiş bir tutar, faturayla
 			# karşılaştırıldığında tutmayan bir tutardır.
