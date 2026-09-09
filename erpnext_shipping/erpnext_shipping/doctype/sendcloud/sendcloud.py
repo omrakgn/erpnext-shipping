@@ -1049,21 +1049,35 @@ class SendCloudUtils:
 				)
 				continue
 
-			# Ülke. `countries` ÇIKIŞ ülkesini anlatıyor, yani paketin alınacağı
-			# yeri. Listede yoksa SendCloud etiketi kesmiyor ve cevabı en son
-			# adımda `Invalid shipment.id` oluyor: kullanıcı ürünü seçtikten,
-			# fiyatı gördükten ve düğmeye bastıktan sonra. Teklif listesinin işi
-			# satın alınabilecek olanı göstermek.
+			# Ülke listesi. Bunun ne anlattığı **bilinmiyor** ve bu yüzden
+			# artık eleme yapmıyor, yalnız uyarıyor.
+			#
+			# Bir süre "çıkış ülkesi, yani paketin alınacağı yer" diye okundu ve
+			# listede olmayan ürünler eleniyordu. Canlı kayıt bunu çürüttü:
+			#
+			#   SHIPMENT-00995, 19.08.2026
+			#   DPD Shop Return, alım yeri Almanya 89423
+			#   takip 05448801222302, durum Booked
+			#
+			# `DPD Shop Return`'ün listesi `BE, NL`. Almanya listede yok ve
+			# etiket yine de kesildi. Süzgeç o tarihte henüz yoktu.
+			#
+			# Ülke uyuşmazlığının etikete engel olduğu **doğrulanmış tek bir
+			# vaka yok**. `Invalid shipment.id` hatalarının hepsi ağırlık bantlı
+			# ürünlerde çıktı ve onlar ayrıca eleniyor.
+			#
+			# Bilinmeyen bir alandan tahmin yürütüp satın alınabilir bir ürünü
+			# listeden çıkarmak, kesilebilecek bir etiketi engellemek demek.
 			kodlar = []
 			for entry in method.get("countries") or []:
 				kod = (entry.get("iso_2") or "").upper()
 				if kod:
 					kodlar.append(kod)
+			ulke_uyarisi = None
 			if origin and kodlar and origin not in kodlar:
-				elenen.append(
-					_("{0}: not offered from {1} (only {2})").format(ad, origin, ", ".join(sorted(kodlar)))
+				ulke_uyarisi = _("{0} is not in this product's country list ({1})").format(
+					origin, ", ".join(sorted(kodlar))
 				)
-				continue
 
 			# Sözleşme fiyat kademesi. Satın alınamıyor: SendCloud etiket
 			# isteğini `Invalid shipment.id` ile reddediyor ve bunu ancak
@@ -1099,6 +1113,8 @@ class SendCloudUtils:
 			service.service_name = f"{method.get('name')} ({low:g}-{high:g} kg)"
 			service.service_id = str(method.get("id"))
 			service.is_return = True
+			if ulke_uyarisi:
+				service.note = ulke_uyarisi
 			# Sözleşme ürünün taşıyıcısından çözülüyor. Eskiden ürünü hangi
 			# isteğin döndürdüğü yazılıyordu ve o, DPD ürününe FedEx sözleşmesi
 			# bağlıyordu.
