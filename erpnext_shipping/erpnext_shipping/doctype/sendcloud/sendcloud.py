@@ -331,6 +331,17 @@ def sync_sendcloud_return_methods():
 		row.method_name = method.get("name") or ""
 		row.weight_range = f"{flt(method.get('min_weight')):g}-{flt(method.get('max_weight')):g} kg"
 
+		# Cikis ulkeleri. SendCloud bunu zaten gonderiyor ve etiket aninda
+		# okunuyordu, ama saklanmiyordu: kullanici hangi urunun nereden iade
+		# aldigini ancak etiket kesmeye calisip basarisiz olunca ogreniyordu.
+		# Isaretleme karari burada veriliyor, bilgi de burada olmali.
+		kodlar = []
+		for entry in method.get("countries") or []:
+			kod = (entry.get("iso_2") or "").upper()
+			if kod and kod not in kodlar:
+				kodlar.append(kod)
+		row.from_countries = ", ".join(sorted(kodlar))
+
 	# Hesaptan kalkan ürünler silinmiyor: işaretlenmiş bir ürün geçmiş bir
 	# gönderide kullanılmış olabilir ve satırın kaybolması onu da götürür.
 	stale = []
