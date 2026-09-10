@@ -2362,6 +2362,101 @@ class SendCloudUtils:
 			pass
 		return info
 
+	def _items_from_parcel_table(self, shipment_doc, shipment_name):
+		"""İrsaliyesiz gönderiler için kalem bilgisi: `custom_parcel_items`.
+
+		Fiyat ve ağırlık o tabloda yok, ürün kartından alınıyor. Fiyat için
+		`valuation_rate` kullanılıyor, satış fiyatı değil: bu yol satış olmayan
+		hareketler için var (LVB'ye stok transferi, iade gönderisi) ve oradaki
+		değer maliyet değeridir. Satış fiyatı yazmak, gümrük beyanına olmayan
+		bir satışı yazmak olurdu.
+
+		Tablo da boşsa `None` dönüyor ve gönderi kalemsiz gidiyor; eskisi gibi.
+		Kalem bilgisi zorunlu değil, ama elde varken göndermemek için sebep yok.
+		"""
+		satirlar = shipment_doc.get("custom_parcel_items") or []
+		if not satirlar:
+			return None
+
+		items_dict = {}
+		sku_qty = {}
+		total_value = 0
+		currency = frappe.db.get_value("Company", shipment_doc.get("delivery_company")
+		                               or shipment_doc.get("pickup_company"), "default_currency") or "EUR"
+
+		for row in satirlar:
+			if not row.item_code:
+				continue
+			adet = int(flt(row.qty) or 0)
+			if adet <= 0:
+				continue
+
+			sku = row.item_code
+			if sku in items_dict:
+				items_dict[sku]["quantity"] += adet
+				sku_qty[sku] = sku_qty.get(sku, 0) + adet
+				total_value += items_dict[sku]["price"]["value"] * adet
+				continue
+
+			item_doc = frappe.get_cached_doc("Item", sku)
+			birim_agirlik = flt(item_doc.weight_per_unit or 0)
+			birim_fiyat = flt(item_doc.valuation_rate or 0)
+			if not birim_fiyat:
+				# Ürün kartında değer yoksa depo bakiyesinden ortalama alınıyor.
+				# Gümrük beyanında sıfır değer, gönderinin durdurulma sebebi.
+				bakiye = frappe.db.sql(
+					"""SELECT SUM(stock_value) / NULLIF(SUM(actual_qty), 0)
+					   FROM `tabBin` WHERE item_code = %s AND actual_qty > 0""",
+					(sku,),
+				)
+				birim_fiyat = flt(bakiye[0][0]) if bakiye and bakiye[0][0] else 0
+
+			items_dict[sku] = {
+				"description": (row.item_name or item_doc.item_name or sku)[:200],
+				"quantity": adet,
+				"price": {"value": flt(birim_fiyat, CURRENCY_DECIMALS), "currency": currency},
+				"weight": {
+					"value": flt(birim_agirlik, WEIGHT_DECIMALS) if birim_agirlik > 0 else 0.1,
+					"unit": "kg",
+				},
+				"sku": sku[:50],
+			}
+			if item_doc.customs_tariff_number:
+				items_dict[sku]["hs_code"] = item_doc.customs_tariff_number[:20]
+			if item_doc.country_of_origin:
+				kod = frappe.db.get_value("Country", item_doc.country_of_origin, "code")
+				if kod:
+					items_dict[sku]["origin_country"] = kod.upper()
+
+			sku_qty[sku] = adet
+			total_value += birim_fiyat * adet
+
+		if not items_dict:
+			return None
+
+		notlar = []
+		for sku, adet in sku_qty.items():
+			notlar.append(f"{sku}[{adet}]")
+
+		item_info = {}
+		for sku, kalem in items_dict.items():
+			item_info[sku] = {
+				"unit_price": kalem["price"]["value"],
+				"unit_weight": kalem["weight"]["value"],
+				"description": kalem["description"],
+				"hs_code": kalem.get("hs_code"),
+				"origin_country": kalem.get("origin_country"),
+			}
+
+		return {
+			"parcel_items": list(items_dict.values()),
+			"order_number": shipment_name,
+			"label_notes": notlar,
+			"total_value": flt(total_value, CURRENCY_DECIMALS),
+			"item_info": item_info,
+			"currency": currency,
+		}
+
 	def get_shipment_items(self, shipment):
 		"""
 		Shipment'a bağlı Delivery Note'lardan item bilgilerini al.
@@ -2393,8 +2488,16 @@ class SendCloudUtils:
 			delivery_notes = shipment_doc.get("shipment_delivery_note", [])
 
 			if not delivery_notes:
-				# Delivery Note yoksa None döndür
-				return None
+				# İrsaliye yok. Eskiden burada `None` dönülüyordu ve gönderiye
+				# **hiç kalem bilgisi gitmiyordu**, gönderinin kendi kalem
+				# tablosu (`custom_parcel_items`) dolu olsa bile: `get_parcel`
+				# o tabloyu yalnız bu veri doluysa okuyor.
+				#
+				# Her gönderinin bir irsaliyesi olmuyor. Bol'un LVB deposuna
+				# yapılan stok transferi bir `Stock Entry`, satış değil; iade
+				# gönderisi de irsaliyesiz kuruluyor. İkisinde de kalem bilgisi
+				# elde var, sadece başka bir yerde.
+				return self._items_from_parcel_table(shipment_doc, shipment_name)
 
 			seen_dns = set()
 			for dn_row in delivery_notes:
