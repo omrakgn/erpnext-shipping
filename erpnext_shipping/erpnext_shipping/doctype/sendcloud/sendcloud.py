@@ -2239,26 +2239,49 @@ class SendCloudUtils:
 					if label_notes:
 						parcel_data["label_notes"] = label_notes
 			# Elle girilen koli değeri (Value of Goods) varsa SendCloud'a onu beyan et
-			self._apply_parcel_value(parcel_data, parcel)
+			self._apply_parcel_value(parcel_data, parcel, shipment)
 			# Eşleştirme modunda haritada olmayan koli ürünsüz kalır
 			return parcel_data
 
 		# 2) Eşleştirme yoksa: eski davranış (tüm ürünler her koliye)
 		if shipment_items_data and shipment_items_data.get("parcel_items"):
-			parcel_data["parcel_items"] = shipment_items_data["parcel_items"]
+			# Kopya alınıyor: aynı liste bütün kolilere veriliyor ve aşağıdaki
+			# değer ölçeklemesi onu yerinde değiştiriyor. Kopyalanmazsa ilk
+			# kolinin ölçeklemesi diğerlerine de sızar.
+			import copy
+
+			parcel_data["parcel_items"] = copy.deepcopy(shipment_items_data["parcel_items"])
 
 			# Label notes (SKU bilgileri)
 			if shipment_items_data.get("label_notes"):
 				parcel_data["label_notes"] = shipment_items_data["label_notes"]
 
+			# Bu dalda eskiden HİÇ çağrılmıyordu: eşleştirme tablosu boş olan
+			# gönderilerde elle girilen değer sessizce yok sayılıyordu.
+			self._apply_parcel_value(parcel_data, parcel, shipment)
+
 		return parcel_data
 
-	def _apply_parcel_value(self, parcel_data, parcel):
-		"""Kolinin SendCloud'a beyan edilen toplam değerini, Shipment Parcel'da elle
-		girilen custom_value_of_goods'a eşitle. DN kalem tutarları 0 olsa bile (ör.
-		bedava topper, bundle bileşeni) kolinin gerçek beyan değeri gider. İtem
-		fiyatları hedefe göre ölçeklenir; hepsi 0 ise adete göre dağıtılır."""
+	def _apply_parcel_value(self, parcel_data, parcel, shipment=None):
+		"""Kolinin SendCloud'a beyan edilen toplam değerini elle girilen değere eşitle.
+
+		Sıra:
+
+		1. **Koli satırındaki `custom_value_of_goods`.** En özel bilgi; hangi
+		   kolinin ne kadar değer taşıdığını yazan kişi orada yazmış.
+		2. **Gönderi başlığındaki `value_of_goods`.** Koli başına eşit
+		   bölünüyor.
+		3. Hiçbiri yoksa kalem fiyatları olduğu gibi gidiyor.
+
+		İkinci basamak eksikti ve kullanıcı başlıktaki alanı doldurduğunda değer
+		sessizce yok sayılıyordu; SendCloud'a stok maliyeti gidiyordu.
+
+		Koli içinde dağıtım **oranlı**: kalem fiyatları hedefe göre ölçekleniyor,
+		böylece pahalı ürün pahalı kalıyor. Hepsi sıfırsa adete bölünüyor.
+		"""
 		target = flt(parcel.get("custom_value_of_goods"), CURRENCY_DECIMALS)
+		if target <= 0 and shipment:
+			target = self._header_value_share(shipment)
 		items = parcel_data.get("parcel_items") or []
 		if target <= 0 or not items:
 			return
@@ -2278,6 +2301,40 @@ class SendCloudUtils:
 			per_unit = flt(target / total_qty, CURRENCY_DECIMALS)
 			for it in items:
 				it["price"]["value"] = per_unit
+
+	def _header_value_share(self, shipment):
+		"""Gönderi başlığındaki `value_of_goods`'un bir koliye düşen payı.
+
+		Koli başına **eşit** bölünüyor. Başlıktaki değer bütün gönderi için
+		girilmiş tek bir sayı ve hangi kolinin ne kadarını taşıdığını söylemiyor;
+		oranlı bölmek için gereken bilgi orada yok. Eşit bölmek toplamı doğru
+		tutuyor, ki gümrük beyanında önemli olan da toplam.
+
+		**Koli satırlarından biri kendi değerini yazmışsa başlık hiç
+		kullanılmıyor.** İkisini karıştırmak, aynı değeri iki kez beyan etmeye
+		yol açardı.
+		"""
+		try:
+			doc = frappe.get_cached_doc("Shipment", shipment) if isinstance(shipment, str) else shipment
+		except frappe.DoesNotExistError:
+			return 0
+
+		satirlar = doc.get("shipment_parcel") or []
+		for row in satirlar:
+			if flt(row.get("custom_value_of_goods")) > 0:
+				return 0
+
+		toplam = flt(doc.get("value_of_goods"), CURRENCY_DECIMALS)
+		if toplam <= 0:
+			return 0
+
+		koli = 0
+		for row in satirlar:
+			koli += max(1, cint(row.get("count") or 1))
+		if koli <= 0:
+			koli = 1
+
+		return flt(toplam / koli, CURRENCY_DECIMALS)
 
 	def get_parcel_item_map(self, shipment_doc):
 		"""custom_parcel_items child tablosundan koli -> {item_code: qty} haritası çıkar.
