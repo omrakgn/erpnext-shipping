@@ -573,11 +573,14 @@ def create_replacement_shipment(claim):
 		new_dn = frappe.copy_doc(frappe.get_doc("Delivery Note", dn_name))
 		new_dn.set("posting_date", nowdate())
 		new_dn.set("set_posting_time", 1)
-		new_dn.set(
-			"remarks",
+		new_dn.insert(ignore_permissions=True)
+		# Delivery Note'ta `remarks` alanı yok: oraya `set` edilen not hata
+		# vermeden kayboluyordu (2026-10-02, multichannel_core'da aynı hata
+		# MAT-DN-2026-01559'da görüldü). İz zaman çizelgesinde.
+		new_dn.add_comment(
+			"Info",
 			frappe._("Replacement for lost shipment {0} (claim {1}).").format(doc.shipment, doc.name),
 		)
-		new_dn.insert(ignore_permissions=True)
 		new_dn_name = new_dn.name
 
 	new_ship = frappe.copy_doc(orig)
