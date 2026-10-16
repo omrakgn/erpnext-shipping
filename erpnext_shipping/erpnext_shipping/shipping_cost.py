@@ -502,6 +502,99 @@ def _new_stats():
 	}
 
 
+# Alıcı alanları. Faturada olmayan, eşleşen siparişten tamamlanıyor (fill_receiver_from_order).
+RECEIVER_FIELDS = ("receiver_name", "receiver_street", "receiver_zip", "receiver_city")
+
+
+def _order_receiver(shipment, delivery_note) -> dict:
+	"""Name and address the order was shipped to.
+
+	The Shipment's delivery contact and address first, the same source the loss
+	claim uses, so both screens name the same person. A Delivery Note without a
+	Shipment: its contact and shipping address. On a dealer's note those are the end
+	customer's (docs/bayi-son-musteri-ayrimi.md), which is who the parcel went to.
+	"""
+	from erpnext_shipping.erpnext_shipping.doctype.pickup_manifest.pickup_manifest import _clean_contact
+
+	ad, adres = None, None
+	if shipment:
+		sh = (
+			frappe.db.get_value(
+				"Shipment",
+				shipment,
+				["delivery_contact_name", "delivery_customer", "delivery_company", "delivery_address_name"],
+				as_dict=True,
+			)
+			or {}
+		)
+		ad = (
+			_clean_contact(sh.get("delivery_contact_name"))
+			or sh.get("delivery_customer")
+			or sh.get("delivery_company")
+		)
+		adres = sh.get("delivery_address_name")
+	if delivery_note and not (ad and adres):
+		dn = (
+			frappe.db.get_value(
+				"Delivery Note",
+				delivery_note,
+				["contact_display", "customer_name", "shipping_address_name", "customer_address"],
+				as_dict=True,
+			)
+			or {}
+		)
+		ad = ad or dn.get("contact_display") or dn.get("customer_name")
+		adres = adres or dn.get("shipping_address_name") or dn.get("customer_address")
+
+	sonuc = {"receiver_name": ad}
+	if adres:
+		a = (
+			frappe.db.get_value(
+				"Address", adres, ["address_line1", "address_line2", "pincode", "city"], as_dict=True
+			)
+			or {}
+		)
+		sonuc["receiver_street"] = ", ".join(p for p in (a.get("address_line1"), a.get("address_line2")) if p)
+		sonuc["receiver_zip"] = a.get("pincode")
+		sonuc["receiver_city"] = a.get("city")
+	return sonuc
+
+
+def fill_receiver_from_order(doc, link_changed=False):
+	"""Complete the receiver from the matched order where the carrier's invoice is silent.
+
+	SendCloud's invoice has no receiver name, FedEx's no street or zip; DPD's has
+	everything. What the invoice says is never overwritten: it is what the carrier
+	billed for. `receiver_from_order` remembers which fields came from the order,
+	so a re-link replaces them and a re-import (which writes every receiver field
+	from the invoice and clears the list) starts clean.
+	"""
+	siparisten = {f for f in (doc.get("receiver_from_order") or "").split(",") if f}
+	if link_changed:
+		for f in siparisten:
+			doc.update({f: None})
+		siparisten = set()
+
+	bos = [f for f in RECEIVER_FIELDS if not (doc.get(f) or "").strip()]
+	if bos and (doc.get("shipment") or doc.get("delivery_note")):
+		kaynak = _order_receiver(doc.get("shipment"), doc.get("delivery_note"))
+		for f in bos:
+			if kaynak.get(f):
+				doc.update({f: kaynak[f]})
+				siparisten.add(f)
+
+	doc.receiver_from_order = ",".join(f for f in RECEIVER_FIELDS if f in siparisten)
+	faturadan = any((doc.get(f) or "").strip() and f not in siparisten for f in RECEIVER_FIELDS)
+	if faturadan and siparisten:
+		doc.receiver_source = "Invoice + Order"
+	elif siparisten:
+		doc.receiver_source = "Order"
+	elif faturadan:
+		doc.receiver_source = "Invoice"
+	else:
+		doc.receiver_source = None
+
+
 def _upsert_cost_entry(values, ctx, stats, pdf=None):
 	"""Match one parsed invoice line to a Shipment/Delivery Note and upsert it as a
 	Shipping Cost Entry (idempotent by parcel+invoice). Updates the stats accumulator
@@ -512,6 +605,11 @@ def _upsert_cost_entry(values, ctx, stats, pdf=None):
 
 	shipment, delivery_note, status = match_entry(parcel, values.get("reference_1"), ctx)
 	values = dict(values)
+	# Alıcı her içe aktarmada faturadan baştan yazılıyor; faturanın boş bıraktığını
+	# doğrulama siparişten tamamlıyor (fill_receiver_from_order).
+	for f in RECEIVER_FIELDS:
+		values.setdefault(f, "")
+	values["receiver_from_order"] = ""
 	values["shipment"] = shipment
 	values["delivery_note"] = delivery_note
 	values["match_method"] = MATCH_METHOD_LABELS.get(status)
@@ -711,6 +809,17 @@ def _sendcloud_invoice_number(source_file):
 	return (source_file or "").replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
 
 
+def _sendcloud_street(row):
+	"""Street and house number from a SendCloud invoice line ("Leharkade 10, 2nd floor").
+
+	The file has them (`To Address 1`, `To House Number`, `To Address 2`) but they
+	were never read, so SendCloud entries had no street. The receiver's name is not
+	in the file at all; it comes from the order.
+	"""
+	sokak = " ".join(p for p in (_s(row.get("To Address 1")), _s(row.get("To House Number"))) if p)
+	return ", ".join(p for p in (sokak, _s(row.get("To Address 2"))) if p)
+
+
 def _sendcloud_carrier(rows):
 	"""Real carrier from the freight line ("DPD Classic B2B" -> "DPD").
 
@@ -795,6 +904,7 @@ def _parse_sendcloud_into(content, source_file, ctx, stats):
 			"currency": "EUR",
 			"total_net_amount": flt(total),
 			"reference_1": _s(first.get("Order number")),
+			"receiver_street": _sendcloud_street(first),
 			"receiver_zip": _s(first.get("To Postal Code")),
 			"receiver_city": _s(first.get("To City")),
 			"charge_breakdown": json.dumps(breakdown, ensure_ascii=False),

@@ -17,6 +17,18 @@ class ShippingCostEntry(Document):
 			self.match_method = "Manual"
 		if not (self.shipment or self.delivery_note):
 			self.match_method = None
+		self._fill_receiver()
+
+	def _fill_receiver(self):
+		from erpnext_shipping.erpnext_shipping.shipping_cost import fill_receiver_from_order
+
+		old = self.get_doc_before_save()
+		# Boş değer None ya da "" gelebilir; ikisi aynı bağ.
+		link_changed = bool(old) and (
+			(old.get("shipment") or None) != (self.shipment or None)
+			or (old.get("delivery_note") or None) != (self.delivery_note or None)
+		)
+		fill_receiver_from_order(self, link_changed=link_changed)
 
 	def on_update(self):
 		self._recompute_affected()

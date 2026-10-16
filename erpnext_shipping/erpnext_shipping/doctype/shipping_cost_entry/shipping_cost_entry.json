@@ -31,6 +31,8 @@
   "receiver_zip",
   "column_break_receiver",
   "receiver_city",
+  "receiver_source",
+  "receiver_from_order",
   "measurements_section",
   "invoicing_weight",
   "corrected_weight",
@@ -210,6 +212,22 @@
    "label": "City"
   },
   {
+   "description": "Invoice: the carrier's invoice. Order: completed from the matched Shipment or Delivery Note, where the invoice has no receiver details.",
+   "fieldname": "receiver_source",
+   "fieldtype": "Select",
+   "label": "Receiver Details From",
+   "options": "\nInvoice\nInvoice + Order\nOrder",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receiver_from_order",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Receiver Fields From Order",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "measurements_section",
    "fieldtype": "Section Break",
@@ -298,7 +316,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-09 00:00:00.000000",
+ "modified": "2026-10-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping Cost Entry",
