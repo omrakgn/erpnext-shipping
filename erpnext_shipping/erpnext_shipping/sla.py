@@ -14,6 +14,8 @@ import math
 import frappe
 from frappe.utils import add_days, cint, getdate, now_datetime, nowdate
 
+from erpnext_shipping.erpnext_shipping.own_transport import OWN_TRANSPORT_MODES
+
 DEFAULT_SLA_DAYS = {"dpd": 3, "fedex": 2}
 # Max realistic transit days; above this a delivery is an outlier (stuck/lost) and
 # is excluded from the learned averages.
@@ -193,10 +195,17 @@ def sla_applies(doc):
 
 	**Cancelled shipments.** The promise was withdrawn with the shipment.
 
+	**Own transport** (own vehicle, hired transport company). No carrier lane
+	to measure against, and the daily sweep skips shipments without a tracking
+	number, so a status written on save would never be refreshed: it would
+	stay "On Track" or turn into a stale "At Risk" (docs/plans/ozel-tasima.md).
+
 	Kept as one function because the daily sweep and the validate hook must
 	agree; when they drift, one writes a status the other never clears.
 	"""
 	if doc.get("custom_is_return"):
+		return False
+	if (doc.get("shipping_transport_mode") or "") in OWN_TRANSPORT_MODES:
 		return False
 	if (doc.get("status") or "") == "Cancelled":
 		return False
@@ -279,6 +288,8 @@ def clear_stale_sla():
 	or_filters = [["status", "=", "Cancelled"], ["docstatus", "=", 2]]
 	if frappe.db.has_column("Shipment", "custom_is_return"):
 		or_filters.append(["custom_is_return", "=", 1])
+	if frappe.db.has_column("Shipment", "shipping_transport_mode"):
+		or_filters.append(["shipping_transport_mode", "in", list(OWN_TRANSPORT_MODES)])
 
 	names = frappe.get_all(
 		"Shipment", filters=filters, or_filters=or_filters, fields=["name"], pluck="name"

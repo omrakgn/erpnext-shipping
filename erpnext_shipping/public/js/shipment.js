@@ -140,7 +140,9 @@ frappe.ui.form.on("Shipment", {
 				__("Loss")
 			);
 		}
-		if (frm.doc.docstatus === 1 && !frm.doc.shipment_id) {
+		// Etiketsiz gönderide (kendi aracımız, nakliyeci) taşıyıcı düğmeleri yok;
+		// yerine teslim belgesi ve "Mark Delivered" (own_transport_buttons).
+		if (frm.doc.docstatus === 1 && !frm.doc.shipment_id && !is_own_transport(frm)) {
 			// SendCloud's rate endpoint only offers each carrier's default contract,
 			// so a broker contract ("Sendcloud rates") never appears in the rate list
 			// even though it can be picked in SendCloud's own panel. Without an
@@ -322,6 +324,9 @@ frappe.ui.form.on("Shipment", {
 					__("View")
 				);
 			}
+		}
+		if (!frm.is_new() && is_own_transport(frm)) {
+			own_transport_buttons(frm);
 		}
 	},
 
@@ -1041,4 +1046,108 @@ function do_fulfill(frm, sendcloud_order_id) {
 			}
 		},
 	});
+}
+
+// Etiketsiz gönderi: kendi aracımız ya da tutulan nakliyeci (docs/plans/ozel-tasima.md).
+// Takip beslemesi yok; teslim, imzalı nüshadan elle yazılıyor.
+const OWN_TRANSPORT_MODES = ["Own Vehicle", "Transport Company"];
+
+function is_own_transport(frm) {
+	return OWN_TRANSPORT_MODES.includes(frm.doc.shipping_transport_mode || "");
+}
+
+function own_transport_buttons(frm) {
+	["EN", "NL", "DE", "FR"].forEach((lang) => {
+		frm.add_custom_button(lang, () => print_pickup_note(frm, lang), __("Delivery Pickup Note"));
+	});
+	if (
+		frm.doc.docstatus === 1 &&
+		!frm.doc.custom_delivered_at &&
+		!frm.doc.custom_returned_to_sender
+	) {
+		frm.add_custom_button(__("Mark Delivered"), () => mark_delivered_dialog(frm)).addClass(
+			"btn-primary"
+		);
+	}
+}
+
+function print_pickup_note(frm, lang) {
+	const notes = (frm.doc.shipment_delivery_note || [])
+		.map((row) => row.delivery_note)
+		.filter(Boolean);
+	if (!notes.length) {
+		frappe.msgprint(__("No delivery note on this shipment."));
+		return;
+	}
+	const format = "Delivery Pickup Note " + lang;
+	// Tek irsaliye önizlemede açılır; birden çoğu tek PDF'te, tarayıcı açılır
+	// pencere engelleyicisi ikinci sekmeyi yutmasın diye.
+	const url =
+		notes.length === 1
+			? "/printview?" +
+			  $.param({ doctype: "Delivery Note", name: notes[0], format: format, no_letterhead: 1 })
+			: "/api/method/frappe.utils.print_format.download_multi_pdf?" +
+			  $.param({
+					doctype: "Delivery Note",
+					name: JSON.stringify(notes),
+					format: format,
+					no_letterhead: 1,
+			  });
+	window.open(frappe.urllib.get_full_url(url));
+}
+
+function mark_delivered_dialog(frm) {
+	const d = new frappe.ui.Dialog({
+		title: __("Mark Delivered"),
+		fields: [
+			{
+				fieldname: "delivered_at",
+				fieldtype: "Datetime",
+				label: __("Delivered At"),
+				reqd: 1,
+				default: frappe.datetime.now_datetime(),
+			},
+			{
+				fieldname: "received_by",
+				fieldtype: "Data",
+				label: __("Received By"),
+				reqd: 1,
+				description: __("Name of the person who signed the delivery note."),
+			},
+			{
+				fieldname: "proof",
+				fieldtype: "Attach",
+				label: __("Signed Delivery Note"),
+				description: __(
+					"Photo or scan of the copy the receiver signed. It is attached to the shipment and to its delivery notes."
+				),
+			},
+			{
+				fieldname: "remarks",
+				fieldtype: "Small Text",
+				label: __("Damage / Remarks"),
+			},
+		],
+		primary_action_label: __("Mark Delivered"),
+		primary_action(values) {
+			frappe.call({
+				method: "erpnext_shipping.erpnext_shipping.own_transport.mark_delivered",
+				args: {
+					shipment: frm.doc.name,
+					delivered_at: values.delivered_at,
+					received_by: values.received_by,
+					proof: values.proof || null,
+					remarks: values.remarks || null,
+				},
+				freeze: true,
+				callback(r) {
+					if (r.exc) return;
+					d.hide();
+					frappe.show_alert({ message: __("Marked as delivered."), indicator: "green" });
+					frm.reload_doc();
+				},
+			});
+		},
+	});
+	d.show();
 }

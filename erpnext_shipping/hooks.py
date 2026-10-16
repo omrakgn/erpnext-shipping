@@ -182,6 +182,8 @@ doc_events = {
 			"erpnext_shipping.erpnext_shipping.utils.validate_parcel_items",
 			"erpnext_shipping.erpnext_shipping.shipping.set_shipment_description",
 			"erpnext_shipping.erpnext_shipping.shipping.set_parcel_values",
+			# Etiketsiz gönderide (kendi aracımız, nakliyeci) taşıyıcı adını yaz.
+			"erpnext_shipping.erpnext_shipping.own_transport.set_own_transport_carrier",
 			# SLA Date + Status'ı güncel tut (taahhüt tarihi ya da pickup + carrier SLA).
 			"erpnext_shipping.erpnext_shipping.sla.set_sla_fields",
 			# "Returned to Us" işaretlendiği anı damgala.

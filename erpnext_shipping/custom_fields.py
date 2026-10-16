@@ -239,6 +239,44 @@ def get_custom_fields():
 				"description": _("Days from Pickup Date to delivery (carrier transit time)."),
 			},
 			{
+				# Etiketsiz gönderi: kendi aracımız ya da tutulan nakliyeci. Takip
+				# beslemesi yok, teslim "Mark Delivered" ile elle yazılıyor.
+				# docs/plans/ozel-tasima.md
+				"fieldname": "shipping_transport_mode",
+				"label": _("Transport Without Carrier"),
+				"fieldtype": "Select",
+				"options": "\nOwn Vehicle\nTransport Company",
+				"allow_on_submit": 1,
+				"in_standard_filter": 1,
+				"insert_after": "description_of_content",
+				"description": _(
+					"Leave empty when a carrier label is made. Own Vehicle: we deliver it ourselves. "
+					"Transport Company: a hired transport firm. Either way there is no label and no "
+					"tracking: print the Delivery Pickup Note for the driver and record the delivery "
+					"with Mark Delivered."
+				),
+			},
+			{
+				"fieldname": "shipping_received_by",
+				"label": _("Received By"),
+				"fieldtype": "Data",
+				"read_only": 1,
+				"allow_on_submit": 1,
+				"no_copy": 1,
+				"depends_on": "shipping_received_by",
+				"insert_after": "custom_transit_days",
+			},
+			{
+				"fieldname": "shipping_delivery_proof",
+				"label": _("Signed Delivery Note"),
+				"fieldtype": "Attach",
+				"read_only": 1,
+				"allow_on_submit": 1,
+				"no_copy": 1,
+				"depends_on": "shipping_delivery_proof",
+				"insert_after": "shipping_received_by",
+			},
+			{
 				"fieldname": "custom_tracking_details",
 				"label": _("Tracking Details (JSON)"),
 				"fieldtype": "Long Text",
