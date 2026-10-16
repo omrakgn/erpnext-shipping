@@ -2,6 +2,18 @@
 // For license information, please see license.txt
 
 frappe.listview_settings["Shipping Cost Entry"] = {
+	add_fields: ["matched", "is_correction", "weight_surcharge", "reweigh", "surcharge_amount"],
+
+	// Listede ve formun başlığında aynı durum. Önce "eşleşmedi" (ne olduğu bilinmeyen
+	// maliyet), sonra düzeltme, sonra itiraz adayı olabilecek ek ücretler.
+	get_indicator(doc) {
+		if (!doc.matched) return [__("Not Matched"), "red", "matched,=,0"];
+		if (doc.is_correction) return [__("Correction"), "blue", "is_correction,=,1"];
+		if (doc.weight_surcharge || doc.reweigh) return [__("Weight/Size Surcharge"), "orange", "weight_surcharge,=,1"];
+		if (flt(doc.surcharge_amount) > 0) return [__("Surcharge"), "yellow", "surcharge_amount,>,0"];
+		return [__("Matched"), "green", "matched,=,1"];
+	},
+
 	onload: function (listview) {
 		listview.page.add_inner_button(__("Import Invoice"), function () {
 			const d = new frappe.ui.Dialog({
@@ -13,7 +25,7 @@ frappe.listview_settings["Shipping Cost Entry"] = {
 						label: __("Invoice File"),
 						reqd: 1,
 						description: __(
-							"DPD detail (.xlsx), FedEx invoice (.xml), or a .zip containing many of them. Format is auto-detected."
+							"DPD detail (.xlsx), SendCloud invoice (.csv), FedEx invoice (.xml), or a .zip containing many of them. Format is auto-detected."
 						),
 					},
 				],

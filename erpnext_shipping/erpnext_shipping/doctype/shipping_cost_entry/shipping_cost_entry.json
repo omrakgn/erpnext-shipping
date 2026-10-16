@@ -6,40 +6,37 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "parcel_number",
-  "invoice_number",
-  "carrier",
-  "billed_via",
-  "sales_channel",
-  "scan_date",
-  "product_name",
-  "country",
-  "reference_1",
-  "column_break_main",
+  "overview_tab",
+  "summary_html",
+  "details_section",
   "total_net_amount",
   "currency",
   "vat_rate",
+  "column_break_main",
+  "carrier",
+  "billed_via",
+  "scan_date",
+  "column_break_ids",
+  "parcel_number",
+  "invoice_number",
+  "product_name",
+  "breakdown_section",
+  "breakdown_html",
+  "column_break_breakdown",
+  "surcharge_amount",
+  "weight_surcharge",
+  "reweigh",
   "is_correction",
-  "matched",
-  "match_method",
-  "shipment",
-  "delivery_note",
-  "purchase_invoice",
   "contents_section",
   "items",
   "contents_summary",
   "column_break_contents",
   "contents_source",
   "allocation_basis",
-  "receiver_section",
-  "receiver_name",
-  "receiver_street",
-  "receiver_zip",
-  "column_break_receiver",
-  "receiver_city",
-  "receiver_source",
-  "receiver_from_order",
+  "parcel_tab",
   "measurements_section",
+  "measure_html",
+  "invoiced_measurements_section",
   "invoicing_weight",
   "corrected_weight",
   "girth",
@@ -47,14 +44,97 @@
   "length",
   "width",
   "height",
-  "breakdown_section",
-  "surcharge_amount",
-  "weight_surcharge",
-  "reweigh",
-  "charge_breakdown",
-  "source_file"
+  "receiver_section",
+  "receiver_name",
+  "receiver_street",
+  "receiver_zip",
+  "column_break_receiver",
+  "receiver_city",
+  "country",
+  "receiver_source",
+  "receiver_from_order",
+  "links_tab",
+  "links_section",
+  "shipment",
+  "delivery_note",
+  "purchase_invoice",
+  "column_break_links",
+  "matched",
+  "match_method",
+  "reference_1",
+  "sales_channel",
+  "source_tab",
+  "source_section",
+  "source_file",
+  "charge_breakdown"
  ],
  "fields": [
+  {
+   "fieldname": "overview_tab",
+   "fieldtype": "Tab Break",
+   "label": "Overview"
+  },
+  {
+   "fieldname": "summary_html",
+   "fieldtype": "HTML",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_net_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Net Amount",
+   "options": "currency"
+  },
+  {
+   "default": "EUR",
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency",
+   "hidden": 1
+  },
+  {
+   "fieldname": "vat_rate",
+   "fieldtype": "Percent",
+   "label": "VAT Rate"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "DPD",
+   "description": "The carrier that actually moved the parcel, whoever billed it.",
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Carrier",
+   "in_list_view": 1
+  },
+  {
+   "description": "Who invoiced this line, and who a dispute goes to. SendCloud bills the parcels it carried on its own contract, whatever the carrier.",
+   "fieldname": "billed_via",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Billed By",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "scan_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Scan Date"
+  },
+  {
+   "fieldname": "column_break_ids",
+   "fieldtype": "Column Break"
+  },
   {
    "fieldname": "parcel_number",
    "fieldtype": "Data",
@@ -67,78 +147,54 @@
   {
    "fieldname": "invoice_number",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Invoice Number"
-  },
-  {
-   "default": "DPD",
-   "description": "The carrier that actually moved the parcel, whoever billed it.",
-   "fieldname": "carrier",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Carrier"
-  },
-  {
-   "description": "Who issued the invoice. A DPD parcel booked through SendCloud is carrier=DPD, billed_via=SendCloud.",
-   "fieldname": "billed_via",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Billed Via",
-   "read_only": 1
-  },
-  {
-   "description": "Sales channel the parcel came from, as reported by SendCloud (shopify_v2_importer, bolv3_importer, amazon_v2_importer, ...).",
-   "fieldname": "sales_channel",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Sales Channel",
-   "read_only": 1
-  },
-  {
-   "fieldname": "scan_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Scan Date"
   },
   {
    "fieldname": "product_name",
    "fieldtype": "Data",
    "in_standard_filter": 1,
-   "label": "Product / Service"
+   "label": "Carrier Service"
   },
   {
-   "fieldname": "country",
-   "fieldtype": "Data",
-   "label": "Country"
+   "fieldname": "breakdown_section",
+   "fieldtype": "Section Break",
+   "label": "What We Paid For"
   },
   {
-   "fieldname": "reference_1",
-   "fieldtype": "Data",
-   "label": "Reference"
+   "fieldname": "breakdown_html",
+   "fieldtype": "HTML",
+   "label": "Charges"
   },
   {
-   "fieldname": "column_break_main",
+   "fieldname": "column_break_breakdown",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "total_net_amount",
+   "fieldname": "surcharge_amount",
    "fieldtype": "Currency",
-   "in_list_view": 1,
-   "label": "Total Net Amount",
-   "options": "currency"
+   "label": "Surcharge Amount",
+   "options": "currency",
+   "read_only": 1,
+   "description": "Total of all surcharge components (everything except the base Product Net Amount)."
   },
   {
-   "default": "EUR",
-   "fieldname": "currency",
-   "fieldtype": "Data",
-   "label": "Currency"
+   "default": "0",
+   "fieldname": "weight_surcharge",
+   "fieldtype": "Check",
+   "label": "Weight/Size Surcharge",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set when an Oversized/Overweight or Heavy-Weight surcharge was billed — our declared weight/dims may be wrong."
   },
   {
-   "fieldname": "vat_rate",
-   "fieldtype": "Percent",
-   "label": "VAT Rate"
+   "default": "0",
+   "fieldname": "reweigh",
+   "fieldtype": "Check",
+   "label": "Re-weighed",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set when the carrier's Corrected Weight differs from the Invoicing Weight (parcel re-measured)."
   },
   {
    "default": "0",
@@ -147,45 +203,6 @@
    "in_standard_filter": 1,
    "label": "Is Correction",
    "description": "Set for credit / correction invoice lines (invoice starting with 4 or negative amount)."
-  },
-  {
-   "default": "0",
-   "fieldname": "matched",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Matched",
-   "description": "A Shipment was found for this parcel number."
-  },
-  {
-   "fieldname": "match_method",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Match Method",
-   "options": "\nTracking\nDN Tracking\nOrder Number\nManual",
-   "read_only": 1,
-   "description": "How the Shipment was matched: by tracking (parcel) number, by order number (po_no via Reference), or set manually."
-  },
-  {
-   "fieldname": "shipment",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Shipment",
-   "options": "Shipment"
-  },
-  {
-   "fieldname": "delivery_note",
-   "fieldtype": "Link",
-   "label": "Delivery Note",
-   "options": "Delivery Note"
-  },
-  {
-   "description": "The Purchase Invoice this line was billed on. Set once, so a re-import cannot invoice the same freight twice.",
-   "fieldname": "purchase_invoice",
-   "fieldtype": "Link",
-   "label": "Purchase Invoice",
-   "options": "Purchase Invoice",
-   "read_only": 1
   },
   {
    "fieldname": "contents_section",
@@ -205,7 +222,8 @@
    "fieldtype": "Data",
    "in_standard_filter": 1,
    "label": "Product List",
-   "read_only": 1
+   "read_only": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "column_break_contents",
@@ -227,56 +245,25 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
-   "fieldname": "receiver_section",
-   "fieldtype": "Section Break",
-   "label": "Receiver"
+   "fieldname": "parcel_tab",
+   "fieldtype": "Tab Break",
+   "label": "Parcel and Receiver"
   },
   {
-   "fieldname": "receiver_name",
-   "fieldtype": "Data",
-   "label": "Name"
-  },
-  {
-   "fieldname": "receiver_street",
-   "fieldtype": "Data",
-   "label": "Street + Home Number"
-  },
-  {
-   "fieldname": "receiver_zip",
-   "fieldtype": "Data",
-   "label": "Zip Code"
-  },
-  {
-   "fieldname": "column_break_receiver",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "receiver_city",
-   "fieldtype": "Data",
-   "label": "City"
-  },
-  {
-   "description": "Invoice: the carrier's invoice. Order: completed from the matched Shipment or Delivery Note, where the invoice has no receiver details.",
-   "fieldname": "receiver_source",
-   "fieldtype": "Select",
-   "label": "Receiver Details From",
-   "options": "\nInvoice\nInvoice + Order\nOrder",
-   "read_only": 1
-  },
-  {
-   "fieldname": "receiver_from_order",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Receiver Fields From Order",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
    "fieldname": "measurements_section",
    "fieldtype": "Section Break",
-   "label": "Measurements"
+   "label": "Weight and Size"
+  },
+  {
+   "fieldname": "measure_html",
+   "fieldtype": "HTML",
+   "label": "Weight and Size Comparison"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "invoiced_measurements_section",
+   "fieldtype": "Section Break",
+   "label": "As Invoiced"
   },
   {
    "fieldname": "invoicing_weight",
@@ -313,37 +300,133 @@
    "label": "Height (cm)"
   },
   {
-   "collapsible": 1,
-   "fieldname": "breakdown_section",
+   "fieldname": "receiver_section",
    "fieldtype": "Section Break",
-   "label": "Charge Breakdown"
+   "label": "Receiver"
   },
   {
-   "fieldname": "surcharge_amount",
-   "fieldtype": "Currency",
-   "label": "Surcharge Amount",
-   "options": "currency",
-   "read_only": 1,
-   "in_list_view": 1,
-   "description": "Total of all surcharge components (everything except the base Product Net Amount)."
+   "fieldname": "receiver_name",
+   "fieldtype": "Data",
+   "label": "Name"
+  },
+  {
+   "fieldname": "receiver_street",
+   "fieldtype": "Data",
+   "label": "Street + Home Number"
+  },
+  {
+   "fieldname": "receiver_zip",
+   "fieldtype": "Data",
+   "label": "Zip Code"
+  },
+  {
+   "fieldname": "column_break_receiver",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "receiver_city",
+   "fieldtype": "Data",
+   "label": "City"
+  },
+  {
+   "fieldname": "country",
+   "fieldtype": "Data",
+   "label": "Country"
+  },
+  {
+   "description": "Invoice: the carrier's invoice. Order: completed from the matched Shipment or Delivery Note, where the invoice has no receiver details.",
+   "fieldname": "receiver_source",
+   "fieldtype": "Select",
+   "label": "Receiver Details From",
+   "options": "\nInvoice\nInvoice + Order\nOrder",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receiver_from_order",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Receiver Fields From Order",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "links_tab",
+   "fieldtype": "Tab Break",
+   "label": "Matching"
+  },
+  {
+   "fieldname": "links_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "shipment",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Shipment",
+   "options": "Shipment"
+  },
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "label": "Delivery Note",
+   "options": "Delivery Note"
+  },
+  {
+   "description": "The Purchase Invoice this line was billed on. Set once, so a re-import cannot invoice the same freight twice.",
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Purchase Invoice",
+   "options": "Purchase Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_links",
+   "fieldtype": "Column Break"
   },
   {
    "default": "0",
-   "fieldname": "weight_surcharge",
+   "fieldname": "matched",
    "fieldtype": "Check",
-   "label": "Weight/Size Surcharge",
-   "read_only": 1,
    "in_standard_filter": 1,
-   "description": "Set when an Oversized/Overweight or Heavy-Weight surcharge was billed — our declared weight/dims may be wrong."
+   "label": "Matched",
+   "description": "A Shipment was found for this parcel number."
   },
   {
-   "default": "0",
-   "fieldname": "reweigh",
-   "fieldtype": "Check",
-   "label": "Re-weighed",
-   "read_only": 1,
+   "fieldname": "match_method",
+   "fieldtype": "Select",
    "in_standard_filter": 1,
-   "description": "Set when the carrier's Corrected Weight differs from the Invoicing Weight (parcel re-measured)."
+   "label": "Match Method",
+   "options": "\nTracking\nDN Tracking\nOrder Number\nManual",
+   "read_only": 1,
+   "description": "How the Shipment was matched: by tracking (parcel) number, by order number (po_no via Reference), or set manually."
+  },
+  {
+   "fieldname": "reference_1",
+   "fieldtype": "Data",
+   "label": "Reference on Invoice"
+  },
+  {
+   "description": "Sales channel the parcel came from, as reported by SendCloud (shopify_v2_importer, bolv3_importer, amazon_v2_importer, ...).",
+   "fieldname": "sales_channel",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Sales Channel",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_tab",
+   "fieldtype": "Tab Break",
+   "label": "Source"
+  },
+  {
+   "fieldname": "source_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "label": "Source File",
+   "read_only": 1
   },
   {
    "fieldname": "charge_breakdown",
@@ -351,17 +434,11 @@
    "label": "Charge Breakdown (JSON)",
    "read_only": 1,
    "description": "Per-surcharge component breakdown from the DPD invoice."
-  },
-  {
-   "fieldname": "source_file",
-   "fieldtype": "Data",
-   "label": "Source File",
-   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-16 15:00:00.000000",
+ "modified": "2026-10-16 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping Cost Entry",
