@@ -783,10 +783,65 @@ def get_shipment_form_defaults():
 		"default_pickup_from": _time_str(_get_shipment_setting("default_pickup_from", "15:00:00")),
 		"default_pickup_to": _time_str(_get_shipment_setting("default_pickup_to", "17:00:00")),
 		"default_pickup_address": _valid("Address", _get_shipment_setting("default_pickup_address")),
+		# ERPNext'in yeni gönderiye kendiliğinden koyduğu adresler: şirketin birincil
+		# (fatura) adresi. Form yalnız bunları varsayılanla değiştirir; elle seçilen
+		# başka bir depo adresine dokunmaz.
+		"company_billing_addresses": company_billing_addresses(),
 		"default_pickup_contact_person": _valid(
 			"User", _get_shipment_setting("default_pickup_contact_person")
 		),
 	}
+
+
+def company_billing_addresses():
+	"""Our own addresses marked preferred billing: what ERPNext puts on a new shipment."""
+	return frappe.get_all(
+		"Address",
+		filters={"is_your_company_address": 1, "is_primary_address": 1, "disabled": 0},
+		pluck="name",
+	)
+
+
+def apply_default_pickup_address(doc, method=None):
+	"""Shipment before_insert: ship from the default pickup address, not the billing one.
+
+	ERPNext fills a new shipment's pickup with the company's preferred billing
+	address, from the delivery note's mapping and again from its own form
+	script. The form replaces it with Shipment Settings' default pickup address
+	on two timers, but when ERPNext's lookup answers later than the timers the
+	billing address wins and the shipment is saved, labelled and printed
+	(Delivery Pickup Note "Pick up at") from it (2026-10-17).
+
+	Only the automatic choice is replaced: an empty pickup or a company billing
+	address. A different address picked on purpose, another warehouse, stays.
+	Runs once, on insert: a draft changed afterwards keeps what was chosen.
+	"""
+	if (doc.get("pickup_from_type") or "Company") != "Company":
+		return
+	varsayilan = _get_shipment_setting("default_pickup_address")
+	if not varsayilan or doc.get("pickup_address_name") == varsayilan:
+		return
+	if not frappe.db.exists("Address", varsayilan):
+		return
+	mevcut = doc.get("pickup_address_name")
+	if mevcut and mevcut not in company_billing_addresses():
+		return
+	# multichannel_core ambalaj toplamayı bilerek iade adresinden kuruyor; o adres
+	# fatura adresiyle aynı olsa bile seçilmiş sayılır. Single düz SQL'le okunuyor.
+	if mevcut and mevcut == _return_address():
+		return
+	from frappe.contacts.doctype.address.address import get_address_display
+
+	doc.pickup_address_name = varsayilan
+	doc.pickup_address = get_address_display(varsayilan)
+
+
+def _return_address():
+	"""multichannel_core Return Settings' return address, or None when that app is absent."""
+	satir = frappe.db.sql(
+		"select value from `tabSingles` where doctype = 'Return Settings' and field = 'return_address'"
+	)
+	return satir[0][0] if satir else None
 
 
 def _content_description_from_dns(dn_names):

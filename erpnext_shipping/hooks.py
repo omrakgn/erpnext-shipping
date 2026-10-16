@@ -178,6 +178,8 @@ override_doctype_dashboards = {
 
 doc_events = {
 	"Shipment": {
+		# Yeni gönderi şirketin fatura adresinden değil varsayılan alış adresinden çıkar.
+		"before_insert": "erpnext_shipping.erpnext_shipping.shipping.apply_default_pickup_address",
 		"validate": [
 			# Parçalar boşsa önce doldur ki alttaki parça doğrulamaları çalışabilsin.
 			"erpnext_shipping.erpnext_shipping.shipping.auto_populate_parcels",

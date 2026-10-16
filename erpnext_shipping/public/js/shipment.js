@@ -9,6 +9,10 @@ frappe.ui.form.on("Shipment", {
 			method: "erpnext_shipping.erpnext_shipping.shipping.get_shipment_form_defaults",
 			callback: function (r) {
 				const s = r.message || {};
+				// Zamanlayıcılardan sonra gelen ERPNext dolduruşu için: ilk 15 saniyede
+				// alış adresi fatura adresine dönerse pickup_address_name olayı düzeltir.
+				frm.__pickup_defaults = s;
+				frm.__pickup_guard_until = Date.now() + 15000;
 				if (s.set_pickup_date_today && !frm.doc.pickup_date) {
 					frm.set_value("pickup_date", frappe.datetime.get_today());
 				}
@@ -1282,3 +1286,47 @@ function open_carrier_page(frm) {
 		frappe.msgprint({ message: msg, title: __("Incomplete Shipment") });
 	}
 }
+
+// Kart, kullandığı alanlardan biri değişince yeniden çizilir (2026-10-17: yeni gönderide
+// varsayılan alış adresi yazıldıktan sonra kart fatura adresini göstermeye devam ediyordu).
+// Art arda gelen değişiklikler tek çizime toplanır.
+const SHIPMENT_VIEW_TRIGGERS = [
+	"pickup_address",
+	"delivery_address",
+	"delivery_contact",
+	"delivery_address_name",
+	"delivery_contact_name",
+	"pickup_date",
+	"total_weight",
+	"description_of_content",
+	"shipping_transport_mode",
+	"shipping_driver_note",
+];
+
+function schedule_shipment_view(frm) {
+	clearTimeout(frm.__shipment_view_timer);
+	frm.__shipment_view_timer = setTimeout(() => render_shipment_view(frm), 150);
+}
+
+const shipment_view_events = {};
+SHIPMENT_VIEW_TRIGGERS.forEach((fieldname) => {
+	shipment_view_events[fieldname] = (frm) => schedule_shipment_view(frm);
+});
+shipment_view_events.pickup_address_name = function (frm) {
+	const guard = frm.is_new() && Date.now() < (frm.__pickup_guard_until || 0);
+	const address = erpnext_shipping.shipment_view.pickup_override(
+		frm.doc.pickup_address_name,
+		frm.__pickup_defaults,
+		guard
+	);
+	if (address) frm.set_value("pickup_address_name", address);
+	schedule_shipment_view(frm);
+};
+frappe.ui.form.on("Shipment", shipment_view_events);
+
+frappe.ui.form.on("Shipment Parcel", {
+	weight: (frm) => schedule_shipment_view(frm),
+	count: (frm) => schedule_shipment_view(frm),
+	shipment_parcel_add: (frm) => schedule_shipment_view(frm),
+	shipment_parcel_remove: (frm) => schedule_shipment_view(frm),
+});

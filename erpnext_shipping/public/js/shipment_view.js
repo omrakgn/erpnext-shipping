@@ -34,6 +34,18 @@ frappe.provide("erpnext_shipping.shipment_view");
 	ns.has_label = (doc) => Boolean(doc.shipment_id || doc.awb_number);
 	ns.expected = (doc) => doc.custom_sla_date || doc.custom_promised_delivery_date || null;
 
+	// Yeni gönderide ERPNext alış adresine şirketin fatura adresini koyuyor, bazen
+	// varsayılanı yazan zamanlayıcılardan sonra. O adres gelince varsayılan alış adresi
+	// döner; elle seçilen başka bir adres kalır. Sunucu da kayıtta aynısını yapıyor
+	// (shipping.py::apply_default_pickup_address). Dönen: yazılacak adres ya da null.
+	ns.pickup_override = function (value, defaults, guard_active) {
+		const d = defaults || {};
+		if (!guard_active || !d.default_pickup_address) return null;
+		if (value === d.default_pickup_address) return null;
+		if (value && !(d.company_billing_addresses || []).includes(value)) return null;
+		return d.default_pickup_address;
+	};
+
 	// Onayı bugün de durduran eksikler; yeni kural değil, yalnız önceden söylenmesi.
 	ns.missing = function (doc) {
 		const out = [];
