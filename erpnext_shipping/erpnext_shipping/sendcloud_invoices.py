@@ -47,6 +47,9 @@ from erpnext_shipping.erpnext_shipping.shipping_cost import (
 API = "https://panel.sendcloud.sc/api"
 SETTINGS = "Shipping Cost Settings"
 DEFAULT_SINCE = "2026-10-01"
+# A normal day brings one or two invoices. More at once means the start date is
+# wrong (2026-10-16: the whole history since 2022 came in); nothing is written.
+MAX_INVOICES_PER_RUN = 10
 TIMEOUT = 30
 MAX_TRIES = 4
 TYPE_FREIGHT = "shipment"
@@ -103,6 +106,21 @@ def _paged(path, auth, params):
 		sayfa = None
 
 
+def sync_from():
+	"""Start date of the fetch: the setting, else DEFAULT_SINCE.
+
+	Read raw from tabSingles. `get_single_value` casts an empty Date field to
+	0001-01-01, which is truthy, so `... or DEFAULT_SINCE` never applied and the
+	first run fetched every invoice since 2022 (2026-10-16).
+	"""
+	deger = frappe.db.sql(
+		"select value from `tabSingles` where doctype = %s and field = %s",
+		(SETTINGS, "sendcloud_invoice_sync_from"),
+	)
+	deger = deger[0][0] if deger else None
+	return getdate(deger or DEFAULT_SINCE)
+
+
 def new_invoices(auth, since):
 	"""Invoices from `since` on that are not in ERPNext yet, oldest first.
 
@@ -138,7 +156,14 @@ def invoice_items(auth, invoice_id):
 
 
 def fetch_parcel(auth, parcel_id):
-	r = _get(f"{API}/v2/parcels/{parcel_id}", auth)
+	"""{} when SendCloud no longer has the parcel: old parcels answer 404. The cost
+	entry is still written, from the invoice line alone."""
+	try:
+		r = _get(f"{API}/v2/parcels/{parcel_id}", auth)
+	except requests.HTTPError as e:
+		if e.response is not None and e.response.status_code == 404:
+			return {}
+		raise
 	return (r.json() or {}).get("parcel") or {}
 
 
@@ -288,7 +313,7 @@ def sync_sendcloud_invoices(manual=False, user=None):
 	"""Scheduler (05:27) and the list's button: fetch the SendCloud invoices ERPNext lacks."""
 	if not manual and frappe.db.get_single_value(SETTINGS, "pause_sendcloud_invoice_sync"):
 		return None
-	since = frappe.db.get_single_value(SETTINGS, "sendcloud_invoice_sync_from") or DEFAULT_SINCE
+	since = sync_from()
 
 	stats = _new_stats()
 	stats["invoices"], stats["no_parcel"] = [], []
@@ -300,6 +325,16 @@ def sync_sendcloud_invoices(manual=False, user=None):
 		frappe.db.rollback()
 		frappe.log_error(title="SendCloud invoice fetch failed", message=frappe.get_traceback())
 		return _finish(stats, _("SendCloud could not be read: {0}").format(e), user)
+
+	if len(invoices) > MAX_INVOICES_PER_RUN:
+		return _finish(
+			stats,
+			_(
+				"{0} SendCloud invoices from {1} on are missing in ERPNext. More than {2} at once is not"
+				" fetched: check Fetch Invoices From. Nothing was written."
+			).format(len(invoices), since, MAX_INVOICES_PER_RUN),
+			user,
+		)
 
 	ctx = build_match_context() if invoices else None
 	parcel_cache = {}

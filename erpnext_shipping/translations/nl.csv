@@ -112,3 +112,6 @@
 "Invoices: {0}. Created: {1}, updated: {2}. Unmatched parcels: {3}.","Facturen: {0}. Aangemaakt: {1}, bijgewerkt: {2}. Niet gekoppelde pakketten: {3}."
 "Lines without a parcel (no cost entry): {0}.","Regels zonder pakket (geen kostenregel): {0}."
 "SendCloud could not be read: {0}","SendCloud kon niet worden gelezen: {0}"
+"Errors: {0}.","Fouten: {0}."
+"Started in the background.","Op de achtergrond gestart."
+"{0} SendCloud invoices from {1} on are missing in ERPNext. More than {2} at once is not fetched: check Fetch Invoices From. Nothing was written.","{0} SendCloud-facturen vanaf {1} ontbreken in ERPNext. Meer dan {2} tegelijk wordt niet opgehaald: controleer Facturen ophalen vanaf. Er is niets geschreven."

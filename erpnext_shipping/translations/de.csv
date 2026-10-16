@@ -131,3 +131,6 @@ Pickup contact phone must consist of a '+' followed by one or more digits.,Telef
 "Invoices: {0}. Created: {1}, updated: {2}. Unmatched parcels: {3}.","Rechnungen: {0}. Angelegt: {1}, aktualisiert: {2}. Nicht zugeordnete Pakete: {3}."
 "Lines without a parcel (no cost entry): {0}.","Zeilen ohne Paket (kein Kostenposten): {0}."
 "SendCloud could not be read: {0}","SendCloud konnte nicht gelesen werden: {0}"
+"Errors: {0}.","Fehler: {0}."
+"Started in the background.","Im Hintergrund gestartet."
+"{0} SendCloud invoices from {1} on are missing in ERPNext. More than {2} at once is not fetched: check Fetch Invoices From. Nothing was written.","{0} SendCloud-Rechnungen ab {1} fehlen in ERPNext. Mehr als {2} auf einmal werden nicht abgerufen: Rechnungen abrufen ab prüfen. Es wurde nichts geschrieben."
