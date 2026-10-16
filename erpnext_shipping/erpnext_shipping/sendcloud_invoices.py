@@ -50,6 +50,7 @@ DEFAULT_SINCE = "2026-10-01"
 TIMEOUT = 30
 MAX_TRIES = 4
 TYPE_FREIGHT = "shipment"
+CATEGORY_SUBSCRIPTION = "subscription"
 SURCHARGE_TYPES = ("surcharge", "surcharge_refund")
 DIMENSIONAL_SUBTYPES = ("dimensional",)
 CARRIER_NAMES = {
@@ -118,6 +119,10 @@ def new_invoices(auth, since):
 			if getdate(str(inv.get("created_at"))[:10]) < since:
 				continue
 			hepsi_eski = False
+			# Aylık ücret faturasında koli yok, maliyet kaydı da olmaz; atlanmasa her sabah
+			# "yeni" sayılıp yeniden okunurdu.
+			if inv.get("category") == CATEGORY_SUBSCRIPTION:
+				continue
 			if not frappe.db.exists("Shipping Cost Entry", {"invoice_number": inv.get("reference")}):
 				sonuc.append(inv)
 		if hepsi_eski:
