@@ -44,6 +44,13 @@
   "length",
   "width",
   "height",
+  "label_measurements_section",
+  "sendcloud_weight",
+  "sendcloud_length",
+  "column_break_label",
+  "sendcloud_width",
+  "sendcloud_height",
+  "sendcloud_parcel_id",
   "receiver_section",
   "receiver_name",
   "receiver_street",
@@ -63,6 +70,8 @@
   "match_method",
   "reference_1",
   "sales_channel",
+  "contract_id",
+  "contract_type",
   "source_tab",
   "source_section",
   "source_file",
@@ -300,6 +309,47 @@
    "label": "Height (cm)"
   },
   {
+   "collapsible": 1,
+   "fieldname": "label_measurements_section",
+   "fieldtype": "Section Break",
+   "label": "On the SendCloud Label"
+  },
+  {
+   "fieldname": "sendcloud_weight",
+   "fieldtype": "Float",
+   "label": "Label Weight (kg)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sendcloud_length",
+   "fieldtype": "Float",
+   "label": "Label Length (cm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_label",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sendcloud_width",
+   "fieldtype": "Float",
+   "label": "Label Width (cm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sendcloud_height",
+   "fieldtype": "Float",
+   "label": "Label Height (cm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sendcloud_parcel_id",
+   "fieldtype": "Data",
+   "label": "SendCloud Parcel ID",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
    "fieldname": "receiver_section",
    "fieldtype": "Section Break",
    "label": "Receiver"
@@ -414,6 +464,21 @@
    "read_only": 1
   },
   {
+   "fieldname": "contract_id",
+   "fieldtype": "Data",
+   "label": "SendCloud Contract",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "description": "broker: SendCloud's own contract; SendCloud bills the freight and a dispute goes to SendCloud. direct: our own contract with the carrier.",
+   "fieldname": "contract_type",
+   "fieldtype": "Data",
+   "label": "Contract Type",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
    "fieldname": "source_tab",
    "fieldtype": "Tab Break",
    "label": "Source"
@@ -438,7 +503,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-16 17:00:00.000000",
+ "modified": "2026-10-16 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping Cost Entry",

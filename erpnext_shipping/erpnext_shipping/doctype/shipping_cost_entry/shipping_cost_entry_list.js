@@ -76,6 +76,15 @@ frappe.listview_settings["Shipping Cost Entry"] = {
 			d.show();
 		});
 
+		listview.page.add_inner_button(__("Fetch SendCloud Invoices"), function () {
+			frappe.call({
+				method: "erpnext_shipping.erpnext_shipping.sendcloud_invoices.fetch_now",
+				callback: function (r) {
+					if (r.message) frappe.show_alert({ message: r.message, indicator: "blue" }, 8);
+				},
+			});
+		});
+
 		listview.page.add_inner_button(__("Re-match Unmatched"), function () {
 			frappe.call({
 				method: "erpnext_shipping.erpnext_shipping.shipping_cost.rematch_unmatched",

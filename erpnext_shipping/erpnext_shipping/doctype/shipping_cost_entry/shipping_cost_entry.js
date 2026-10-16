@@ -70,8 +70,15 @@ frappe.provide("erpnext_shipping.cost_entry");
 		if (flt(doc.surcharge_amount)) chips.push(pill(__("Surcharges {0}", [money(doc, doc.surcharge_amount)]), "orange"));
 		if (doc.weight_surcharge) chips.push(pill(__("Weight/size surcharge"), "orange"));
 		if (doc.reweigh) chips.push(pill(__("Re-weighed"), "orange"));
-		const excess = ns.weight_excess(ns.declared_weight(doc), ns.invoiced_weight(doc));
-		if (excess && excess.flagged) chips.push(pill(__("Billed {0} over declared", [kg(excess.diff)]), "red"));
+		const base = ns.baseline(doc);
+		const excess = base && ns.weight_excess(base.weight, ns.invoiced_weight(doc));
+		if (excess && excess.flagged) {
+			const text =
+				base.source === "label"
+					? __("Billed {0} over the label weight", [kg(excess.diff)])
+					: __("Billed {0} over declared", [kg(excess.diff)]);
+			chips.push(pill(text, "red"));
+		}
 		if ((doc.receiver_source || "").includes("Order")) chips.push(pill(__("Receiver completed from order"), "gray"));
 
 		return `<div class="sce-summary">
@@ -109,7 +116,22 @@ frappe.provide("erpnext_shipping.cost_entry");
 		</table></div>`;
 	};
 
+	// Etikette yazan ağırlık, taşıyıcıya bizim beyan ettiğimizdir: itirazın kanıtı.
+	// Yoksa ürünlerin koli şablonları.
+	ns.label_weight = function (doc) {
+		return flt(doc.sendcloud_weight) > 0 ? flt(doc.sendcloud_weight) : null;
+	};
+
+	ns.baseline = function (doc) {
+		const label = ns.label_weight(doc);
+		if (label) return { weight: label, source: "label" };
+		const declared = ns.declared_weight(doc);
+		return declared != null ? { weight: declared, source: "products" } : null;
+	};
+
 	ns.measure_note = function (doc, declared) {
+		if (ns.label_weight(doc))
+			return __("Difference: invoiced against the weight on the SendCloud label, which is what we declared to the carrier.");
 		if (declared != null) return __("Declared: each product's parcel template, else its own weight, times the quantity in Contents.");
 		if (doc.contents_source === "Shipment (all parcels)")
 			return __("Declared weight is not compared: this parcel cannot be told apart from the rest of its shipment.");
@@ -117,12 +139,23 @@ frappe.provide("erpnext_shipping.cost_entry");
 		return __("Declared weight is not compared: the parcel's products are unknown.");
 	};
 
+	const dims = (l, w, h, girth) => {
+		if (!(flt(l) && flt(w) && flt(h))) return null;
+		return (
+			__("{0} x {1} x {2} cm", [flt(l), flt(w), flt(h)]) + (flt(girth) ? " " + __("(girth {0} cm)", [flt(girth)]) : "")
+		);
+	};
+
 	ns.measure_html = function (doc) {
 		const declared = ns.declared_weight(doc);
+		const label = ns.label_weight(doc);
 		const invoiced = ns.invoiced_weight(doc);
-		const excess = ns.weight_excess(declared, invoiced);
+		const base = ns.baseline(doc);
+		const excess = base && ns.weight_excess(base.weight, invoiced);
+		const notOnInvoice = muted(__("not on the invoice"));
+		const notFromSendcloud = muted(__("no SendCloud label"));
 
-		let invoicedCell = invoiced > 0 ? esc(kg(invoiced)) : muted(__("not on the invoice"));
+		let invoicedCell = invoiced > 0 ? esc(kg(invoiced)) : notOnInvoice;
 		if (flt(doc.corrected_weight) > 0 && flt(doc.invoicing_weight) > 0 && flt(doc.corrected_weight) !== flt(doc.invoicing_weight)) {
 			invoicedCell += `<div class="small">${muted(__("(re-weighed, first {0})", [kg(doc.invoicing_weight)]))}</div>`;
 		}
@@ -131,24 +164,21 @@ frappe.provide("erpnext_shipping.cost_entry");
 			const text = (excess.diff > 0 ? "+" : "") + kg(excess.diff);
 			diffCell = excess.flagged ? pill(text, "red") : esc(text);
 		}
-		const size =
-			flt(doc.length) && flt(doc.width) && flt(doc.height)
-				? esc(
-					  __("{0} x {1} x {2} cm", [flt(doc.length), flt(doc.width), flt(doc.height)]) +
-						  (flt(doc.girth) ? " " + __("(girth {0} cm)", [flt(doc.girth)]) : "")
-				  )
-				: muted(__("not on the invoice"));
+		const labelDims = dims(doc.sendcloud_length, doc.sendcloud_width, doc.sendcloud_height);
+		const invoicedDims = dims(doc.length, doc.width, doc.height, doc.girth);
 
 		return `<div class="sce-scroll"><table class="table table-sm sce-table">
-			<thead><tr><th></th><th>${esc(__("Declared"))}</th><th>${esc(__("Invoiced"))}</th><th>${esc(__("Difference"))}</th></tr></thead>
+			<thead><tr><th></th><th>${esc(__("Products"))}</th><th>${esc(__("SendCloud Label"))}</th><th>${esc(__("Invoiced"))}</th><th>${esc(__("Difference"))}</th></tr></thead>
 			<tbody>
 				<tr><td>${esc(__("Weight"))}</td>
 					<td class="sce-num">${declared != null ? esc(kg(declared)) : muted(__("unknown"))}</td>
+					<td class="sce-num">${label ? esc(kg(label)) : notFromSendcloud}</td>
 					<td class="sce-figure">${invoicedCell}</td>
 					<td class="sce-num">${diffCell}</td></tr>
 				<tr><td>${esc(__("Dimensions"))}</td>
 					<td>${muted(__("unknown"))}</td>
-					<td class="sce-figure">${size}</td>
+					<td class="sce-figure">${labelDims ? esc(labelDims) : notFromSendcloud}</td>
+					<td class="sce-figure">${invoicedDims ? esc(invoicedDims) : notOnInvoice}</td>
 					<td></td></tr>
 			</tbody>
 		</table></div>

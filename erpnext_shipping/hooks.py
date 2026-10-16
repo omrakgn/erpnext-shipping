@@ -138,6 +138,11 @@ scheduler_events = {
 		# SLA Date/Status güncelle; risk/aşım durumunda iç ekibe bildir.
 		"erpnext_shipping.erpnext_shipping.sla.flag_and_notify_sla",
 	],
+	"cron": {
+		# SendCloud faturalarını API'den çek (elle CSV içe aktarmanın yerine). 05:27:
+		# Bol'un */5, */15, */30 ve saatlik işleriyle aynı dakikaya düşmüyor.
+		"27 5 * * *": ["erpnext_shipping.erpnext_shipping.sendcloud_invoices.sync_sendcloud_invoices"],
+	},
 }
 
 # Testing

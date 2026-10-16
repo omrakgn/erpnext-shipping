@@ -505,6 +505,33 @@ def _new_stats():
 # Alıcı alanları. Faturada olmayan, eşleşen siparişten tamamlanıyor (fill_receiver_from_order).
 RECEIVER_FIELDS = ("receiver_name", "receiver_street", "receiver_zip", "receiver_city")
 
+# SendCloud'un koli kaydından gelenler (sendcloud_invoices.parcel_fields). Bir kolinin
+# her maliyet satırı taşır: SendCloud'un koli başı ücreti de, DPD'nin navlunu da.
+SENDCLOUD_PARCEL_FIELDS = (
+	"sendcloud_parcel_id",
+	"sendcloud_weight",
+	"sendcloud_length",
+	"sendcloud_width",
+	"sendcloud_height",
+	"contract_id",
+	"contract_type",
+)
+
+
+def _known_sendcloud_parcel(parcel_number) -> dict:
+	"""SendCloud data another entry of the same parcel already carries, if any."""
+	pn = _norm_parcel(parcel_number)
+	if not pn or not frappe.db.has_column("Shipping Cost Entry", "sendcloud_parcel_id"):
+		return {}
+	kisa = pn.lstrip("0") or pn
+	satir = frappe.db.sql(
+		f"""select {", ".join(SENDCLOUD_PARCEL_FIELDS)} from `tabShipping Cost Entry`
+		where parcel_number in (%s, %s) and ifnull(sendcloud_parcel_id, '') != '' limit 1""",
+		(pn, kisa),
+		as_dict=True,
+	)
+	return dict(satir[0]) if satir else {}
+
 
 def _order_receiver(shipment, delivery_note) -> dict:
 	"""Name and address the order was shipped to.
@@ -859,6 +886,10 @@ def _upsert_cost_entry(values, ctx, stats, pdf=None):
 	for f in RECEIVER_FIELDS:
 		values.setdefault(f, "")
 	values["receiver_from_order"] = ""
+	# Kolinin SendCloud bilgisi başka bir satırla geldiyse (SendCloud'un koli başı
+	# ücreti), taşıyıcının navlun satırı da taşısın.
+	if not values.get("sendcloud_parcel_id"):
+		values.update(_known_sendcloud_parcel(parcel))
 	values["shipment"] = shipment
 	values["delivery_note"] = delivery_note
 	values["match_method"] = MATCH_METHOD_LABELS.get(status)

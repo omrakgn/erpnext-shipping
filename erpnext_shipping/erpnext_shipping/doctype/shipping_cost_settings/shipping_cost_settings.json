@@ -25,7 +25,13 @@
   "carrier_accounts_section",
   "carrier_accounts_info",
   "carrier_accounts",
-  "unmapped_carrier_action"
+  "unmapped_carrier_action",
+  "sendcloud_invoices_section",
+  "pause_sendcloud_invoice_sync",
+  "sendcloud_invoice_sync_from",
+  "column_break_sendcloud_invoices",
+  "sendcloud_last_sync",
+  "sendcloud_last_sync_result"
  ],
  "fields": [
   {
@@ -172,11 +178,45 @@
    "fieldtype": "Select",
    "label": "Unmapped Carrier",
    "options": "Stop and report\nSkip"
+  },
+  {
+   "fieldname": "sendcloud_invoices_section",
+   "fieldtype": "Section Break",
+   "label": "SendCloud Invoices"
+  },
+  {
+   "default": "0",
+   "description": "SendCloud invoices are fetched every morning at 05:27 and become cost entries, as if their CSV had been imported. Tick to stop that; the list's button still works.",
+   "fieldname": "pause_sendcloud_invoice_sync",
+   "fieldtype": "Check",
+   "label": "Pause Daily Fetch"
+  },
+  {
+   "description": "Only invoices from this date on are fetched. Older ones were imported by hand. Empty: 2026-10-01.",
+   "fieldname": "sendcloud_invoice_sync_from",
+   "fieldtype": "Date",
+   "label": "Fetch Invoices From"
+  },
+  {
+   "fieldname": "column_break_sendcloud_invoices",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sendcloud_last_sync",
+   "fieldtype": "Datetime",
+   "label": "Last Fetch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sendcloud_last_sync_result",
+   "fieldtype": "Small Text",
+   "label": "Last Result",
+   "read_only": 1
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-10 00:00:00.000000",
+ "modified": "2026-10-16 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping Cost Settings",
