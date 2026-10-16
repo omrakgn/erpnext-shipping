@@ -108,7 +108,6 @@ Pickup contact phone must consist of a '+' followed by one or more digits.,Telef
 "DPD detail (.xlsx), SendCloud invoice (.csv), FedEx invoice (.xml), or a .zip containing many of them. Format is auto-detected.","DPD-Detail (.xlsx), SendCloud-Rechnung (.csv), FedEx-Rechnung (.xml) oder eine .zip mit mehreren. Das Format wird automatisch erkannt."
 "Billed {0} over the label weight","{0} mehr abgerechnet als das Etikettengewicht"
 "Difference: invoiced against the weight on the SendCloud label, which is what we declared to the carrier.","Differenz: abgerechnet gegenüber dem Gewicht auf dem SendCloud-Etikett, das wir dem Versanddienst angegeben haben."
-"no SendCloud label","kein SendCloud-Etikett"
 "SendCloud Label","SendCloud-Etikett"
 "On the SendCloud Label","Auf dem SendCloud-Etikett"
 "Label Weight (kg)","Etikettengewicht (kg)"

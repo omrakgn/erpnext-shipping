@@ -89,7 +89,6 @@
 "DPD detail (.xlsx), SendCloud invoice (.csv), FedEx invoice (.xml), or a .zip containing many of them. Format is auto-detected.","DPD-detail (.xlsx), SendCloud-factuur (.csv), FedEx-factuur (.xml), of een .zip met meerdere. Het formaat wordt automatisch herkend."
 "Billed {0} over the label weight","{0} meer gefactureerd dan het labelgewicht"
 "Difference: invoiced against the weight on the SendCloud label, which is what we declared to the carrier.","Verschil: gefactureerd tegenover het gewicht op het SendCloud-label, wat we aan de vervoerder opgaven."
-"no SendCloud label","geen SendCloud-label"
 "SendCloud Label","SendCloud-label"
 "On the SendCloud Label","Op het SendCloud-label"
 "Label Weight (kg)","Labelgewicht (kg)"

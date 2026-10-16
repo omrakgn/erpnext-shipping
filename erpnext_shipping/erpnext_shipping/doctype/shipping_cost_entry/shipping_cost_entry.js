@@ -153,7 +153,6 @@ frappe.provide("erpnext_shipping.cost_entry");
 		const base = ns.baseline(doc);
 		const excess = base && ns.weight_excess(base.weight, invoiced);
 		const notOnInvoice = muted(__("not on the invoice"));
-		const notFromSendcloud = muted(__("no SendCloud label"));
 
 		let invoicedCell = invoiced > 0 ? esc(kg(invoiced)) : notOnInvoice;
 		if (flt(doc.corrected_weight) > 0 && flt(doc.invoicing_weight) > 0 && flt(doc.corrected_weight) !== flt(doc.invoicing_weight)) {
@@ -165,19 +164,23 @@ frappe.provide("erpnext_shipping.cost_entry");
 			diffCell = excess.flagged ? pill(text, "red") : esc(text);
 		}
 		const labelDims = dims(doc.sendcloud_length, doc.sendcloud_width, doc.sendcloud_height);
+		// Etiket sütunu yalnız SendCloud'dan bilgi geldiyse: öteki kayıtlarda boş bir sütun
+		// telefonda farkı ekrandan iterdi.
+		const hasLabel = Boolean(label || labelDims);
+		const labelCell = (v, cls) => (hasLabel ? `<td class="${cls}">${v ? esc(v) : muted(__("unknown"))}</td>` : "");
 		const invoicedDims = dims(doc.length, doc.width, doc.height, doc.girth);
 
 		return `<div class="sce-scroll"><table class="table table-sm sce-table">
-			<thead><tr><th></th><th>${esc(__("Products"))}</th><th>${esc(__("SendCloud Label"))}</th><th>${esc(__("Invoiced"))}</th><th>${esc(__("Difference"))}</th></tr></thead>
+			<thead><tr><th></th><th>${esc(__("Products"))}</th>${hasLabel ? `<th>${esc(__("SendCloud Label"))}</th>` : ""}<th>${esc(__("Invoiced"))}</th><th>${esc(__("Difference"))}</th></tr></thead>
 			<tbody>
 				<tr><td>${esc(__("Weight"))}</td>
 					<td class="sce-num">${declared != null ? esc(kg(declared)) : muted(__("unknown"))}</td>
-					<td class="sce-num">${label ? esc(kg(label)) : notFromSendcloud}</td>
+					${labelCell(label && kg(label), "sce-num")}
 					<td class="sce-figure">${invoicedCell}</td>
 					<td class="sce-num">${diffCell}</td></tr>
 				<tr><td>${esc(__("Dimensions"))}</td>
 					<td>${muted(__("unknown"))}</td>
-					<td class="sce-figure">${labelDims ? esc(labelDims) : notFromSendcloud}</td>
+					${labelCell(labelDims, "sce-figure")}
 					<td class="sce-figure">${invoicedDims ? esc(invoicedDims) : notOnInvoice}</td>
 					<td></td></tr>
 			</tbody>
