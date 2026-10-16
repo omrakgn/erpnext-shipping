@@ -18,6 +18,7 @@ class ShippingCostEntry(Document):
 		if not (self.shipment or self.delivery_note):
 			self.match_method = None
 		self._fill_receiver()
+		self._fill_contents()
 
 	def _fill_receiver(self):
 		from erpnext_shipping.erpnext_shipping.shipping_cost import fill_receiver_from_order
@@ -29,6 +30,11 @@ class ShippingCostEntry(Document):
 			or (old.get("delivery_note") or None) != (self.delivery_note or None)
 		)
 		fill_receiver_from_order(self, link_changed=link_changed)
+
+	def _fill_contents(self):
+		from erpnext_shipping.erpnext_shipping.shipping_cost import fill_cost_items
+
+		fill_cost_items(self)
 
 	def on_update(self):
 		self._recompute_affected()

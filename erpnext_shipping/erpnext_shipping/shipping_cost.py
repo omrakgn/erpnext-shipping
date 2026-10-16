@@ -595,6 +595,255 @@ def fill_receiver_from_order(doc, link_changed=False):
 		doc.receiver_source = None
 
 
+# ---------------------------------------------------------------------------
+# Paketteki ürünler ve maliyetin ürünlere bölünmesi
+# ---------------------------------------------------------------------------
+# docs/plans/kargo-maliyet-ekrani-ve-itiraz.md §4.2. Pay beyan edilen ağırlığa göre
+# (kargo fiyatı ağırlığa bağlı); bir ürünün ağırlığı yoksa hepsi adede göre.
+BASIS_WEIGHT = "Declared Weight"
+BASIS_QTY = "Quantity"
+SOURCE_PARCEL = "Parcel"
+SOURCE_SHIPMENT = "Shipment"
+SOURCE_SHIPMENT_ALL = "Shipment (all parcels)"
+SOURCE_DN = "Delivery Note"
+TEMPLATE_FIELD = "custom_shipment_parcel_template"
+_KG_PER_UOM = {"kg": 1.0, "kilogram": 1.0, "kilo": 1.0, "gram": 0.001, "g": 0.001, "gm": 0.001}
+
+
+def _item_info(item_code, cache):
+	"""Item facts the split needs, read once per item per entry."""
+	if item_code in cache:
+		return cache[item_code]
+	alanlar = ["item_name", "is_stock_item", "weight_per_unit", "weight_uom"]
+	if frappe.db.has_column("Item", TEMPLATE_FIELD):
+		alanlar.append(TEMPLATE_FIELD)
+	info = frappe.db.get_value("Item", item_code, alanlar, as_dict=True)
+	if info and not info.is_stock_item:
+		info.bundle = frappe.db.get_value("Product Bundle", {"new_item_code": item_code}, "name")
+	cache[item_code] = info
+	return info
+
+
+def _unit_weight(item_code, cache) -> float:
+	"""Declared kg of one unit: its parcel template, else the item's own weight."""
+	info = _item_info(item_code, cache) or {}
+	sablon = info.get(TEMPLATE_FIELD)
+	if sablon:
+		w = flt(frappe.db.get_value("Shipment Parcel Template", sablon, "weight"))
+		if w > 0:
+			return w
+	oran = _KG_PER_UOM.get((info.get("weight_uom") or "").strip().lower())
+	if oran and flt(info.get("weight_per_unit")) > 0:
+		return flt(info.get("weight_per_unit")) * oran
+	return 0.0
+
+
+def _expand(item_code, qty, cache, depth=0):
+	"""Stock items behind one line: a bundle opens into its parts, a service line drops out."""
+	info = _item_info(item_code, cache)
+	if not info or depth > 3:
+		return []
+	if info.is_stock_item:
+		return [(item_code, flt(qty))]
+	if not info.get("bundle"):
+		return []
+	sonuc = []
+	for p in frappe.get_all(
+		"Product Bundle Item",
+		filters={"parent": info.bundle, "parenttype": "Product Bundle"},
+		fields=["item_code", "qty"],
+		order_by="idx",
+	):
+		sonuc.extend(_expand(p.item_code, flt(qty) * flt(p.qty), cache, depth + 1))
+	return sonuc
+
+
+def _merge(pairs):
+	"""[(item_code, qty)] -> same, one line per item, first-seen order."""
+	toplam, sira = {}, []
+	for code, qty in pairs:
+		if code not in toplam:
+			toplam[code] = 0.0
+			sira.append(code)
+		toplam[code] += flt(qty)
+	return [(c, toplam[c]) for c in sira if toplam[c] > 0]
+
+
+def _dn_items(delivery_note, cache):
+	"""Stock items of a Delivery Note; a bundle line as the Packed Items it actually shipped."""
+	paketler = {}
+	for p in frappe.get_all(
+		"Packed Item",
+		filters={"parent": delivery_note, "parenttype": "Delivery Note"},
+		fields=["parent_detail_docname", "item_code", "qty"],
+		order_by="idx",
+	):
+		paketler.setdefault(p.parent_detail_docname, []).append(p)
+	pairs = []
+	for row in frappe.get_all(
+		"Delivery Note Item",
+		filters={"parent": delivery_note, "parenttype": "Delivery Note"},
+		fields=["name", "item_code", "qty"],
+		order_by="idx",
+	):
+		if row.name in paketler:
+			for p in paketler[row.name]:
+				pairs.extend(_expand(p.item_code, p.qty, cache))
+		elif row.item_code:
+			pairs.extend(_expand(row.item_code, row.qty, cache))
+	return pairs
+
+
+def _shipment_items(shipment, cache):
+	"""Stock items of a Shipment: its per-parcel item table, else its Delivery Notes."""
+	pairs = []
+	for row in frappe.get_all(
+		"Shipment Parcel Item",
+		filters={"parent": shipment, "parenttype": "Shipment"},
+		fields=["item_code", "qty"],
+		order_by="idx",
+	):
+		if row.item_code:
+			pairs.extend(_expand(row.item_code, row.qty or 1, cache))
+	if pairs:
+		return pairs
+	for dn in frappe.get_all(
+		"Shipment Delivery Note",
+		filters={"parent": shipment, "parenttype": "Shipment"},
+		pluck="delivery_note",
+		order_by="idx",
+	):
+		if dn:
+			pairs.extend(_dn_items(dn, cache))
+	return pairs
+
+
+def _shipment_parcels(shipment):
+	"""(per-parcel tracking rows, parcel count) of a Shipment, from what is stored.
+
+	The rows are `custom_tracking_details` (tracking number and SKUs per parcel),
+	written when SendCloud labels the shipment. Nothing is fetched here: this runs
+	on every save of a cost entry.
+	"""
+	satirlar = []
+	ham = frappe.db.get_value("Shipment", shipment, "custom_tracking_details")
+	if ham:
+		try:
+			satirlar = json.loads(ham) or []
+		except (TypeError, ValueError):
+			satirlar = []
+	if satirlar:
+		return satirlar, len(satirlar)
+	adet = frappe.db.sql(
+		"""select coalesce(sum(greatest(ifnull(`count`, 1), 1)), 0) from `tabShipment Parcel`
+		where parent = %s and parenttype = 'Shipment'""",
+		shipment,
+	)[0][0]
+	return [], int(adet or 0)
+
+
+def _parcel_pairs(parcel_rows, parcel_number, cache):
+	"""Items of the parcel this entry bills, from its SKUs; [] when unknown."""
+	hedef = _norm_parcel(parcel_number)
+	hedef = hedef.lstrip("0") or hedef
+	for p in parcel_rows:
+		tn = _norm_parcel(p.get("tracking_number"))
+		if not tn or (tn.lstrip("0") or tn) != hedef:
+			continue
+		pairs = []
+		for sku in (p.get("sku") or "").split(","):
+			sku = sku.strip()
+			if sku and _item_info(sku, cache):
+				pairs.extend(_expand(sku, 1, cache))
+		return pairs
+	return []
+
+
+def _entry_contents(entry, cache):
+	"""(pairs, source): what was in the parcel this entry bills, and how sure we are."""
+	shipment = entry.get("shipment")
+	if shipment:
+		parcels, adet = _shipment_parcels(shipment)
+		pairs = _parcel_pairs(parcels, entry.get("parcel_number"), cache)
+		if pairs:
+			return pairs, SOURCE_PARCEL
+		pairs = _shipment_items(shipment, cache)
+		if pairs:
+			return pairs, (SOURCE_SHIPMENT if adet <= 1 else SOURCE_SHIPMENT_ALL)
+	if entry.get("delivery_note"):
+		pairs = _dn_items(entry.get("delivery_note"), cache)
+		if pairs:
+			return pairs, SOURCE_DN
+	return [], None
+
+
+def cost_items(entry) -> dict:
+	"""The entry's products and each one's share of its cost.
+
+	Split by declared weight, because the carrier's price follows the weight: a
+	mattress and a pillow in one parcel do not cost the same to ship. One product
+	without a declared weight and the whole entry splits by quantity instead; a
+	weight for some and not others would hand the whole cost to the ones that
+	have it. The last cent goes to the largest share so the lines add up.
+
+	A parcel the entry can name is split over its own contents. A multi-parcel
+	shipment whose parcels cannot be told apart is split over the whole shipment:
+	each parcel's line is then approximate, the product's total over all lines is
+	still right.
+	"""
+	cache = {}
+	pairs, kaynak = _entry_contents(entry, cache)
+	pairs = _merge(pairs)
+	if not pairs:
+		return {"items": [], "allocation_basis": None, "contents_source": None, "contents_summary": None}
+
+	toplam_tutar = flt(entry.get("total_net_amount"))
+	satirlar = []
+	for code, qty in pairs:
+		info = _item_info(code, cache) or {}
+		satirlar.append(
+			{
+				"item_code": code,
+				"item_name": info.get("item_name"),
+				"qty": qty,
+				"unit_weight": _unit_weight(code, cache),
+			}
+		)
+
+	if all(r["unit_weight"] > 0 for r in satirlar):
+		basis = BASIS_WEIGHT
+		tabanlar = [r["unit_weight"] * r["qty"] for r in satirlar]
+	else:
+		basis = BASIS_QTY
+		tabanlar = [r["qty"] for r in satirlar]
+	taban_toplam = sum(tabanlar)
+	for r, t in zip(satirlar, tabanlar):
+		oran = (t / taban_toplam) if taban_toplam > 0 else 1.0 / len(satirlar)
+		r["share"] = flt(oran * 100, 2)
+		r["amount"] = flt(toplam_tutar * oran, 2)
+	fark = flt(toplam_tutar - sum(r["amount"] for r in satirlar), 2)
+	if fark:
+		en_buyuk = max(range(len(satirlar)), key=lambda i: tabanlar[i])
+		satirlar[en_buyuk]["amount"] = flt(satirlar[en_buyuk]["amount"] + fark, 2)
+
+	ozet = ", ".join(f"{r['item_code']} x{r['qty']:g}" for r in satirlar)
+	return {
+		"items": satirlar,
+		"allocation_basis": basis,
+		"contents_source": kaynak,
+		"contents_summary": ozet[:140],
+	}
+
+
+def fill_cost_items(doc):
+	"""Write the products and their shares onto a Shipping Cost Entry being saved."""
+	sonuc = cost_items(doc)
+	doc.set("items", sonuc["items"])
+	doc.allocation_basis = sonuc["allocation_basis"]
+	doc.contents_source = sonuc["contents_source"]
+	doc.contents_summary = sonuc["contents_summary"]
+
+
 def _upsert_cost_entry(values, ctx, stats, pdf=None):
 	"""Match one parsed invoice line to a Shipment/Delivery Note and upsert it as a
 	Shipping Cost Entry (idempotent by parcel+invoice). Updates the stats accumulator

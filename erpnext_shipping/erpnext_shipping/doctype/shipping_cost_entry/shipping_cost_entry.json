@@ -25,6 +25,12 @@
   "shipment",
   "delivery_note",
   "purchase_invoice",
+  "contents_section",
+  "items",
+  "contents_summary",
+  "column_break_contents",
+  "contents_source",
+  "allocation_basis",
   "receiver_section",
   "receiver_name",
   "receiver_street",
@@ -182,6 +188,45 @@
    "read_only": 1
   },
   {
+   "fieldname": "contents_section",
+   "fieldtype": "Section Break",
+   "label": "Contents"
+  },
+  {
+   "description": "The products in the parcel and each one's share of this cost, split by declared weight (by quantity when a product has no declared weight).",
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Products",
+   "options": "Shipping Cost Entry Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contents_summary",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Product List",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_contents",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Parcel: this parcel's own contents. Shipment: a one-parcel shipment. Shipment (all parcels): the parcel could not be told apart, so the whole shipment. Delivery Note: no Shipment.",
+   "fieldname": "contents_source",
+   "fieldtype": "Select",
+   "label": "Contents From",
+   "options": "\nParcel\nShipment\nShipment (all parcels)\nDelivery Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allocation_basis",
+   "fieldtype": "Select",
+   "label": "Split By",
+   "options": "\nDeclared Weight\nQuantity",
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "receiver_section",
    "fieldtype": "Section Break",
@@ -316,7 +361,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-16 12:00:00.000000",
+ "modified": "2026-10-16 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping Cost Entry",
