@@ -216,7 +216,6 @@ def get_custom_fields():
 				"fieldname": "custom_delivery_status_section",
 				"label": _("Delivery Status"),
 				"fieldtype": "Section Break",
-				"collapsible": 1,
 				"insert_after": "tracking_status",
 			},
 			{
@@ -271,6 +270,93 @@ def get_custom_fields():
 					"Printed on the Delivery Pickup Note under Instructions, with the delivery "
 					"note's own instructions. For a note that stays inside, use the comment box below."
 				),
+			},
+			# --- Gönderi ekranı: altı sekme (docs/plans/gonderi-ekrani.md) -----------------
+			# Sıra property_setters.py'deki `field_order` ile; insert_after yalnız yedek.
+			{
+				"fieldname": "shipping_overview_tab",
+				"label": _("Overview"),
+				"fieldtype": "Tab Break",
+				"insert_after": "amended_from",
+			},
+			{
+				# Durum kartı: tek cümle ve sıradaki adım (shipment_view.js).
+				"fieldname": "shipping_summary_html",
+				"label": _("Status"),
+				"fieldtype": "HTML",
+				"insert_after": "shipping_overview_tab",
+			},
+			{
+				"fieldname": "shipping_route_section",
+				"label": _("From / To"),
+				"fieldtype": "Section Break",
+				"insert_after": "shipping_summary_html",
+			},
+			{
+				"fieldname": "shipping_parcels_tab",
+				"label": _("Parcels"),
+				"fieldtype": "Tab Break",
+				"insert_after": "shipping_driver_note",
+			},
+			{
+				# Gönderinin irsaliye tablosu ürün satırı başına bir satır; burada tekil.
+				"fieldname": "shipping_delivery_notes_html",
+				"label": _("Delivery Notes"),
+				"fieldtype": "HTML",
+				"insert_after": "shipping_parcels_tab",
+			},
+			{
+				"fieldname": "shipping_goods_column",
+				"fieldtype": "Column Break",
+				"insert_after": "description_of_content",
+			},
+			{
+				"fieldname": "shipping_tracking_tab",
+				"label": _("Tracking"),
+				"fieldtype": "Tab Break",
+				"insert_after": "custom_parcel_breakdown",
+			},
+			{
+				"fieldname": "shipping_timeline_section",
+				"label": _("Carrier Timeline"),
+				"fieldtype": "Section Break",
+				"insert_after": "custom_sendcloud_contract",
+			},
+			{
+				"fieldname": "shipping_problems_tab",
+				"label": _("Problems"),
+				"fieldtype": "Tab Break",
+				"insert_after": "custom_sla_status",
+			},
+			{
+				"fieldname": "shipping_problems_html",
+				"label": _("Problems"),
+				"fieldtype": "HTML",
+				"insert_after": "shipping_problems_tab",
+			},
+			{
+				"fieldname": "shipping_returns_section",
+				"label": _("Returns"),
+				"fieldtype": "Section Break",
+				"insert_after": "shipping_problems_html",
+			},
+			{
+				"fieldname": "shipping_delivery_problems_section",
+				"label": _("Delivery Problems"),
+				"fieldtype": "Section Break",
+				"insert_after": "custom_returned_on",
+			},
+			{
+				"fieldname": "shipping_cost_tab",
+				"label": _("Cost"),
+				"fieldtype": "Tab Break",
+				"insert_after": "custom_label_removed",
+			},
+			{
+				"fieldname": "shipping_details_tab",
+				"label": _("Details"),
+				"fieldtype": "Tab Break",
+				"insert_after": "custom_shipping_cost_updated",
 			},
 			{
 				"fieldname": "shipping_received_by",
@@ -503,9 +589,8 @@ def get_custom_fields():
 			},
 			{
 				"fieldname": "custom_sla_section",
-				"label": _("Delivery SLA"),
+				"label": _("Expected Delivery"),
 				"fieldtype": "Section Break",
-				"collapsible": 1,
 				"insert_after": "custom_presumed_lost",
 			},
 			{
@@ -571,7 +656,6 @@ def get_custom_fields():
 				"fieldname": "custom_cost_section",
 				"label": _("Shipping Cost & Margin"),
 				"fieldtype": "Section Break",
-				"collapsible": 1,
 				"insert_after": "custom_sla_breach_notified",
 			},
 			{

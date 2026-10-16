@@ -1,5 +1,171 @@
+import json
+
+import frappe
+
+# Gönderi (Shipment) ekranı: altı sekme ve her alanın yeri (docs/plans/gonderi-ekrani.md §4.1).
+# Canlıdaki alan sırası 2026-10-16'da okundu. Liste BÜTÜN alanları sayar: Frappe
+# `field_order`'da olmayan alanı kendi `insert_after`'ına göre araya koyar, yani yeni bir
+# alan kaybolmaz; ERPNext güncellemesiyle gelen standart alan Details'e bakarak bulunur.
+# Customize Form'dan yapılan sıra değişikliği bir sonraki migrate'te buna döner.
+SHIPMENT_FIELD_ORDER = [
+	# Overview: durum kartı, nereden ve nereye, alış ve taşıma
+	"shipping_overview_tab",
+	"shipping_summary_html",
+	"shipping_route_section",
+	"heading_pickup_from",
+	"pickup_from_type",
+	"pickup_company",
+	"pickup_customer",
+	"pickup_supplier",
+	"pickup",
+	"pickup_address_name",
+	"pickup_address",
+	"pickup_contact_person",
+	"pickup_contact_name",
+	"pickup_contact_email",
+	"pickup_contact",
+	"column_break_2",
+	"heading_delivery_to",
+	"delivery_to_type",
+	"delivery_company",
+	"delivery_customer",
+	"delivery_supplier",
+	"delivery_to",
+	"delivery_address_name",
+	"delivery_address",
+	"delivery_contact_name",
+	"delivery_contact_email",
+	"delivery_contact",
+	"section_break_40",
+	"pickup_date",
+	"pickup_from",
+	"pickup_to",
+	"column_break_36",
+	"shipping_transport_mode",
+	"shipping_driver_note",
+	# Parcels: irsaliyeler, koliler, mal
+	"shipping_parcels_tab",
+	"shipping_delivery_notes_html",
+	"parcels_section",
+	"parcel_template",
+	"add_template",
+	"shipment_parcel",
+	"custom_parcel_items",
+	"total_weight",
+	"column_break_28",
+	"shipment_delivery_note",
+	"shipment_details_section",
+	"pallets",
+	"value_of_goods",
+	"description_of_content",
+	"shipping_goods_column",
+	"shipment_type",
+	"pickup_type",
+	"incoterm",
+	"custom_parcel_breakdown_section",
+	"custom_parcel_breakdown",
+	# Tracking: taşıyıcı ve etiket, zaman çizelgesi, teslim, beklenen teslim
+	"shipping_tracking_tab",
+	"shipment_information_section",
+	"carrier",
+	"carrier_service",
+	"awb_number",
+	"tracking_status",
+	"tracking_status_info",
+	"tracking_url",
+	"column_break_55",
+	"service_provider",
+	"custom_sendcloud_contract",
+	"shipping_timeline_section",
+	"custom_status_timeline",
+	"custom_delivery_status_section",
+	"custom_delivered_at",
+	"custom_transit_days",
+	"shipping_received_by",
+	"shipping_delivery_proof",
+	"custom_sla_section",
+	"custom_sales_channel",
+	"custom_promised_delivery_date",
+	"custom_sla_date",
+	"custom_sla_status",
+	# Problems: iadeler, teslim sorunları
+	"shipping_problems_tab",
+	"shipping_problems_html",
+	"shipping_returns_section",
+	"custom_is_return",
+	"custom_source_shipment",
+	"custom_returned_to_sender",
+	"custom_return_reason",
+	"custom_returned_on",
+	"shipping_delivery_problems_section",
+	"custom_is_delayed",
+	"custom_tracking_stalled",
+	"custom_presumed_lost",
+	"custom_label_removed",
+	# Cost
+	"shipping_cost_tab",
+	"custom_cost_section",
+	"shipment_amount",
+	"custom_shipping_cost",
+	"custom_surcharge_amount",
+	"custom_has_weight_surcharge",
+	"custom_cost_variance",
+	"custom_cost_variance_pct",
+	"custom_customer_shipping_charge",
+	"custom_shipping_margin",
+	"custom_shipping_cost_currency",
+	"custom_shipping_cost_updated",
+	# Details: teknik
+	"shipping_details_tab",
+	"status",
+	"custom_shipment_status",
+	"shipment_id",
+	"custom_sendcloud_contract_id",
+	"custom_sendcloud_order_id",
+	"custom_tracking_details",
+	"custom_status_history",
+	"custom_delay_notified",
+	"custom_delay_notified_at",
+	"custom_sla_risk_notified",
+	"custom_sla_breach_notified",
+	"amended_from",
+]
+
+
 def get_property_setters():
-	return [
-		# ("Address", "state", "hidden", 1),
-		# ("Address", None, "track_changes", 1),
+	ayarlar = [
+		("Shipment", None, "field_order", json.dumps(SHIPMENT_FIELD_ORDER)),
+		# ERPNext'in adsız ya da belirsiz başlıkları
+		("Shipment", "section_break_40", "label", "Pickup and Transport"),
+		("Shipment", "shipment_information_section", "label", "Carrier and Label"),
+		("Shipment", "shipment_details_section", "label", "Goods"),
+		("Shipment", "shipment_delivery_note", "label", "Delivery Note Lines"),
+		(
+			"Shipment",
+			"shipment_delivery_note",
+			"description",
+			"One row per product line of the delivery note. The value of goods is their sum.",
+		),
+		("Shipment", "shipment_amount", "label", "Quoted Amount"),
+		(
+			"Shipment",
+			"shipment_amount",
+			"description",
+			"The rate quoted when the label was made. Cost Variance compares the carrier's invoice with it.",
+		),
 	]
+	# Ekrandan elle açılmış eski alan (2026-03-31; 1287 gönderinin 8'inde dolu). Aynı
+	# bilgiyi takip durumu ve iade/kayıp işaretleri otomatik tutuyor; elle yazılabilir
+	# kalırsa durum kartıyla çelişen ikinci bir "durum" olur. Silinmez, salt okunur.
+	if frappe.db.exists("Custom Field", {"dt": "Shipment", "fieldname": "custom_shipment_status"}):
+		ayarlar += [
+			("Shipment", "custom_shipment_status", "read_only", 1),
+			("Shipment", "custom_shipment_status", "label", "Manual Status (old)"),
+			(
+				"Shipment",
+				"custom_shipment_status",
+				"description",
+				"Set by hand before October 2026. The status card and Tracking replace it.",
+			),
+		]
+	return ayarlar

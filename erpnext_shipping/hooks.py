@@ -31,7 +31,11 @@ app_include_js = "shipping.bundle.js"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-doctype_js = {"Shipment": "public/js/shipment.js", "Delivery Note": "public/js/delivery_note.js"}
+doctype_js = {
+	# shipment_view.js önce: durum kartını çizen saf fonksiyonlar (docs/plans/gonderi-ekrani.md).
+	"Shipment": ["public/js/shipment_view.js", "public/js/shipment.js"],
+	"Delivery Note": "public/js/delivery_note.js",
+}
 
 # Jinja (print format) yardımcı metotları
 jinja = {

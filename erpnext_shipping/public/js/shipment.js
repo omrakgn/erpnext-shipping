@@ -61,40 +61,29 @@ frappe.ui.form.on("Shipment", {
 			render_status_timeline(frm);
 
 			if (frm.doc.awb_number) {
-				frm.add_custom_button(__("Fetch Carrier Timeline"), function () {
-					frappe.call({
-						method: "erpnext_shipping.erpnext_shipping.loss.backfill_status_history",
-						args: { limit: 1, only_missing: 0, shipment: frm.doc.name },
-						freeze: true,
-						freeze_message: __("Fetching carrier steps..."),
-						callback: function () {
-							frm.reload_doc().then(() => render_status_timeline(frm));
-						},
-					});
-				}, __("Tracking"));
+				frm.add_custom_button(
+					__("Fetch Carrier Timeline"),
+					function () {
+						frappe.call({
+							method: "erpnext_shipping.erpnext_shipping.loss.backfill_status_history",
+							args: { limit: 1, only_missing: 0, shipment: frm.doc.name },
+							freeze: true,
+							freeze_message: __("Fetching carrier steps..."),
+							callback: function () {
+								frm.reload_doc().then(() => render_status_timeline(frm));
+							},
+						});
+					},
+					__("Tracking")
+				);
 			}
 		}
 		// Description of Content zorunlu bir alan; client mandatory kontrolü sunucu
 		// validate hook'undan önce çalıştığı için doldurmayı burada yapıyoruz.
 		maybe_fill_description(frm);
-		if (frm.doc.docstatus === 0 && (frm.doc.shipment_delivery_note || []).length) {
-			frm.add_custom_button(__("Populate Parcels from Delivery Notes"), function () {
-				const has_rows =
-					(frm.doc.shipment_parcel || []).length ||
-					(frm.doc.custom_parcel_items || []).length;
-				const run = () => frm.events.populate_parcels(frm);
-				if (has_rows) {
-					frappe.confirm(
-						__(
-							"This will replace the existing Shipment Parcel and Parcel Items rows. Continue?"
-						),
-						run
-					);
-				} else {
-					run();
-				}
-			});
-		}
+		// Durum kartı, irsaliye listesi ve sorunlar (shipment_view.js); kartın düğmeleri
+		// aşağıdaki işlere bağlanıyor. docs/plans/gonderi-ekrani.md
+		render_shipment_view(frm);
 		// Gönderi kaydedilmiş, takip no var ve henüz teslim edilmemişse: carrier'a
 		// gecikme sormak için hazır dolu bir e-posta taslağı aç.
 		if (
@@ -105,39 +94,23 @@ frappe.ui.form.on("Shipment", {
 		) {
 			frm.add_custom_button(
 				__("Ask Carrier about Delay"),
-				function () {
-					frappe.call({
-						method: "erpnext_shipping.erpnext_shipping.delay.get_carrier_delay_email",
-						args: { shipment: frm.doc.name },
-						freeze: true,
-						callback: function (r) {
-							const d = r.message || {};
-							new frappe.views.CommunicationComposer({
-								doc: frm.doc,
-								frm: frm,
-								subject: d.subject || "",
-								recipients: d.recipients || "",
-								content: d.content || "",
-								sender: d.sender || undefined,
-							});
-						},
-					});
-				},
-				__("Delay")
+				() => ask_carrier_about_delay(frm),
+				__("Problem")
 			);
 		}
 		// Kayıp / teslim sorunu için tazminat talebi (Loss Claim) aç. Birden çok
 		// parsel varsa hangisinin/hangilerinin kayıp olduğu seçilir; her seçilen
 		// parsel için ayrı claim açılır.
 		if (frm.doc.docstatus === 1 && frm.doc.awb_number) {
-			const delivered = frm.doc.custom_delivered_at || frm.doc.tracking_status === "Delivered";
+			const delivered =
+				frm.doc.custom_delivered_at || frm.doc.tracking_status === "Delivered";
 			const default_type = delivered ? "Delivered - Not Received" : "Not Delivered";
 			frm.add_custom_button(
 				__("File Loss Claim"),
 				function () {
 					file_loss_claim(frm, default_type);
 				},
-				__("Loss")
+				__("Problem")
 			);
 		}
 		// Etiketsiz gönderide (kendi aracımız, nakliyeci) taşıyıcı düğmeleri yok;
@@ -208,91 +181,95 @@ frappe.ui.form.on("Shipment", {
 						},
 					});
 				},
-				__("Tools")
+				__("Label")
 			);
 
-			frm.add_custom_button(__("Fetch Shipping Rates"), function () {
-				if (frm.doc.shipment_parcel.length > 1) {
-					frappe.confirm(
-						__(
-							"If your shipment contains packages with varying weights, the estimated shipping rates may differ from the final price charged by your carrier. Do you wish to proceed?"
-						),
-						function () {
-							frm.events.fetch_shipping_rates(frm);
-						}
-					);
-				} else {
-					frm.events.fetch_shipping_rates(frm);
-				}
-			});
+			frm.add_custom_button(__("Get Rates & Label"), () => open_rates(frm), __("Label"));
 
 			if ((frm.doc.shipment_delivery_note || []).length) {
-				frm.add_custom_button(__("Sync SendCloud Label"), function () {
-					frappe.call({
-						method: "erpnext_shipping.erpnext_shipping.shipping.sync_sendcloud_label",
-						freeze: true,
-						freeze_message: __("Syncing SendCloud Label"),
-						args: { shipment: frm.doc.name },
-						callback: function (r) {
-							if (!r.exc && r.message) {
-								frm.reload_doc();
-							}
-						},
-					});
-				});
+				frm.add_custom_button(
+					__("Sync SendCloud Label"),
+					function () {
+						frappe.call({
+							method: "erpnext_shipping.erpnext_shipping.shipping.sync_sendcloud_label",
+							freeze: true,
+							freeze_message: __("Syncing SendCloud Label"),
+							args: { shipment: frm.doc.name },
+							callback: function (r) {
+								if (!r.exc && r.message) {
+									frm.reload_doc();
+								}
+							},
+						});
+					},
+					__("Label")
+				);
 			}
 
 			if ((frm.doc.shipment_delivery_note || []).length) {
-				frm.add_custom_button(__("Fulfill SendCloud Order"), function () {
-					frappe.confirm(
-						__(
-							"Find the SendCloud order matching this shipment's PO number, update it with the ERPNext weight/dimensions/carrier/contract and create the label. Continue?"
-						),
-						function () {
-							frm.events.fulfill_sendcloud_order(frm);
-						}
-					);
-				});
+				frm.add_custom_button(
+					__("Fulfill SendCloud Order"),
+					function () {
+						frappe.confirm(
+							__(
+								"Find the SendCloud order matching this shipment's PO number, update it with the ERPNext weight/dimensions/carrier/contract and create the label. Continue?"
+							),
+							function () {
+								frm.events.fulfill_sendcloud_order(frm);
+							}
+						);
+					},
+					__("Label")
+				);
 			}
 
 			const has_per_parcel = (frm.doc.shipment_parcel || []).some(
 				(p) => p.custom_shipping_option_code
 			);
 			if (has_per_parcel) {
-				frm.add_custom_button(__("Create Shipment (Per-Parcel Carriers)"), function () {
-					frappe.call({
-						method: "erpnext_shipping.erpnext_shipping.shipping.create_shipment_per_parcel",
-						freeze: true,
-						freeze_message: __("Creating Shipment"),
-						args: { shipment: frm.doc.name },
-						callback: function (r) {
-							if (!r.exc && r.message) {
-								frm.reload_doc();
-								frappe.msgprint({
-									message: __("Shipment {0} created with per-parcel carriers.", [
-										r.message.shipment_id ? r.message.shipment_id.bold() : "",
-									]),
-									title: __("Shipment Created"),
-									indicator: "green",
-								});
-								frm.events.update_tracking(
-									frm,
-									r.message.service_provider,
-									r.message.shipment_id
-								);
-							}
-						},
-					});
-				});
+				frm.add_custom_button(
+					__("Create Shipment (Per-Parcel Carriers)"),
+					function () {
+						frappe.call({
+							method: "erpnext_shipping.erpnext_shipping.shipping.create_shipment_per_parcel",
+							freeze: true,
+							freeze_message: __("Creating Shipment"),
+							args: { shipment: frm.doc.name },
+							callback: function (r) {
+								if (!r.exc && r.message) {
+									frm.reload_doc();
+									frappe.msgprint({
+										message: __(
+											"Shipment {0} created with per-parcel carriers.",
+											[
+												r.message.shipment_id
+													? r.message.shipment_id.bold()
+													: "",
+											]
+										),
+										title: __("Shipment Created"),
+										indicator: "green",
+									});
+									frm.events.update_tracking(
+										frm,
+										r.message.service_provider,
+										r.message.shipment_id
+									);
+								}
+							},
+						});
+					},
+					__("Label")
+				);
 			}
 		}
 		if (frm.doc.shipment_id) {
 			frm.add_custom_button(
-				__("Print Shipping Label"),
+				__("Print Label"),
 				function () {
 					return frm.events.print_shipping_label(frm);
 				},
-				__("Tools")
+				__("Label")
 			);
 			if (frm.doc.tracking_status != "Delivered") {
 				frm.add_custom_button(
@@ -304,30 +281,20 @@ frappe.ui.form.on("Shipment", {
 							frm.doc.shipment_id
 						);
 					},
-					__("Tools")
+					__("Tracking")
 				);
 
 				frm.add_custom_button(
-					__("Track Status"),
-					function () {
-						if (frm.doc.tracking_url) {
-							const urls = frm.doc.tracking_url.split(", ");
-							urls.forEach((url) => window.open(url));
-						} else {
-							let msg = __(
-								"Please complete Shipment (ID: {0}) on {1} and Update Tracking.",
-								[frm.doc.shipment_id, frm.doc.service_provider]
-							);
-							frappe.msgprint({ message: msg, title: __("Incomplete Shipment") });
-						}
-					},
-					__("View")
+					__("Open Carrier Page"),
+					() => open_carrier_page(frm),
+					__("Tracking")
 				);
 			}
 		}
 		if (!frm.is_new() && is_own_transport(frm)) {
 			own_transport_buttons(frm);
 		}
+		add_next_step_button(frm);
 	},
 
 	fetch_shipping_rates: function (frm) {
@@ -487,9 +454,7 @@ frappe.ui.form.on("Shipment", {
 function maybe_fill_description(frm) {
 	// Description boşsa ve bağlı Delivery Note varsa, ürün adlarından otomatik doldur.
 	if (frm.doc.description_of_content) return;
-	const dns = (frm.doc.shipment_delivery_note || [])
-		.map((d) => d.delivery_note)
-		.filter(Boolean);
+	const dns = (frm.doc.shipment_delivery_note || []).map((d) => d.delivery_note).filter(Boolean);
 	if (!dns.length) return;
 	frappe.call({
 		method: "erpnext_shipping.erpnext_shipping.shipping.get_content_description",
@@ -524,7 +489,9 @@ function file_loss_claim(frm, default_type) {
 			html +=
 				'<table class="table table-bordered" style="font-size:12px;"><thead><tr>' +
 				`<th style="width:36px;text-align:center;"><input type="checkbox" class="lc-all"></th>` +
-				`<th>${__("Tracking")}</th><th>${__("Carrier")}</th><th>${__("Status")}</th></tr></thead><tbody>`;
+				`<th>${__("Tracking")}</th><th>${__("Carrier")}</th><th>${__(
+					"Status"
+				)}</th></tr></thead><tbody>`;
 			rows.forEach((p) => {
 				const has = p.existing_claim;
 				html +=
@@ -574,7 +541,11 @@ function file_loss_claim(frm, default_type) {
 function create_loss_claims(frm, tns, claim_type) {
 	frappe.call({
 		method: `${LC_NS}.create_loss_claims`,
-		args: { shipment: frm.doc.name, claim_type: claim_type, tracking_numbers: JSON.stringify(tns) },
+		args: {
+			shipment: frm.doc.name,
+			claim_type: claim_type,
+			tracking_numbers: JSON.stringify(tns),
+		},
 		freeze: true,
 		callback: function (r) {
 			const names = r.message || [];
@@ -587,9 +558,9 @@ function create_loss_claims(frm, tns, claim_type) {
 					message: names
 						.map(
 							(n) =>
-								`<a href="/app/shipment-loss-claim/${encodeURIComponent(n)}">${frappe.utils.escape_html(
+								`<a href="/app/shipment-loss-claim/${encodeURIComponent(
 									n
-								)}</a>`
+								)}">${frappe.utils.escape_html(n)}</a>`
 						)
 						.join("<br>"),
 					indicator: "green",
@@ -681,10 +652,7 @@ function render_parcel_breakdown(frm, rows) {
 					p.tracking_number || __("Track")
 			  )}</a>`
 			: esc(p.tracking_number || "");
-		const cost =
-			p.cost || p.cost === 0
-				? format_currency(p.cost, p.currency || "EUR")
-				: "—";
+		const cost = p.cost || p.cost === 0 ? format_currency(p.cost, p.currency || "EUR") : "—";
 		const delivered = p.delivered_at ? esc(p.delivered_at) : "—";
 		const removed = p.label_removed
 			? `<span class="indicator-pill red">${__("Yes")}</span>`
@@ -1011,7 +979,12 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 			frappe.model.set_value(cdt, cdn, "custom_shipping_service", sd.service_name);
 			frappe.model.set_value(cdt, cdn, "custom_shipping_price", sd.total_price || 0);
 			frappe.model.set_value(cdt, cdn, "custom_shipping_contract", sd.contract_name || "");
-			frappe.model.set_value(cdt, cdn, "custom_shipping_contract_type", sd.contract_type || "");
+			frappe.model.set_value(
+				cdt,
+				cdn,
+				"custom_shipping_contract_type",
+				sd.contract_type || ""
+			);
 			frappe.model.set_value(cdt, cdn, "custom_shipping_contract_id", sd.contract_id || "");
 			dialog.hide();
 			frm.save().then(() => {
@@ -1029,7 +1002,6 @@ function select_parcel_carrier(frm, cdt, cdn, available_services) {
 
 	dialog.show();
 }
-
 
 // Etiketi asil basan cagri. Secim yapildiysa hangi SendCloud siparisi oldugu da
 // gonderilir ve Shipment'a yazilir; sonradan hangisinin sevk edildigi baska hicbir
@@ -1066,19 +1038,14 @@ const PICKUP_NOTE_LANGUAGES = [
 ];
 
 function own_transport_buttons(frm) {
-	frm.add_custom_button(__("Print Delivery Pickup Note"), () => print_pickup_note(frm));
+	frm.add_custom_button(__("Delivery Pickup Note"), () => print_pickup_note(frm), __("Print"));
 	PICKUP_NOTE_LANGUAGES.forEach(([code, label]) => {
-		frm.add_custom_button(label, () => print_pickup_note(frm, code), __("Other Language"));
-	});
-	if (
-		frm.doc.docstatus === 1 &&
-		!frm.doc.custom_delivered_at &&
-		!frm.doc.custom_returned_to_sender
-	) {
-		frm.add_custom_button(__("Mark Delivered"), () => mark_delivered_dialog(frm)).addClass(
-			"btn-primary"
+		frm.add_custom_button(
+			__("Delivery Pickup Note: {0}", [label]),
+			() => print_pickup_note(frm, code),
+			__("Print")
 		);
-	}
+	});
 }
 
 function pickup_note_language(language) {
@@ -1092,7 +1059,9 @@ function print_pickup_note(frm, lang) {
 	// yazılı (ERPNext'in "Create > Shipment"i). Tekilleştirilmezse iki satırlı
 	// irsaliye iki kez basılıyordu: 2 nüsha × 2 = 4 sayfa (2026-10-16).
 	const notes = [
-		...new Set((frm.doc.shipment_delivery_note || []).map((row) => row.delivery_note).filter(Boolean)),
+		...new Set(
+			(frm.doc.shipment_delivery_note || []).map((row) => row.delivery_note).filter(Boolean)
+		),
 	];
 	if (!notes.length) {
 		frappe.msgprint(__("No delivery note on this shipment."));
@@ -1101,7 +1070,9 @@ function print_pickup_note(frm, lang) {
 	if (!lang) {
 		frappe.db
 			.get_value("Delivery Note", notes[0], "language")
-			.then((r) => print_pickup_note(frm, pickup_note_language(r.message && r.message.language)))
+			.then((r) =>
+				print_pickup_note(frm, pickup_note_language(r.message && r.message.language))
+			)
 			.catch(() => print_pickup_note(frm, "EN"));
 		return;
 	}
@@ -1111,7 +1082,12 @@ function print_pickup_note(frm, lang) {
 	const url =
 		notes.length === 1
 			? "/printview?" +
-			  $.param({ doctype: "Delivery Note", name: notes[0], format: format, no_letterhead: 1 })
+			  $.param({
+					doctype: "Delivery Note",
+					name: notes[0],
+					format: format,
+					no_letterhead: 1,
+			  })
 			: "/api/method/frappe.utils.print_format.download_multi_pdf?" +
 			  $.param({
 					doctype: "Delivery Note",
@@ -1176,4 +1152,133 @@ function mark_delivered_dialog(frm) {
 		},
 	});
 	d.show();
+}
+
+// --- Gönderi ekranı: durum kartı ve sıradaki adım (docs/plans/gonderi-ekrani.md) -------
+// Kart, irsaliye listesi ve sorunlar shipment_view.js'te saf fonksiyonlarla çiziliyor;
+// burada yalnız alanlara basılıyor ve düğmeleri var olan işlere bağlanıyor.
+const SHIPMENT_VIEW_FIELDS = [
+	"shipping_summary_html",
+	"shipping_delivery_notes_html",
+	"shipping_problems_html",
+];
+
+function render_shipment_view(frm) {
+	const view = erpnext_shipping.shipment_view;
+	const html = {
+		shipping_summary_html: view.summary_html(frm.doc),
+		shipping_delivery_notes_html: view.delivery_notes_html(frm.doc),
+		shipping_problems_html: view.problems_html(frm.doc),
+	};
+	SHIPMENT_VIEW_FIELDS.forEach((fieldname) => {
+		const field = frm.get_field(fieldname);
+		if (!field || !field.$wrapper) return;
+		field.$wrapper.html(html[fieldname]);
+		field.$wrapper
+			.off("click.shipment_view")
+			.on("click.shipment_view", "[data-action]", (e) => {
+				e.preventDefault();
+				run_shipment_action(frm, $(e.currentTarget).attr("data-action"));
+			})
+			.on("click.shipment_view", "[data-goto]", (e) => {
+				e.preventDefault();
+				frm.scroll_to_field($(e.currentTarget).attr("data-goto"));
+			});
+	});
+}
+
+function run_shipment_action(frm, action) {
+	const view = erpnext_shipping.shipment_view;
+	const actions = {
+		submit: () => frm.savesubmit(),
+		get_label: () => open_rates(frm),
+		print_label: () => frm.events.print_shipping_label(frm),
+		track: () => open_carrier_page(frm),
+		update_tracking: () =>
+			frm.events.update_tracking(frm, frm.doc.service_provider, frm.doc.shipment_id),
+		ask_delay: () => ask_carrier_about_delay(frm),
+		loss_claim: () =>
+			file_loss_claim(
+				frm,
+				view.is_delivered(frm.doc) ? "Delivered - Not Received" : "Not Delivered"
+			),
+		print_pickup_note: () => print_pickup_note(frm),
+		mark_delivered: () => mark_delivered_dialog(frm),
+		problems: () => frm.scroll_to_field("shipping_problems_html"),
+		populate: () => populate_parcels_confirm(frm),
+	};
+	if (actions[action]) actions[action]();
+}
+
+// Onaylanmış gönderide sıradaki adım araç çubuğunda da tek mavi düğme. Taslakta
+// Frappe'nin kendi "Submit"i zaten birincil.
+function add_next_step_button(frm) {
+	if (frm.is_new() || frm.doc.docstatus !== 1) return;
+	const view = erpnext_shipping.shipment_view;
+	const first = (view.state(frm.doc).actions || [])[0];
+	if (!first || first === "problems") return;
+	frm.add_custom_button(__(view.ACTION_LABELS[first]), () =>
+		run_shipment_action(frm, first)
+	).addClass("btn-primary");
+}
+
+function populate_parcels_confirm(frm) {
+	const has_rows =
+		(frm.doc.shipment_parcel || []).length || (frm.doc.custom_parcel_items || []).length;
+	const run = () => frm.events.populate_parcels(frm);
+	if (has_rows) {
+		frappe.confirm(
+			__("This will replace the existing Shipment Parcel and Parcel Items rows. Continue?"),
+			run
+		);
+	} else {
+		run();
+	}
+}
+
+function ask_carrier_about_delay(frm) {
+	frappe.call({
+		method: "erpnext_shipping.erpnext_shipping.delay.get_carrier_delay_email",
+		args: { shipment: frm.doc.name },
+		freeze: true,
+		callback: function (r) {
+			const d = r.message || {};
+			new frappe.views.CommunicationComposer({
+				doc: frm.doc,
+				frm: frm,
+				subject: d.subject || "",
+				recipients: d.recipients || "",
+				content: d.content || "",
+				sender: d.sender || undefined,
+			});
+		},
+	});
+}
+
+function open_rates(frm) {
+	if (frm.doc.shipment_parcel.length > 1) {
+		frappe.confirm(
+			__(
+				"If your shipment contains packages with varying weights, the estimated shipping rates may differ from the final price charged by your carrier. Do you wish to proceed?"
+			),
+			function () {
+				frm.events.fetch_shipping_rates(frm);
+			}
+		);
+	} else {
+		frm.events.fetch_shipping_rates(frm);
+	}
+}
+
+function open_carrier_page(frm) {
+	if (frm.doc.tracking_url) {
+		const urls = frm.doc.tracking_url.split(", ");
+		urls.forEach((url) => window.open(url));
+	} else {
+		let msg = __("Please complete Shipment (ID: {0}) on {1} and Update Tracking.", [
+			frm.doc.shipment_id,
+			frm.doc.service_provider,
+		]);
+		frappe.msgprint({ message: msg, title: __("Incomplete Shipment") });
+	}
 }
