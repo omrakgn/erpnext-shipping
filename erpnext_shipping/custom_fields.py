@@ -257,6 +257,22 @@ def get_custom_fields():
 				),
 			},
 			{
+				# Şoförün belgesine basılan not (Delivery Pickup Note > Instructions),
+				# irsaliyenin kendi talimatıyla birlikte. İçeride kalacak not için
+				# formun yorum kutusu var.
+				"fieldname": "shipping_driver_note",
+				"label": _("Note for the Driver"),
+				"fieldtype": "Small Text",
+				"allow_on_submit": 1,
+				"no_copy": 1,
+				"depends_on": "eval:['Own Vehicle', 'Transport Company'].includes(doc.shipping_transport_mode)",
+				"insert_after": "shipping_transport_mode",
+				"description": _(
+					"Printed on the Delivery Pickup Note under Instructions, with the delivery "
+					"note's own instructions. For a note that stays inside, use the comment box below."
+				),
+			},
+			{
 				"fieldname": "shipping_received_by",
 				"label": _("Received By"),
 				"fieldtype": "Data",

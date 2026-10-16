@@ -159,3 +159,7 @@ Pickup contact phone must consist of a '+' followed by one or more digits.,Telef
 "Delivered on {0}, received by {1}. Marked by hand from the signed delivery note.","Zugestellt am {0}, empfangen von {1}. Von Hand anhand des unterschriebenen Lieferscheins markiert."
 "No signed copy attached.","Kein unterschriebenes Exemplar angehängt."
 "Remarks: {0}","Bemerkungen: {0}"
+"Note for the Driver","Hinweis für den Fahrer"
+"Printed on the Delivery Pickup Note under Instructions, with the delivery note's own instructions. For a note that stays inside, use the comment box below.","Wird auf der Delivery Pickup Note unter Hinweise gedruckt, zusammen mit den Hinweisen des Lieferscheins. Für eine interne Notiz verwenden Sie das Kommentarfeld unten."
+"Print Delivery Pickup Note","Delivery Pickup Note drucken"
+"Other Language","Andere Sprache"

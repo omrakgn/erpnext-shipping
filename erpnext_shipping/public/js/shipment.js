@@ -1056,9 +1056,19 @@ function is_own_transport(frm) {
 	return OWN_TRANSPORT_MODES.includes(frm.doc.shipping_transport_mode || "");
 }
 
+// Belgenin dili: irsaliyenin "Print Language"i (müşteriden geliyor). Başka dil
+// yalnız şoför başka dil konuşuyorsa diye, adlarıyla.
+const PICKUP_NOTE_LANGUAGES = [
+	["EN", "English"],
+	["NL", "Nederlands"],
+	["DE", "Deutsch"],
+	["FR", "Français"],
+];
+
 function own_transport_buttons(frm) {
-	["EN", "NL", "DE", "FR"].forEach((lang) => {
-		frm.add_custom_button(lang, () => print_pickup_note(frm, lang), __("Delivery Pickup Note"));
+	frm.add_custom_button(__("Print Delivery Pickup Note"), () => print_pickup_note(frm));
+	PICKUP_NOTE_LANGUAGES.forEach(([code, label]) => {
+		frm.add_custom_button(label, () => print_pickup_note(frm, code), __("Other Language"));
 	});
 	if (
 		frm.doc.docstatus === 1 &&
@@ -1071,12 +1081,28 @@ function own_transport_buttons(frm) {
 	}
 }
 
+function pickup_note_language(language) {
+	// "nl", "nl-BE", "de-DE", "fr" gibi; bilinmeyen her şey İngilizce.
+	const code = (language || "").slice(0, 2).toUpperCase();
+	return PICKUP_NOTE_LANGUAGES.some(([c]) => c === code) ? code : "EN";
+}
+
 function print_pickup_note(frm, lang) {
-	const notes = (frm.doc.shipment_delivery_note || [])
-		.map((row) => row.delivery_note)
-		.filter(Boolean);
+	// Gönderinin irsaliye tablosunda aynı irsaliye her ürün satırı için bir kez
+	// yazılı (ERPNext'in "Create > Shipment"i). Tekilleştirilmezse iki satırlı
+	// irsaliye iki kez basılıyordu: 2 nüsha × 2 = 4 sayfa (2026-10-16).
+	const notes = [
+		...new Set((frm.doc.shipment_delivery_note || []).map((row) => row.delivery_note).filter(Boolean)),
+	];
 	if (!notes.length) {
 		frappe.msgprint(__("No delivery note on this shipment."));
+		return;
+	}
+	if (!lang) {
+		frappe.db
+			.get_value("Delivery Note", notes[0], "language")
+			.then((r) => print_pickup_note(frm, pickup_note_language(r.message && r.message.language)))
+			.catch(() => print_pickup_note(frm, "EN"));
 		return;
 	}
 	const format = "Delivery Pickup Note " + lang;

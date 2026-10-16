@@ -140,3 +140,7 @@
 "Delivered on {0}, received by {1}. Marked by hand from the signed delivery note.","Geleverd op {0}, ontvangen door {1}. Met de hand gemarkeerd op basis van de getekende pakbon."
 "No signed copy attached.","Geen getekend exemplaar bijgevoegd."
 "Remarks: {0}","Opmerkingen: {0}"
+"Note for the Driver","Notitie voor de chauffeur"
+"Printed on the Delivery Pickup Note under Instructions, with the delivery note's own instructions. For a note that stays inside, use the comment box below.","Wordt op de Delivery Pickup Note afgedrukt onder Instructies, samen met de instructies van de pakbon zelf. Voor een interne notitie gebruikt u het opmerkingenveld hieronder."
+"Print Delivery Pickup Note","Delivery Pickup Note afdrukken"
+"Other Language","Andere taal"

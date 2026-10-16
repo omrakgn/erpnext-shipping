@@ -95,7 +95,11 @@ def mark_delivered(shipment, delivered_at, received_by, proof=None, remarks=None
 	onceki = doc.get("tracking_status")
 	doc.db_set(degerler)
 
-	irsaliyeler = [r.delivery_note for r in doc.get("shipment_delivery_note") or [] if r.delivery_note]
+	# ERPNext'in "Create > Shipment"i irsaliyenin her ürün satırı için bir satır yazıyor:
+	# iki ürünlü irsaliye tabloda iki kez. Sırayı koruyarak tekilleştir.
+	irsaliyeler = list(
+		dict.fromkeys(r.delivery_note for r in doc.get("shipment_delivery_note") or [] if r.delivery_note)
+	)
 	if proof:
 		_attach_proof(proof, doc.name, irsaliyeler)
 
