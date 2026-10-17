@@ -284,6 +284,12 @@ frappe.provide("erpnext_shipping.shipment_view");
 			border-bottom: 1px solid var(--border-color, #d1d8dd); }
 		.shp-list li:last-child { border-bottom: 0; }
 		.shp-list .shp-grow { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+		.shp-sum { margin: 0 0 6px; }
+		.shp-parcels li { display: block; }
+		.shp-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }
+		.shp-phead { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+		.shp-sub { margin-top: 4px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+		.shp-num { font-variant-numeric: tabular-nums; font-weight: 500; }
 		@media (max-width: 576px) {
 			.shp-actions { width: 100%; }
 			.shp-actions .btn { flex: 1 1 100%; }
@@ -431,5 +437,67 @@ frappe.provide("erpnext_shipping.shipment_view");
 			? `<div class="shp-actions" style="margin-top:8px;">${button("populate", false)}</div>`
 			: "";
 		return `${ns.STYLE}<ul class="shp-list">${rows}</ul>${fill}`;
+	};
+
+	// Taşıyıcının koli durumu serbest metin ("Parcel at depot Gent", "Bezorgd"); renk
+	// anahtar kelimeden. Bilinmeyen her şey "yolda" (mavi), boş olan gri.
+	ns.parcel_status_color = function (status) {
+		const s = String(status || "").toLowerCase();
+		if (!s) return "gray";
+		if (/(return|refus|retour|geweigerd|verweigert|lost|verloren)/.test(s)) return "red";
+		if (/(not delivered|failed|attempt|mislukt|nicht zugestellt)/.test(s)) return "orange";
+		if (/(deliver|bezorgd|afgeleverd|zugestellt)/.test(s)) return "green";
+		return "blue";
+	};
+
+	// Koli dökümü: koli başına bir satır, dar ekranda alt alta (2026-10-17: altı sütunlu
+	// tablo telefonda sayfayı yana kaydırıyordu). Satırlar get_shipment_parcel_breakdown'dan.
+	ns.parcel_breakdown_html = function (rows) {
+		rows = rows || [];
+		if (!rows.length)
+			return `${ns.STYLE}<p class="text-muted">${esc(__("No parcels yet."))}</p>`;
+		const items = rows
+			.map((p, i) => {
+				const number = p.tracking_url
+					? `<a href="${encodeURI(p.tracking_url)}" target="_blank" rel="noopener">${esc(
+							p.tracking_number || __("Track")
+					  )}</a>`
+					: esc(p.tracking_number || "");
+				const head = [
+					`<strong>${esc(__("Parcel {0}", [i + 1]))}</strong>`,
+					pill(p.status || __("No status yet"), ns.parcel_status_color(p.status)),
+				];
+				if (p.label_removed) head.push(pill(__("Label removed"), "red"));
+				const cost =
+					p.cost || p.cost === 0
+						? `<span class="shp-num">${esc(
+								format_currency(p.cost, p.currency || "EUR")
+						  )}</span>`
+						: `<span class="text-muted">${esc(__("no invoice yet"))}</span>`;
+				const sub = [number, esc(p.carrier || "")].filter(Boolean);
+				if (p.delivered_at) sub.push(esc(__("delivered {0}", [day(p.delivered_at)])));
+				return (
+					`<li><div class="shp-row"><span class="shp-phead">${head.join(
+						" "
+					)}</span>${cost}</div>` +
+					`<div class="shp-sub text-muted">${sub.join(" · ")}</div></li>`
+				);
+			})
+			.join("");
+		let summary = "";
+		if (rows.length > 1) {
+			const total = rows.reduce((s, p) => s + flt(p.cost), 0);
+			const delivered = rows.filter(
+				(p) => ns.parcel_status_color(p.status) === "green"
+			).length;
+			summary = `<p class="text-muted shp-sum">${esc(
+				__("{0} parcels · {1} delivered · {2}", [
+					rows.length,
+					delivered,
+					format_currency(total, rows[0].currency || "EUR"),
+				])
+			)}</p>`;
+		}
+		return `${ns.STYLE}${summary}<ul class="shp-list shp-parcels">${items}</ul>`;
 	};
 })(erpnext_shipping.shipment_view);
