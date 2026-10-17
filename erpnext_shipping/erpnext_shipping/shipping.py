@@ -380,6 +380,7 @@ def _build_parcels(shipment_doc):
 
 	skipped = []
 	parcel_no = 0
+	adlar = {}
 	for unit in units:
 		template = frappe.db.get_value("Item", unit["template_item"], "custom_shipment_parcel_template")
 		if not template:
@@ -428,9 +429,19 @@ def _build_parcels(shipment_doc):
 			)
 			if has_parcel_items:
 				for code, q in unit["contents"].items():
+					# Ad ürün kodundan çekilen (fetch_from) bir alan, ama bu fonksiyon kaydın
+					# doğrulama kancasında da çalışıyor ve Frappe çekmeyi kancalardan önce
+					# yapıyor: yazılmazsa boş kalıyordu (2026-10-17: 248 gönderide 304 satır).
+					if code not in adlar:
+						adlar[code] = frappe.db.get_value("Item", code, "item_name")
 					shipment_doc.append(
 						"custom_parcel_items",
-						{"parcel_no": parcel_no, "item_code": code, "qty": flt(q) * frac},
+						{
+							"parcel_no": parcel_no,
+							"item_code": code,
+							"item_name": adlar[code],
+							"qty": flt(q) * frac,
+						},
 					)
 
 	return parcel_no, skipped
