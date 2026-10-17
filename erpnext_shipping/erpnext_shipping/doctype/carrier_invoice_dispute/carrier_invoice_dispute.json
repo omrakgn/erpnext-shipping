@@ -1,0 +1,413 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "CID-.YYYY.-.#####",
+ "creation": "2026-10-17 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "dispute_tab",
+  "summary_html",
+  "invoice_section",
+  "billed_by",
+  "invoice_number",
+  "invoice_date",
+  "carrier",
+  "column_break_invoice",
+  "status",
+  "purchase_invoice",
+  "supplier",
+  "currency",
+  "lines_section",
+  "lines",
+  "total_billed",
+  "column_break_totals",
+  "total_disputed",
+  "column_break_accepted",
+  "total_accepted",
+  "outcome_section",
+  "decision",
+  "decided_on",
+  "column_break_outcome",
+  "carrier_credit_note",
+  "debit_note",
+  "credited_on",
+  "notes_section",
+  "notes",
+  "sending_tab",
+  "sending_section",
+  "method",
+  "dispute_email",
+  "portal_url",
+  "column_break_sending",
+  "portal_reference",
+  "language",
+  "dates_section",
+  "deadline",
+  "sent_on",
+  "answer_due",
+  "column_break_dates",
+  "deadline_reminded",
+  "answer_reminded",
+  "title"
+ ],
+ "fields": [
+  {
+   "fieldname": "dispute_tab",
+   "fieldtype": "Tab Break",
+   "label": "Dispute"
+  },
+  {
+   "fieldname": "summary_html",
+   "fieldtype": "HTML",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "invoice_section",
+   "fieldtype": "Section Break",
+   "label": "Carrier Invoice"
+  },
+  {
+   "description": "Who invoiced the charges. The dispute goes to them, whoever carried the parcel.",
+   "fieldname": "billed_by",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Billed By",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "invoice_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Invoice Number",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The deadline counts from here.",
+   "fieldname": "invoice_date",
+   "fieldtype": "Date",
+   "label": "Invoice Date"
+  },
+  {
+   "description": "The carriers that moved the disputed parcels.",
+   "fieldname": "carrier",
+   "fieldtype": "Data",
+   "label": "Carrier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_invoice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "no_copy": 1,
+   "options": "Draft\nSent\nAccepted\nPartly Accepted\nRejected\nCredited\nClosed",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Purchase Invoice",
+   "options": "Purchase Invoice"
+  },
+  {
+   "fetch_from": "purchase_invoice.supplier",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "read_only": 1
+  },
+  {
+   "default": "EUR",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "lines_section",
+   "fieldtype": "Section Break",
+   "label": "Disputed Charges"
+  },
+  {
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Charges",
+   "options": "Carrier Invoice Dispute Line"
+  },
+  {
+   "fieldname": "total_billed",
+   "fieldtype": "Currency",
+   "label": "Billed",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_disputed",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Disputed",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_accepted",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_accepted",
+   "fieldtype": "Currency",
+   "label": "Accepted",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.decision || doc.debit_note || doc.carrier_credit_note",
+   "fieldname": "outcome_section",
+   "fieldtype": "Section Break",
+   "label": "Answer"
+  },
+  {
+   "fieldname": "decision",
+   "fieldtype": "Select",
+   "label": "Decision",
+   "no_copy": 1,
+   "options": "\nAccepted\nPartly Accepted\nRejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decided_on",
+   "fieldtype": "Date",
+   "label": "Answered On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_outcome",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The number on the carrier's credit note.",
+   "fieldname": "carrier_credit_note",
+   "fieldtype": "Data",
+   "label": "Carrier Credit Note",
+   "no_copy": 1
+  },
+  {
+   "description": "The return Purchase Invoice that books the credit against the original.",
+   "fieldname": "debit_note",
+   "fieldtype": "Link",
+   "label": "Debit Note",
+   "no_copy": 1,
+   "options": "Purchase Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credited_on",
+   "fieldtype": "Date",
+   "label": "Credited On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "sending_tab",
+   "fieldtype": "Tab Break",
+   "label": "Sending and Dates"
+  },
+  {
+   "description": "Filled from Invoice Disputes in Shipping Cost Settings when the dispute is created.",
+   "fieldname": "sending_section",
+   "fieldtype": "Section Break",
+   "label": "How It Is Sent"
+  },
+  {
+   "fieldname": "method",
+   "fieldtype": "Select",
+   "label": "Send By",
+   "options": "\nEmail\nPortal"
+  },
+  {
+   "depends_on": "eval:doc.method != 'Portal'",
+   "fieldname": "dispute_email",
+   "fieldtype": "Data",
+   "label": "Dispute Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "portal_url",
+   "fieldtype": "Data",
+   "label": "Portal Link",
+   "options": "URL"
+  },
+  {
+   "fieldname": "column_break_sending",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The case or ticket number the carrier gave.",
+   "fieldname": "portal_reference",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Carrier Reference",
+   "no_copy": 1
+  },
+  {
+   "default": "en",
+   "fieldname": "language",
+   "fieldtype": "Link",
+   "label": "Language",
+   "options": "Language"
+  },
+  {
+   "fieldname": "dates_section",
+   "fieldtype": "Section Break",
+   "label": "Dates"
+  },
+  {
+   "description": "Last day to file the dispute: invoice date plus the days set for this party.",
+   "fieldname": "deadline",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "File By"
+  },
+  {
+   "fieldname": "sent_on",
+   "fieldtype": "Date",
+   "label": "Sent On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "answer_due",
+   "fieldtype": "Date",
+   "label": "Answer Due",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "deadline_reminded",
+   "fieldtype": "Date",
+   "label": "Deadline Reminder Sent",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "answer_reminded",
+   "fieldtype": "Date",
+   "label": "Answer Reminder Sent",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Title",
+   "no_copy": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-17 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Carrier Invoice Dispute",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "billed_by,invoice_number,portal_reference",
+ "show_title_field_in_link": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

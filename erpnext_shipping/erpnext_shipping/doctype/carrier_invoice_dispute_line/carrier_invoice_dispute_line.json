@@ -1,0 +1,151 @@
+{
+ "actions": [],
+ "creation": "2026-10-17 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "cost_entry",
+  "parcel_number",
+  "reason",
+  "billed_amount",
+  "disputed_amount",
+  "accepted_amount",
+  "evidence_section",
+  "billed_weight",
+  "declared_weight",
+  "column_break_evidence",
+  "evidence",
+  "links_section",
+  "shipment",
+  "scan_date",
+  "column_break_links",
+  "currency"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "cost_entry",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Cost Entry",
+   "options": "Shipping Cost Entry",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fetch_from": "cost_entry.parcel_number",
+   "fieldname": "parcel_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Parcel",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "reason",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Reason",
+   "options": "Weight or size surcharge\nBilled weight above declared\nDuplicate charge\nSurcharge does not apply\nPrice above agreed rate\nCancelled or unsent parcel\nOther",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "fetch_from": "cost_entry.total_net_amount",
+   "fieldname": "billed_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Billed",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "description": "The part of the billed amount we ask back. Usually the surcharge line, not the whole charge.",
+   "fieldname": "disputed_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Disputed",
+   "options": "currency"
+  },
+  {
+   "columns": 1,
+   "description": "Filled when the answer is recorded. Edit it when the carrier accepted some lines and not others.",
+   "fieldname": "accepted_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Accepted",
+   "options": "currency"
+  },
+  {
+   "fieldname": "evidence_section",
+   "fieldtype": "Section Break",
+   "label": "Evidence"
+  },
+  {
+   "fieldname": "billed_weight",
+   "fieldtype": "Float",
+   "label": "Billed Weight (kg)"
+  },
+  {
+   "description": "The weight on our label, else the products' declared weight.",
+   "fieldname": "declared_weight",
+   "fieldtype": "Float",
+   "label": "Declared Weight (kg)"
+  },
+  {
+   "fieldname": "column_break_evidence",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Sent to the carrier as written.",
+   "fieldname": "evidence",
+   "fieldtype": "Small Text",
+   "label": "Explanation"
+  },
+  {
+   "fieldname": "links_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fetch_from": "cost_entry.shipment",
+   "fieldname": "shipment",
+   "fieldtype": "Link",
+   "label": "Shipment",
+   "options": "Shipment",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "cost_entry.scan_date",
+   "fieldname": "scan_date",
+   "fieldtype": "Date",
+   "label": "Scan Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_links",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "cost_entry.currency",
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Currency",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-17 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Carrier Invoice Dispute Line",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

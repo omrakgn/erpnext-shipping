@@ -1,0 +1,92 @@
+{
+ "actions": [],
+ "creation": "2026-10-17 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "billed_by",
+  "method",
+  "email",
+  "portal_url",
+  "dispute_days",
+  "answer_days",
+  "language"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "description": "As it appears in Billed By on the cost entries. Case is ignored.",
+   "fieldname": "billed_by",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Billed By",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "Email",
+   "fieldname": "method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Send By",
+   "options": "Email\nPortal",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Dispute Email",
+   "options": "Email"
+  },
+  {
+   "columns": 2,
+   "fieldname": "portal_url",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Portal Link",
+   "options": "URL"
+  },
+  {
+   "columns": 1,
+   "description": "Days from the invoice date to file a dispute. Empty: no deadline is set.",
+   "fieldname": "dispute_days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Days to Dispute"
+  },
+  {
+   "columns": 1,
+   "default": "14",
+   "description": "Days after sending before a missing answer is chased.",
+   "fieldname": "answer_days",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Days to Answer"
+  },
+  {
+   "columns": 1,
+   "default": "en",
+   "description": "Language of the e-mail and the portal text.",
+   "fieldname": "language",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Language",
+   "options": "Language"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-17 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPNext Shipping",
+ "name": "Carrier Dispute Contact",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

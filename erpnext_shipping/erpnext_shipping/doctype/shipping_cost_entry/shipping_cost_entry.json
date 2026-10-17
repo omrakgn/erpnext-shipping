@@ -65,6 +65,8 @@
   "shipment",
   "delivery_note",
   "purchase_invoice",
+  "dispute",
+  "dispute_status",
   "column_break_links",
   "matched",
   "match_method",
@@ -430,6 +432,24 @@
    "read_only": 1
   },
   {
+   "description": "The dispute this charge is in. A charge is in one open dispute at a time.",
+   "fieldname": "dispute",
+   "fieldtype": "Link",
+   "label": "Dispute",
+   "no_copy": 1,
+   "options": "Carrier Invoice Dispute",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "dispute_status",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Dispute Status",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_links",
    "fieldtype": "Column Break"
   },
@@ -502,8 +522,14 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2026-10-16 18:00:00.000000",
+ "links": [
+  {
+   "group": "Disputes",
+   "link_doctype": "Carrier Invoice Dispute",
+   "link_fieldname": "cost_entry"
+  }
+ ],
+ "modified": "2026-10-17 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping Cost Entry",

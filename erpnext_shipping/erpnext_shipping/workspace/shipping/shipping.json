@@ -95,7 +95,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Shipping Costs",
-   "link_count": 5,
+   "link_count": 6,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -106,6 +106,17 @@
    "label": "Shipping Cost Entry",
    "link_count": 0,
    "link_to": "Shipping Cost Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Carrier Invoice Dispute",
+   "link_count": 0,
+   "link_to": "Carrier Invoice Dispute",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -289,7 +300,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-07-18 00:00:00.000000",
+ "modified": "2026-10-17 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "ERPNext Shipping",
  "name": "Shipping",

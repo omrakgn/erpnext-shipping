@@ -39,6 +39,13 @@ frappe.provide("erpnext_shipping.cost_entry");
 		return rows.reduce((t, r) => t + flt(r.unit_weight) * flt(r.qty), 0);
 	};
 
+	// İtiraz edilebilir: faturası belli, tutarı artı, düzeltme değil ve açık bir itirazda değil.
+	ns.OPEN_DISPUTE = ["Draft", "Sent", "Accepted", "Partly Accepted"];
+	ns.can_dispute = function (doc) {
+		if (!doc.invoice_number || !(flt(doc.total_net_amount) > 0) || doc.is_correction) return false;
+		return !(doc.dispute && ns.OPEN_DISPUTE.includes(doc.dispute_status));
+	};
+
 	ns.invoiced_weight = function (doc) {
 		return flt(doc.corrected_weight) > 0 ? flt(doc.corrected_weight) : flt(doc.invoicing_weight);
 	};
@@ -66,6 +73,7 @@ frappe.provide("erpnext_shipping.cost_entry");
 		const chips = [];
 		if (!doc.matched) chips.push(pill(__("Not matched"), "red"));
 		else chips.push(pill(__("Matched by {0}", [__(doc.match_method || "Manual")]), "gray"));
+		if (doc.dispute) chips.push(pill(__("Dispute {0}: {1}", [doc.dispute, __(doc.dispute_status || "Draft")]), "purple"));
 		if (doc.is_correction) chips.push(pill(__("Correction"), "blue"));
 		if (flt(doc.surcharge_amount)) chips.push(pill(__("Surcharges {0}", [money(doc, doc.surcharge_amount)]), "orange"));
 		if (doc.weight_surcharge) chips.push(pill(__("Weight/size surcharge"), "orange"));
@@ -201,6 +209,24 @@ frappe.ui.form.on("Shipping Cost Entry", {
 		draw("breakdown_html", ns.breakdown_html(frm.doc));
 		draw("measure_html", ns.measure_html(frm.doc));
 
+		if (frm.doc.dispute) {
+			frm.add_custom_button(__("Dispute"), () => frappe.set_route("Form", "Carrier Invoice Dispute", frm.doc.dispute), __("Open"));
+		}
+		if (!frm.is_new() && ns.can_dispute(frm.doc)) {
+			frm.add_custom_button(__("Dispute This Charge"), () => {
+				frappe
+					.call({
+						method: "erpnext_shipping.erpnext_shipping.dispute.create_disputes",
+						args: { cost_entries: [frm.doc.name] },
+						freeze: true,
+					})
+					.then((r) => {
+						const m = r.message || {};
+						if ((m.disputes || []).length) frappe.set_route("Form", "Carrier Invoice Dispute", m.disputes[0]);
+						else if ((m.skipped || []).length) frappe.msgprint(m.skipped[0].why);
+					});
+			});
+		}
 		if (frm.doc.shipment) {
 			frm.add_custom_button(__("Shipment"), () => frappe.set_route("Form", "Shipment", frm.doc.shipment), __("Open"));
 		}

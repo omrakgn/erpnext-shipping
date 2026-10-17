@@ -146,6 +146,9 @@ scheduler_events = {
 		# SendCloud faturalarını API'den çek (elle CSV içe aktarmanın yerine). 05:27:
 		# Bol'un */5, */15, */30 ve saatlik işleriyle aynı dakikaya düşmüyor.
 		"27 5 * * *": ["erpnext_shipping.erpnext_shipping.sendcloud_invoices.sync_sendcloud_invoices"],
+		# Son günü yaklaşan taslak ve cevabı geciken itiraz, açanına ToDo olur. 06:47:
+		# Bol'un saatlik 40 ve 50 işlerinin arasında, Shopify'ın 06:35 işinden sonra.
+		"47 6 * * *": ["erpnext_shipping.erpnext_shipping.dispute.remind_disputes"],
 	},
 }
 
@@ -207,5 +210,17 @@ doc_events = {
 		# Yalnızca Shipment Settings'te kargo geliri hesabı tanımlıysa çalışır (aksi
 		# halde no-op) — müşteri kargo bedelini vergi satırından doldurur.
 		"validate": "erpnext_shipping.erpnext_shipping.shipping_cost.set_dn_customer_shipping_charge",
+	},
+	# Kargo faturası itirazı (docs/plans/kargo-maliyet-ekrani-ve-itiraz.md §4.4).
+	# İkisi de ilk satırda kendi kapsamı dışını bırakıyor: yalnız itirazdan giden
+	# e-posta ve yalnız iade satın alma faturası (debit note).
+	"Communication": {
+		"after_insert": "erpnext_shipping.erpnext_shipping.dispute.on_communication",
+	},
+	"Purchase Invoice": {
+		"on_submit": "erpnext_shipping.erpnext_shipping.dispute.on_debit_note_submit",
+		"on_cancel": "erpnext_shipping.erpnext_shipping.dispute.on_debit_note_cancel",
+		# Bağlantı denetiminden önce çalışır: silinen taslak debit note itirazı bırakır.
+		"on_trash": "erpnext_shipping.erpnext_shipping.dispute.on_debit_note_trash",
 	},
 }
