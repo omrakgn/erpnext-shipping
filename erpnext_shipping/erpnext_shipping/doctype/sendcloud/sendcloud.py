@@ -228,6 +228,17 @@ def sender_company_name(shipment=None):
 	)
 
 
+# Adres başlığı bunlardan birini taşıyorsa bir cadde adıdır, firma adı değil.
+STREET_WORDS = ("straat", "laan", "weg", "street", "road", "avenue")
+
+
+def person_name(contact):
+	"""Etiketteki kişi adı. Boş soyad "Ad None" diye basılıyordu."""
+	if not contact:
+		return ""
+	return " ".join(p for p in (contact.get("first_name"), contact.get("last_name")) if p).strip()
+
+
 def return_contract_ids():
 	"""İade ürünleri hangi sözleşmeler için sorulacak.
 
@@ -594,7 +605,7 @@ class SendCloudUtils:
 		house_number, address = self.extract_house_number(pickup_address.address_line1)
 
 		# Müşteri tipini belirle (Şirket mi, Bireysel mi?)
-		customer_name = f"{delivery_contact.first_name} {delivery_contact.last_name}"
+		customer_name = person_name(delivery_contact)
 		company_name = self.get_company_name(delivery_address, customer_name)
 
 		# Teslimat adresi için house number extraction
@@ -623,7 +634,7 @@ class SendCloudUtils:
 
 		# from_address oluştur
 		from_address = {
-			"name": f"{pickup_contact.first_name} {pickup_contact.last_name}",
+			"name": person_name(pickup_contact),
 			"address_line_1": address or pickup_address.address_line1,
 			"house_number": house_number or " ",
 			"postal_code": pickup_address.pincode,
@@ -631,13 +642,9 @@ class SendCloudUtils:
 			"country_code": pickup_address.country_code.upper(),
 		}
 		
-		# Company name için: address_title adres gibi görünüyorsa, şirket adını farklı yerden al
-		from_company = pickup_address.address_title
-		if from_company and not any(word in from_company.lower() for word in ['straat', 'laan', 'weg', 'street', 'road', 'avenue']):
+		from_company = self.sender_company(shipment, pickup_address, from_address["name"])
+		if from_company:
 			from_address["company_name"] = from_company
-		else:
-			# Address title adres içeriyorsa, Company'den şirket adını al
-			from_address["company_name"] = sender_company_name(shipment)
 		
 		if pickup_contact.phone:
 			from_address["phone_number"] = pickup_contact.phone
@@ -793,7 +800,7 @@ class SendCloudUtils:
 	):
 		"""SendCloud to_address / from_address ve order_number'ı oluştur (create yollarında ortak)."""
 		# Müşteri tipi (Şirket / Bireysel)
-		customer_name = f"{delivery_contact.first_name} {delivery_contact.last_name}"
+		customer_name = person_name(delivery_contact)
 		company_name = self.get_company_name(delivery_address, customer_name)
 
 		delivery_house_number, delivery_street = self.extract_house_number(delivery_address.address_line1)
@@ -829,20 +836,16 @@ class SendCloudUtils:
 
 		house_number, address = self.extract_house_number(pickup_address.address_line1)
 		from_address = {
-			"name": f"{pickup_contact.first_name} {pickup_contact.last_name}",
+			"name": person_name(pickup_contact),
 			"address_line_1": address or pickup_address.address_line1,
 			"house_number": house_number or " ",
 			"postal_code": pickup_address.pincode,
 			"city": pickup_address.city,
 			"country_code": pickup_address.country_code.upper(),
 		}
-		from_company = pickup_address.address_title
-		if from_company and not any(
-			word in from_company.lower() for word in ["straat", "laan", "weg", "street", "road", "avenue"]
-		):
+		from_company = self.sender_company(shipment, pickup_address, from_address["name"])
+		if from_company:
 			from_address["company_name"] = from_company
-		else:
-			from_address["company_name"] = sender_company_name(shipment)
 		if pickup_contact.phone:
 			from_address["phone_number"] = pickup_contact.phone
 		if pickup_contact.email_id:
@@ -2684,54 +2687,61 @@ class SendCloudUtils:
 		else:
 			return None, None
 
-	def get_company_name(self, delivery_address, customer_name):
+	def sender_company(self, shipment, pickup_address, name):
+		"""Gönderenin şirket satırı.
+
+		Kendi depomuzdan ya da tedarikçiden çıkan gönderide adres başlığı firmanın
+		adı; cadde adı gibi görünüyorsa gönderinin şirketi. Müşteriden alınan
+		gönderide (iade) başlık müşterinin kaydıdır, firma adı değil: alıcı
+		tarafındaki kural uygulanıyor. SHIPMENT-01248'in etiketinde gönderen
+		"Duaa Kanjo Duaa Kanjo-ORD-20260908-BC450A" diye basılmıştı (2026-10-23).
 		"""
-		Müşteri tipine göre company_name belirle.
-		- Şirket müşterisiyse: Şirket adını döndür
-		- Bireysel müşteriyse: Boş string döndür (SendCloud'da company_name görünmez)
+		pickup_type = frappe.db.get_value("Shipment", shipment, "pickup_from_type") if shipment else None
+		if pickup_type == "Customer":
+			return self.get_company_name(pickup_address, name)
+		title = pickup_address.get("address_title")
+		if title and not any(word in title.lower() for word in STREET_WORDS):
+			return title
+		return sender_company_name(shipment)
+
+	def get_company_name(self, address, person):
+		"""
+		Etiketin şirket satırı: yalnız bir şirketin kendi adresinde, yoksa boş.
+
+		- Adres bir şahıs müşteriye bağlıysa boş. Bir son müşterinin adresi hem
+		  bayiye hem şahıs kaydına bağlı olabiliyor; şahıs bağı adresin kimin
+		  olduğunu söylüyor.
+		- Yalnız şirket müşterisine bağlıysa şirketin adı, ama yalnız adres
+		  başlığında o ad geçiyorsa. Bayinin son müşteri adresleri yalnız bayiye
+		  bağlı ve başlıkları "Ad Soyad-ORD-..." (Portal); eskiden başlık olduğu
+		  gibi şirket adı yapılıyor, bayi siparişlerinin etiketinde alıcının
+		  şirketi diye "Duaa Kanjo-ORD-20260908-BC450A" yazıyordu.
 		"""
 		try:
-			# Address'e bağlı Customer veya Link'i bul
-			customer = None
-			customer_type = None
-
-			# Önce address_title'dan Customer bulmayı dene
-			if delivery_address.address_title:
-				# Customer tablosunda ara
-				customer_exists = frappe.db.exists("Customer", delivery_address.address_title)
-				if customer_exists:
-					customer = delivery_address.address_title
-					customer_type = frappe.db.get_value("Customer", customer, "customer_type")
-
-			# Eğer bulunamadıysa, Dynamic Link üzerinden bul
-			if not customer and delivery_address.name:
-				links = frappe.get_all(
+			title = (address.get("address_title") or "").strip()
+			customers = []
+			if address.get("name"):
+				customers = frappe.get_all(
 					"Dynamic Link",
-					filters={
-						"link_doctype": "Customer",
-						"parenttype": "Address",
-						"parent": delivery_address.name
-					},
-					fields=["link_name"]
+					filters={"link_doctype": "Customer", "parenttype": "Address", "parent": address.get("name")},
+					pluck="link_name",
 				)
-				if links:
-					customer = links[0].link_name
-					customer_type = frappe.db.get_value("Customer", customer, "customer_type")
+			if not customers and title and frappe.db.exists("Customer", title):
+				customers = [title]
 
-			# Customer tipi "Company" ise şirket adını döndür
-			if customer_type == "Company":
-				# Şirket adı olarak address_title veya customer_name kullan
-				company_name = delivery_address.address_title or ""
+			companies = []
+			for customer in customers:
+				row = frappe.db.get_value("Customer", customer, ["customer_type", "customer_name"], as_dict=True)
+				if not row:
+					continue
+				if row.customer_type != "Company":
+					return ""
+				companies.append(row.customer_name or customer)
 
-				# Eğer address_title kişi adıyla aynıysa, customer_name'i kontrol et
-				if company_name.lower() == customer_name.lower():
-					customer_name_from_db = frappe.db.get_value("Customer", customer, "customer_name")
-					if customer_name_from_db and customer_name_from_db.lower() != customer_name.lower():
-						return customer_name_from_db
-
-				return company_name if company_name.lower() != customer_name.lower() else ""
-
-			# Bireysel müşteri - company_name boş olsun
+			person = (person or "").strip().lower()
+			for company in companies:
+				if company.lower() in title.lower() and company.lower() != person:
+					return company
 			return ""
 
 		except Exception as e:
