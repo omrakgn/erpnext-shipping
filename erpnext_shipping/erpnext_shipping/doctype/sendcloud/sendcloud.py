@@ -1234,8 +1234,15 @@ class SendCloudUtils:
 			}
 			if contract_id:
 				body["contract"] = contract_id
-			if pickup_contact.get("email_id"):
-				body["from_email"] = pickup_contact.email_id
+			# SendCloud iade kolisinde gönderenin e-postasını zorunlu tutuyor
+			# ("from_email: This field is required", 2026-10-23). Müşterinin
+			# e-postası yoksa bizim iade kişimizinki: etiket kesilsin, SendCloud'un
+			# bildirimi de bize gelsin.
+			sender_email = pickup_contact.get("email_id") or (
+				delivery_contact.get("email_id") if delivery_contact else None
+			)
+			if sender_email:
+				body["from_email"] = sender_email
 			if pickup_contact.get("phone"):
 				body["from_telephone"] = pickup_contact.phone
 			if delivery_contact and delivery_contact.get("email_id"):
@@ -1271,7 +1278,16 @@ class SendCloudUtils:
 		# olurdu.
 		created_list = []
 		for i, box in enumerate(boxes, start=1):
-			created = self._post_parcel({"parcel": _body(box, i)})
+			body = _body(box, i)
+			context = _("Return product {0} ({1}), {2} kg, from {3} to {4}, contract {5}.").format(
+				service_info.get("service_name") or "",
+				service_info.get("service_id"),
+				body["weight"],
+				body["from_country"] or "?",
+				body["country"] or "?",
+				contract_id or _("account default"),
+			)
+			created = self._post_parcel({"parcel": body}, context=context)
 			created_list.append(created)
 
 			arrives = ((created.get("country") or {}).get("iso_2") or "").upper()
@@ -1330,11 +1346,11 @@ class SendCloudUtils:
 			"shipment_amount": flt(service_info.get("total_price")) * len(results),
 		}
 
-	def _post_parcel(self, payload):
+	def _post_parcel(self, payload, context=None):
 		response = requests.post(
 			PARCELS_URL, json=payload, auth=(self.api_key, self.api_secret), timeout=60
 		)
-		return self._parcel_or_throw(response)
+		return self._parcel_or_throw(response, context, payload)
 
 	def _put_parcel(self, payload):
 		response = requests.put(
@@ -1342,7 +1358,15 @@ class SendCloudUtils:
 		)
 		return self._parcel_or_throw(response)
 
-	def _parcel_or_throw(self, response):
+	def _parcel_or_throw(self, response, context=None, payload=None):
+		"""The parcel, or a stop that says what was refused.
+
+		The bare SendCloud message ("shipment: Invalid shipment.id") named neither
+		the product nor the parcel, and every refusal had to be rebuilt by hand in
+		the console (SHIPMENT-01248, 2026-10-23). `context` says what was asked
+		for; the request goes to the Error Log without the customer's e-mail and
+		phone.
+		"""
 		try:
 			data = response.json()
 		except ValueError:
@@ -1350,9 +1374,53 @@ class SendCloudUtils:
 
 		if response.status_code >= 400 or data.get("error"):
 			message = (data.get("error") or {}).get("message") or response.text[:300]
-			frappe.throw(_("SendCloud: {0}").format(message), title=_("Return label failed"))
+			if not context:
+				frappe.throw(_("SendCloud: {0}").format(message), title=_("Return label failed"))
+			kayit = dict((payload or {}).get("parcel") or {})
+			for alan in ("from_email", "from_telephone", "email", "telephone"):
+				kayit.pop(alan, None)
+			frappe.log_error(
+				title="SendCloud return label refused",
+				message=f"{context}\n\n{message}\n\n{json.dumps(kayit, indent=1, default=str)}",
+			)
+			text = _("SendCloud: {0}").format(message) + "<br><br>" + context
+			if "shipment.id" in message:
+				text += "<br><br>" + _(
+					"SendCloud does not sell this return product for this parcel. Choose another one, or a product marked \"Regular shipment\" further down the list."
+				)
+			frappe.throw(text, title=_("Return label failed"))
 
 		return data.get("parcel") or {}
+
+	def recipient_problem(self, parcel_ids, delivery_address):
+		"""None when every parcel is addressed to `delivery_address`, else what SendCloud holds instead.
+
+		Read back from SendCloud's own record of the parcel: a return booked as an
+		ordinary shipment must arrive at us. A parcel that cannot be read is not
+		counted as a problem; the check must not invent one.
+		"""
+		want_country = (delivery_address.get("country_code") or "").upper()
+		want_zip = re.sub(r"\s+", "", delivery_address.get("pincode") or "").upper()
+		for parcel_id in str(parcel_ids or "").split(","):
+			parcel_id = parcel_id.strip()
+			if not parcel_id:
+				continue
+			try:
+				response = requests.get(
+					f"{PARCELS_URL}/{parcel_id}", auth=(self.api_key, self.api_secret), timeout=30
+				)
+				parcel = (response.json() or {}).get("parcel") or {}
+			except Exception:  # noqa: BLE001, S112 - okunamayan koli sorun sayılmaz
+				continue
+			country = ((parcel.get("country") or {}).get("iso_2") or "").upper()
+			postcode = re.sub(r"\s+", "", parcel.get("postal_code") or "").upper()
+			if (country and want_country and country != want_country) or (
+				postcode and want_zip and postcode != want_zip
+			):
+				return _("parcel {0} is addressed to {1} {2}, not to {3} {4}").format(
+					parcel_id, postcode, country, want_zip, want_country
+				)
+		return None
 
 	def get_tracking_history(self, tracking_number):
 		"""Full status ladder for a tracking number, or None.

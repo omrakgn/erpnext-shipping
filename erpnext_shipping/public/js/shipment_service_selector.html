@@ -18,6 +18,7 @@
 							<td class="service-info" style="width:40%;">
 								{{ data.preferred_services[i].service_name }}
 								<div class="text-muted" style="font-size: 11px;">{{ data.preferred_services[i].service_id }}</div>
+								{% if (data.preferred_services[i].note) { %}<div class="text-warning" style="font-size: 11px;">{{ data.preferred_services[i].note }}</div>{% } %}
 							</td>
 							<td class="service-info" style="width:24%;">
 								{% if (data.preferred_services[i].contract_pinned) { %}<span style="color:#f0ad4e;" title="{{ __('Saved with this preferred option') }}">★</span> {% } %}{{ data.preferred_services[i].contract_name || __("Account default") }}
@@ -68,6 +69,7 @@
 							<td class="service-info" style="width:40%;">
 								{{ data.other_services[i].service_name }}
 								<div class="text-muted" style="font-size: 11px;">{{ data.other_services[i].service_id }}</div>
+								{% if (data.other_services[i].note) { %}<div class="text-warning" style="font-size: 11px;">{{ data.other_services[i].note }}</div>{% } %}
 							</td>
 							<td class="service-info" style="width:24%;">
 								{% if (data.other_services[i].contract_pinned) { %}<span style="color:#f0ad4e;" title="{{ __('Saved with this preferred option') }}">★</span> {% } %}{{ data.other_services[i].contract_name || __("Account default") }}

@@ -120,11 +120,12 @@ def fetch_shipping_rates(
 
 	if sendcloud_enabled and cint(is_return):
 		# İade ürünleri v2'de ve sayısal id ile çalışıyor; günlük teklif akışı
-		# v3'te ve metin kod kullanıyor. İkisi birbirinin yerine geçmediği için
-		# iade kendi yolundan gidiyor ve v3 tarafına hiç uğramıyor.
+		# v3'te ve metin kod kullanıyor. İkisi birbirinin yerine geçmiyor: iade
+		# ürünleri iade yolundan, normal ürünler normal yoldan kesiliyor.
 		sendcloud = SendCloudUtils()
-		return_prices = sendcloud.get_return_services(pickup_address=pickup_address, parcels=parcels)
-		if not return_prices:
+		return_prices = sendcloud.get_return_services(pickup_address=pickup_address, parcels=parcels) or []
+		regular = regular_services_for_return(sendcloud, pickup_address, delivery_address, parcels)
+		if not return_prices and not regular:
 			frappe.msgprint(
 				_("No return product covers a parcel of this weight leaving {0}. Carriers band return prices by weight, and the bands have gaps.").format(
 					pickup_address.get("country") or pickup_address.get("country_code")
@@ -132,7 +133,7 @@ def fetch_shipping_rates(
 				title=_("No return options"),
 				indicator="orange",
 			)
-		return return_prices
+		return return_prices + regular
 
 	if sendcloud_enabled:
 		sendcloud = SendCloudUtils()
@@ -263,10 +264,59 @@ def create_shipment(
 		shipment.db_set(values)
 		announce_label(shipment.name)
 
+		# İade gönderisi normal ürünle kesildiyse yönü SendCloud'un kaydından
+		# doğrula: ters kurulmuş bir iade, bizim paramızla müşteriye giden bir
+		# kolidir. Etiket artık satın alınmış; durdurmak yerine yüksek sesle söyle.
+		if (
+			service_info["service_provider"] == SENDCLOUD_PROVIDER
+			and not service_info.get("is_return")
+			and cint(shipment.get("custom_is_return"))
+		):
+			problem = sendcloud.recipient_problem(shipment_info.get("shipment_id"), delivery_address)
+			if problem:
+				frappe.msgprint(
+					_("This return label does not come to us: {0}. Cancel it in SendCloud before the carrier collects.").format(
+						problem
+					),
+					title=_("Return label goes the wrong way"),
+					indicator="red",
+				)
+
 		if delivery_notes:
 			update_delivery_note(delivery_notes=delivery_notes, shipment_info=shipment_info)
 
 	return shipment_info
+
+
+def regular_services_for_return(sendcloud, pickup_address, delivery_address, parcels):
+	"""SendCloud's ordinary products for a return: the customer sends, we receive.
+
+	Some returns have no return product at all. FedEx freight is the known case:
+	the return product (28479) is refused from every country, and the ordinary
+	freight products cannot be booked as a return either; both answer
+	"Invalid shipment.id" (2026-10-23, docs/iade-kargo-duzeltmeleri.md). Booked
+	as an ordinary shipment with the customer as sender, the same label works and
+	is billed to our own account. SendCloud then lists it with outgoing shipments.
+
+	Listed after the return products and marked as such, so nobody takes one for
+	the other. A starred option keeps the contract saved with it.
+	"""
+	prices = (
+		sendcloud.get_available_services(
+			delivery_address=delivery_address, pickup_address=pickup_address, parcels=parcels
+		)
+		or []
+	)
+	prices = match_parcel_service_type_carrier(prices, "carrier", "service_name")
+	preferred_codes = sendcloud.get_preferred_codes()
+	note = _("Regular shipment, sender is the customer. SendCloud lists it with outgoing shipments.")
+	for price in prices:
+		price.regular_for_return = 1
+		price.note = note
+		if preferred_codes and price.get("service_id") in preferred_codes:
+			price.is_preferred = 1
+	apply_preferred_contracts(sendcloud, prices)
+	return sorted(prices, key=lambda k: (k.get("total_price") is None, k.get("total_price") or 0))
 
 
 def apply_preferred_contracts(sendcloud, prices):
