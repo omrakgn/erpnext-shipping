@@ -1,0 +1,14 @@
+Shipments waiting for a label,Etiket bekleyen gönderiler
+"Submitted, pickup day reached, no label yet. Create the label or change the pickup date.","Onaylandı, alım günü geldi ama etiket yok. Etiketi oluşturun ya da alım tarihini değiştirin."
+Shipments still in draft,Taslakta bekleyen gönderiler
+"Saved but never submitted. Complete and submit them, or delete them.",Kaydedilmiş ama hiç onaylanmamış. Tamamlayıp onaylayın ya da silin.
+Late deliveries,Geciken teslimatlar
+Past the carrier's usual delivery time and still on the way. Check the tracking and ask the carrier.,"Taşıyıcının olağan teslim süresi geçti, paket hâlâ yolda. Takibe bakın ve taşıyıcıya sorun."
+"Presumed lost, no claim opened","Kayıp sayılan, talebi açılmamış paketler"
+No news from the carrier for weeks. Open a loss claim before the carrier's deadline passes.,Haftalardır taşıyıcıdan haber yok. Taşıyıcının son tarihi geçmeden kayıp talebi açın.
+Loss claims due within {0} days,{0} gün içinde dolan kayıp talepleri
+Not filed with the carrier yet and the deadline is near or past. File them now.,Taşıyıcıya henüz gönderilmedi ve son tarih yakın ya da geçti. Hemen gönderin.
+Carrier invoice disputes running late,Geciken kargo faturası itirazları
+"A draft past its deadline, or a sent dispute the carrier has not answered in time. Send it, or chase the carrier.",Son tarihi geçmiş bir taslak ya da taşıyıcının zamanında cevaplamadığı bir itiraz. Gönderin ya da taşıyıcının peşine düşün.
+Returned parcels still marked delivered,Geri dönmüş ama teslim edildi görünen paketler
+A return note was booked within two days of delivery: the parcel came back. Mark the shipment Returned to Us.,Teslimden sonraki iki gün içinde iade irsaliyesi kesilmiş: paket geri dönmüş. Gönderiyi Returned to Us olarak işaretleyin.

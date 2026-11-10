@@ -128,6 +128,10 @@ after_migrate = [
 # Scheduled Tasks
 # ---------------
 
+# Operations board of multichannel_core (/app/operations-board): shipping's cards. Called only
+# by that board; without multichannel_core nothing reads this list. See operations.py.
+operations_board_sources = ["erpnext_shipping.operations.cards"]
+
 scheduler_events = {
 	"hourly": ["erpnext_shipping.erpnext_shipping.utils.update_tracking_info"],
 	"daily": [
